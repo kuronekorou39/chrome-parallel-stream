@@ -1,0 +1,218 @@
+/* ダーク基調＋等幅で「ログを見ている」雰囲気にする */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas',
+    'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 640px;
+  max-width: 720px;
+  padding: 12px 14px 20px;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  background: #0d1117;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #21262d;
+  z-index: 10;
+}
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1 {
+  font-size: 14px;
+  margin: 0;
+  color: #f0f6fc;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  font-size: 12px;
+  color: #f0f6fc;
+  margin: 16px 0 6px;
+  padding: 0;
+  border-left: 3px solid #58a6ff;
+  padding-left: 8px;
+}
+
+.hint {
+  font-weight: normal;
+  font-size: 11px;
+  color: #8b949e;
+  margin-left: 6px;
+}
+
+.status {
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.status.error {
+  color: #f85149;
+}
+
+.status.success {
+  color: #3fb950;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+button:hover {
+  background: #30363d;
+  border-color: #58a6ff;
+}
+
+button:active {
+  background: #1f2937;
+}
+
+section {
+  margin-bottom: 10px;
+}
+
+.block {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 4px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11.5px;
+}
+
+.empty {
+  color: #6e7681;
+  font-style: italic;
+}
+
+/* ★ Custom API 表示の強調 */
+.custom-marker {
+  color: #f0883e;
+  font-weight: bold;
+}
+
+.api-block {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #21262d;
+}
+
+.api-block:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.api-name {
+  color: #f0883e;
+  font-weight: bold;
+}
+
+.api-name.standard {
+  color: #79c0ff;
+  font-weight: normal;
+}
+
+.api-typeof {
+  color: #8b949e;
+}
+
+.member {
+  margin-left: 14px;
+}
+
+.member .name {
+  color: #d2a8ff;
+}
+
+.sub-member {
+  margin-left: 28px;
+  color: #8b949e;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 12px;
+}
+
+.kv .k {
+  color: #8b949e;
+}
+
+.kv .v {
+  color: #c9d1d9;
+  word-break: break-all;
+}
+
+pre.json {
+  margin: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  margin-right: 4px;
+}
+
+.tag-ok {
+  background: #033a16;
+  color: #3fb950;
+}
+
+.tag-err {
+  background: #3c0d11;
+  color: #f85149;
+}
+
+.tag-skip {
+  background: #2d2206;
+  color: #d29922;
+}
+
+.tag-info {
+  background: #0c2d6b;
+  color: #58a6ff;
+}

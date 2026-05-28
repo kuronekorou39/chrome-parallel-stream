@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Parallel Stream Probe</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Parallel Stream Probe</h1>
+      <span id="status" class="status"></span>
+    </div>
+    <div class="actions">
+      <button id="rerun" type="button">Re-run probes</button>
+      <button id="copy-json" type="button">Copy report as JSON</button>
+      <button id="copy-md" type="button">Copy report as Markdown</button>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Custom APIs <span class="hint">(標準外として検出された namespace)</span></h2>
+      <div id="custom-apis" class="block"></div>
+    </section>
+
+    <section>
+      <h2>Windows Probe Result</h2>
+      <div id="windows-probe" class="block"></div>
+    </section>
+
+    <section>
+      <h2>Fullscreen Probe Result</h2>
+      <div id="fullscreen-probe" class="block"></div>
+    </section>
+
+    <section>
+      <h2>Webview / Custom Namespace Probe</h2>
+      <div id="webview-probe" class="block"></div>
+    </section>
+
+    <section class="collapsible">
+      <h2>Standard APIs <span class="hint">(参考: 想定範囲内)</span></h2>
+      <div id="standard-apis" class="block"></div>
+    </section>
+
+    <section>
+      <h2>Errors</h2>
+      <div id="errors" class="block"></div>
+    </section>
+
+    <section>
+      <h2>Meta</h2>
+      <div id="meta" class="block"></div>
+    </section>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

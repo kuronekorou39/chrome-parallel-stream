@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Parallel Stream Probe",
+  "version": "0.1.0",
+  "description": "Phase 1 capability probe: Android向け自作Chromiumブラウザでマルチビュー実現可能性を実機で検証する。",
+  "permissions": [
+    "tabs",
+    "windows",
+    "scripting",
+    "activeTab",
+    "storage",
+    "sidePanel",
+    "declarativeNetRequest",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Parallel Stream Probe"
+  },
+  "content_scripts": []
+}
