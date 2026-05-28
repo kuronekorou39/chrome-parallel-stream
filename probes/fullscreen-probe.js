@@ -1,6 +1,7 @@
 // このスクリプトは chrome.scripting.executeScript で
 // アクティブタブに content script として注入される。
-// IIFE の戻り値（最後の式）が executeScript の result として返る。
+// async IIFE の戻り値 Promise は executeScript が resolve するまで待ってくれる
+// （Chrome docs: "If the result is a Promise, ... it is resolved before returning."）
 //
 // ねらい:
 //   1. document.documentElement.requestFullscreen() の挙動を見る
@@ -8,7 +9,7 @@
 //   2. 各配信サイトの「シアターモード」ボタンが取れるかを試す
 //      → 取れるなら、Phase 2 ではボタンを叩くだけで「画面1枚最大化」までは行ける
 
-(function fullscreenProbe() {
+(async function fullscreenProbe() {
   const report = {
     location: location.href,
     hostname: location.hostname,
@@ -31,40 +32,39 @@
     // noop
   }
 
-  // requestFullscreen は Promise を返すが、ここで await すると IIFE の戻り値が
-  // Promise になってしまい executeScript 側の結果がシリアライズで欠ける可能性がある。
-  // そのため Promise を直接叩いて、結果はベストエフォートで同期記録する。
+  // requestFullscreen の Promise を await して結果を確定させる。
+  // 確定状態: 'success' | 'rejected' | 'threw' | 'called (no promise returned)'
   try {
     const p = document.documentElement.requestFullscreen();
     if (p && typeof p.then === 'function') {
-      report.requestFullscreen = 'pending';
-      p.then(
-        () => {
-          report.requestFullscreen = 'success';
-          try {
-            report.fullscreenElementAfter = document.fullscreenElement
-              ? document.fullscreenElement.tagName
-              : null;
-          } catch (e) {
-            // noop
-          }
-        },
-        (err) => {
-          report.requestFullscreen = 'rejected';
-          report.requestFullscreenError = {
-            name: err && err.name,
-            message: err && err.message
-          };
-        }
-      );
+      try {
+        await p;
+        report.requestFullscreen = 'success';
+      } catch (err) {
+        report.requestFullscreen = 'rejected';
+        report.requestFullscreenError = {
+          name: err && err.name,
+          message: err && err.message,
+          string: String(err)
+        };
+      }
     } else {
       report.requestFullscreen = 'called (no promise returned)';
+    }
+
+    try {
+      report.fullscreenElementAfter = document.fullscreenElement
+        ? document.fullscreenElement.tagName
+        : null;
+    } catch (e) {
+      // noop
     }
   } catch (e) {
     report.requestFullscreen = 'threw';
     report.requestFullscreenError = {
       name: e && e.name,
-      message: e && e.message
+      message: e && e.message,
+      string: String(e)
     };
   }
 
