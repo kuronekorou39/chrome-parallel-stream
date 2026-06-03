@@ -24,7 +24,7 @@ const wins = [];
 (async function init() {
   wireToolbar();
   window.addEventListener('message', onFrameMessage);
-  window.addEventListener('resize', () => wins.forEach((w) => setRect(w, getRect(w).x, getRect(w).y, getRect(w).w, getRect(w).h)));
+  window.addEventListener('resize', relayoutOnResize);
 
   const data = await chrome.storage.local.get([MULTIVIEW_ACTIVE_KEY, MULTIVIEW_SETTINGS_KEY]);
   applySettings(data[MULTIVIEW_SETTINGS_KEY] || {});
@@ -138,8 +138,9 @@ function setRect(win, x, y, w, h) {
   const sh = stage.clientHeight;
   w = Math.max(220, Math.min(w, sw));
   h = Math.max(150, Math.min(h, sh));
-  x = Math.max(0, Math.min(x, sw - 60));
-  y = Math.max(0, Math.min(y, sh - 30));
+  // x+w<=sw / y+h<=sh を保証し、窓(と右下リサイズハンドル)が必ずステージ内に収まるようにする。
+  x = Math.max(0, Math.min(x, sw - w));
+  y = Math.max(0, Math.min(y, sh - h));
   win.el.style.left = x + 'px';
   win.el.style.top = y + 'px';
   win.el.style.width = w + 'px';
@@ -150,12 +151,26 @@ function getRect(win) {
   return { x: win.el.offsetLeft, y: win.el.offsetTop, w: win.el.offsetWidth, h: win.el.offsetHeight };
 }
 
+// ブラウザ窓のリサイズ時: 最大化窓はステージ全体へ再展開、その他はステージ内へ再クランプ。
+function relayoutOnResize() {
+  for (const w of wins) {
+    if (w.maximized) {
+      setRect(w, 4, 4, stage.clientWidth - 8, stage.clientHeight - 8);
+    } else {
+      const r = getRect(w);
+      setRect(w, r.x, r.y, r.w, r.h);
+    }
+  }
+}
+
 function focusWindow(win) {
-  win.el.style.zIndex = ++zCounter;
+  // 既にアクティブ(=最前面)なら z を無駄に増やさない。
+  // el と bar の二重 mousedown で focusWindow が連続呼出される際の zCounter 膨張も防ぐ。
   if (activeWin === win) return;
   if (activeWin) activeWin.el.classList.remove('active');
   activeWin = win;
   win.el.classList.add('active');
+  win.el.style.zIndex = ++zCounter;
 }
 
 function makeDraggable(win, handle) {
@@ -227,7 +242,11 @@ function closeWindow(win) {
   const i = wins.indexOf(win);
   if (i >= 0) wins.splice(i, 1);
   win.el.remove();
-  if (activeWin === win) activeWin = null;
+  if (activeWin === win) {
+    activeWin = null;
+    // アクティブ窓を閉じたら、残っている最前面寄りの窓へフォーカスを引き継ぐ。
+    if (wins.length) focusWindow(wins[wins.length - 1]);
+  }
   updateCount();
   saveLineup();
 }
@@ -243,6 +262,8 @@ function updateCount() {
 function toggleMute(win) {
   win.muted = !win.muted;
   sendAudio(win);
+  // .solo(可聴が1つだけ)はグローバル状態依存なので、他窓のハイライトも再評価する。
+  wins.forEach(updateWinAudioUI);
 }
 
 // ソロ: この窓だけ鳴らし、他は全部ミュート(マスタミュートも解除)。
@@ -286,10 +307,12 @@ function sendAudio(win) {
 }
 
 function updateWinAudioUI(win) {
-  const eff = master.muted || win.muted;
+  // マスタミュート / マスタ音量0 でも実質無音なので、アイコンはミュート表示にする。
+  const masterAudible = !master.muted && master.volume > 0;
+  const eff = !masterAudible || win.muted;
   win.muteBtn.textContent = eff ? '🔇' : '🔊';
   win.muteBtn.classList.toggle('muted', eff);
-  const onlyOneAudible = !win.muted && !master.muted && wins.filter((w) => !w.muted).length === 1;
+  const onlyOneAudible = masterAudible && !win.muted && wins.filter((w) => !w.muted).length === 1;
   win.el.classList.toggle('solo', onlyOneAudible);
 }
 

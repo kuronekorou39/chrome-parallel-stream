@@ -182,14 +182,6 @@ section {
 .setting-row input[type="checkbox"] { accent-color: #58a6ff; }
 .setting-row input[type="range"] { accent-color: #58a6ff; flex: 1 1 auto; cursor: pointer; }
 
-/* ===== Multiview last-run の inject 結果 ===== */
-.inject-head {
-  color: #8b949e;
-  margin: 8px 0 4px;
-  border-top: 1px dashed #21262d;
-  padding-top: 6px;
-}
-
 /* ===== Probe 表示 ===== */
 .custom-marker {
   color: #f0883e;

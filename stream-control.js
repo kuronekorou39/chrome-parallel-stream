@@ -20,12 +20,15 @@
     return Math.max(0, Math.min(1, x));
   }
 
-  function applyAudio() {
+  // withVolume=false のときは muted だけ反映する。volume はメッセージ受信時のみ反映し、
+  // DOM 変化(MutationObserver)契機で毎回上書きしてユーザーのプレイヤー内音量操作を
+  // 巻き戻すことを防ぐ。
+  function applyAudio(withVolume) {
     const vids = document.querySelectorAll('video');
     for (const v of vids) {
       try {
         v.muted = desired.muted;
-        if (!desired.muted) v.volume = clamp01(desired.volume);
+        if (withVolume && !desired.muted) v.volume = clamp01(desired.volume);
       } catch (e) {
         /* noop */
       }
@@ -33,24 +36,28 @@
   }
 
   window.addEventListener('message', (e) => {
+    if (e.source !== window.parent) return; // 親(multiview.html)以外からの偽装を弾く
     const d = e.data;
     if (!d || d[MAGIC] !== true) return;
     if (d.type === 'audio') {
       desired.muted = !!d.muted;
       desired.volume = clamp01(d.volume);
+      const first = !gotState;
       gotState = true;
-      applyAudio();
-      // プレイヤー初期化で <video> が遅れて現れる場合に備えて数回追いがけ。
-      [300, 1000, 2500].forEach((ms) => setTimeout(applyAudio, ms));
+      applyAudio(true);
+      // 初回のみ、プレイヤー初期化で <video> が遅れて現れる場合に備えて追いがけする。
+      if (first) {
+        [300, 1000, 2500].forEach((ms) => setTimeout(() => applyAudio(true), ms));
+      }
     }
   });
 
-  // DOM 変化(新しい video の追加・差し替え)を拾って都度適用。多発するので軽くスロットル。
+  // DOM 変化(新しい video の追加・差し替え)を拾って muted を再適用。多発するので軽くスロットル。
   let pending = false;
   const mo = new MutationObserver(() => {
     if (pending) return;
     pending = true;
-    setTimeout(() => { pending = false; applyAudio(); }, 300);
+    setTimeout(() => { pending = false; applyAudio(false); }, 300);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
