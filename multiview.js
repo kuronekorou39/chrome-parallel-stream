@@ -5,6 +5,7 @@
 // postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
+const MULTIVIEW_SETTINGS_KEY = 'multiviewSettings';
 const MAX_WINDOWS = 10;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
@@ -25,7 +26,9 @@ const wins = [];
   window.addEventListener('message', onFrameMessage);
   window.addEventListener('resize', () => wins.forEach((w) => setRect(w, getRect(w).x, getRect(w).y, getRect(w).w, getRect(w).h)));
 
-  const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
+  const data = await chrome.storage.local.get([MULTIVIEW_ACTIVE_KEY, MULTIVIEW_SETTINGS_KEY]);
+  applySettings(data[MULTIVIEW_SETTINGS_KEY] || {});
+
   const urls = ((data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [])
     .map((u) => (u || '').trim())
     .filter((u) => u.length > 0)
@@ -35,6 +38,24 @@ const wins = [];
   tileAll();
   updateCount();
 })();
+
+// popup の設定(起動時ミュート・マスタ音量初期値)を master に反映し、ツールバー UI を合わせる。
+function applySettings(s) {
+  master.muted = s.startMuted !== false; // 既定 ON
+  master.volume = typeof s.masterVolume === 'number' ? Math.max(0, Math.min(1, s.masterVolume)) : 1;
+  document.getElementById('master-vol').value = Math.round(master.volume * 100);
+  updateMasterMuteUI();
+}
+
+// 現在の配信ラインナップを storage に保存(専用ページを開き直すと復元される)。
+function saveLineup() {
+  const urls = wins.map((w) => w.url);
+  try {
+    chrome.storage.local.set({ [MULTIVIEW_ACTIVE_KEY]: { urls, timestamp: new Date().toISOString() } });
+  } catch (e) {
+    /* noop */
+  }
+}
 
 // ====== ウィンドウ生成 ======
 
@@ -94,7 +115,10 @@ function createWindow(url, opts = {}) {
 
   focusWindow(win);
   updateWinAudioUI(win);
-  if (!opts.silent) updateCount();
+  if (!opts.silent) {
+    updateCount();
+    saveLineup();
+  }
   return win;
 }
 
@@ -205,6 +229,7 @@ function closeWindow(win) {
   win.el.remove();
   if (activeWin === win) activeWin = null;
   updateCount();
+  saveLineup();
 }
 
 function updateCount() {

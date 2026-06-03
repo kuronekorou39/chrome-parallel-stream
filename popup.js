@@ -2,10 +2,10 @@
 // 2タブ構成: Multiview (本機能) / Probe (Phase 1のケイパビリティ調査結果)
 
 const STORAGE_KEY = 'probeReport';
-const MULTIVIEW_PREFS_KEY = 'multiviewPrefs';
-const MULTIVIEW_LAST_KEY = 'multiviewLastRun';
-// multiview.html が読む「いま表示する配信」セット。
+// 専用ページ(multiview.html)が保持する「保存中の配信」セット。専用ページ側が更新する。
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
+// 専用ページの起動時設定(全ミュート・マスタ音量初期値)。
+const MULTIVIEW_SETTINGS_KEY = 'multiviewSettings';
 
 const $ = (id) => document.getElementById(id);
 
@@ -36,53 +36,26 @@ function activateTab(name) {
     .forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== name));
 }
 
-// ---------- Multiview ----------
+// ---------- Multiview (専用ページの入口) ----------
 
-let saveDebounceTimer = null;
-function scheduleSavePrefs() {
-  clearTimeout(saveDebounceTimer);
-  saveDebounceTimer = setTimeout(saveMultiviewPrefs, 400);
-}
+const MULTIVIEW_URL = chrome.runtime.getURL('multiview.html');
 
-const MAX_STREAMS = 10;
-
-// textarea の各行を URL 配列に。空行は除く。
-function readUrls() {
-  return $('urls')
-    .value.split('\n')
-    .map((u) => u.trim())
-    .filter((u) => u.length > 0)
-    .slice(0, MAX_STREAMS);
-}
-
-async function saveMultiviewPrefs() {
-  await chrome.storage.local.set({ [MULTIVIEW_PREFS_KEY]: { urls: readUrls() } });
-}
-
-async function loadMultiviewPrefs() {
-  const data = await chrome.storage.local.get(MULTIVIEW_PREFS_KEY);
-  const prefs = data[MULTIVIEW_PREFS_KEY] || {};
-  $('urls').value = (prefs.urls || []).join('\n');
-}
-
+// 専用ページのタブを開く。既に開いていればそれをフォーカスする(重複タブを作らない)。
 async function openMultiview() {
-  const urls = readUrls();
-
-  if (urls.length === 0) {
-    setStatus('No URLs entered.', 'error');
-    return;
-  }
-
-  const run = { timestamp: new Date().toISOString(), urls };
-
   $('open-multiview').disabled = true;
   try {
-    // multiview.html がこれを読んで iframe グリッドを作る。
-    await chrome.storage.local.set({ [MULTIVIEW_ACTIVE_KEY]: run });
-    await chrome.tabs.create({ url: chrome.runtime.getURL('multiview.html') });
-    await chrome.storage.local.set({ [MULTIVIEW_LAST_KEY]: run });
-    setStatus('Opened multiview tab (' + urls.length + ' streams).', 'success');
-    renderLastRun(run);
+    const all = await chrome.tabs.query({});
+    const existing = all.find((t) => t.url && t.url.startsWith(MULTIVIEW_URL));
+    if (existing) {
+      await chrome.tabs.update(existing.id, { active: true });
+      if (existing.windowId != null) {
+        await chrome.windows.update(existing.windowId, { focused: true });
+      }
+      setStatus('既存のマルチビュータブをフォーカスしました。', 'success');
+    } else {
+      await chrome.tabs.create({ url: MULTIVIEW_URL });
+      setStatus('マルチビューを開きました。', 'success');
+    }
   } catch (e) {
     setStatus('Open error: ' + e.message, 'error');
   } finally {
@@ -90,46 +63,46 @@ async function openMultiview() {
   }
 }
 
-// 開いている multiview.html タブをすべて閉じる。
-async function closeMultiview() {
-  $('close-multiview').disabled = true;
-  try {
-    const url = chrome.runtime.getURL('multiview.html');
-    const all = await chrome.tabs.query({});
-    const ids = all
-      .filter((t) => t.url && t.url.startsWith(url))
-      .map((t) => t.id)
-      .filter((id) => id != null);
-    if (ids.length) await chrome.tabs.remove(ids);
-    setStatus('Closed ' + ids.length + ' multiview tab(s).', 'success');
-  } catch (e) {
-    setStatus('Close error: ' + e.message, 'error');
-  } finally {
-    $('close-multiview').disabled = false;
-  }
+// ---- 設定(専用ページが起動時に読む) ----
+
+async function loadSettings() {
+  const data = await chrome.storage.local.get(MULTIVIEW_SETTINGS_KEY);
+  const s = data[MULTIVIEW_SETTINGS_KEY] || {};
+  $('set-startmuted').checked = s.startMuted !== false; // 既定 ON
+  const vol = typeof s.masterVolume === 'number' ? Math.round(s.masterVolume * 100) : 100;
+  $('set-mastervol').value = vol;
+  $('set-mastervol-val').textContent = vol;
 }
 
-function renderLastRun(run) {
-  if (!run) {
-    $('multiview-last').innerHTML = '<span class="empty">no runs yet</span>';
+async function saveSettings() {
+  const startMuted = $('set-startmuted').checked;
+  const masterVolume = Number($('set-mastervol').value) / 100;
+  $('set-mastervol-val').textContent = $('set-mastervol').value;
+  await chrome.storage.local.set({
+    [MULTIVIEW_SETTINGS_KEY]: { startMuted, masterVolume }
+  });
+}
+
+// ---- 保存中の配信(専用ページで追加した分のプレビュー) ----
+
+async function renderSavedList() {
+  const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
+  const urls = (data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [];
+  if (!urls.length) {
+    $('saved-list').innerHTML = '<span class="empty">なし</span>';
     return;
   }
-  const html = [];
-  html.push('<div class="kv">');
-  html.push('<div class="k">timestamp</div><div class="v">' + escapeHtml(run.timestamp) + '</div>');
-  html.push(
-    '<div class="k">streams</div><div class="v">' + (run.urls || []).length + '</div>'
-  );
-  html.push('</div>');
-  for (const u of run.urls || []) {
-    html.push('<div class="member">• ' + escapeHtml(u) + '</div>');
-  }
-  $('multiview-last').innerHTML = html.join('');
+  $('saved-list').innerHTML = urls
+    .map((u) => '<div class="member">• ' + escapeHtml(u) + '</div>')
+    .join('');
 }
 
-async function loadLastRun() {
-  const data = await chrome.storage.local.get(MULTIVIEW_LAST_KEY);
-  if (data[MULTIVIEW_LAST_KEY]) renderLastRun(data[MULTIVIEW_LAST_KEY]);
+async function clearSaved() {
+  await chrome.storage.local.set({
+    [MULTIVIEW_ACTIVE_KEY]: { urls: [], timestamp: new Date().toISOString() }
+  });
+  await renderSavedList();
+  setStatus('保存中の配信をクリアしました。', 'success');
 }
 
 // ---------- Probe ----------
@@ -443,20 +416,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     t.addEventListener('click', () => activateTab(t.dataset.tab));
   });
 
-  // Multiview
-  $('urls').addEventListener('input', scheduleSavePrefs);
-  $('urls').addEventListener('change', saveMultiviewPrefs);
+  // Multiview(入口)
   $('open-multiview').addEventListener('click', openMultiview);
-  $('close-multiview').addEventListener('click', closeMultiview);
+  $('set-startmuted').addEventListener('change', saveSettings);
+  $('set-mastervol').addEventListener('input', saveSettings);
+  $('clear-saved').addEventListener('click', clearSaved);
 
-  // Probe
+  // Debug (probe)
   $('rerun').addEventListener('click', rerun);
   $('copy-json').addEventListener('click', copyJson);
   $('copy-md').addEventListener('click', copyMarkdown);
 
   // 初期データロード
-  await loadMultiviewPrefs();
-  await loadLastRun();
+  await loadSettings();
+  await renderSavedList();
   const report = await loadReport();
   render(report);
 });

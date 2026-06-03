@@ -169,66 +169,18 @@ section {
   font-style: italic;
 }
 
-/* ===== Multiview フォーム ===== */
-.url-row {
-  display: grid;
-  grid-template-columns: 70px 1fr;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.url-row label {
-  color: #8b949e;
-  font-size: 11px;
-}
-
-.url-input {
-  background: #0d1117;
-  color: #c9d1d9;
-  border: 1px solid #30363d;
-  border-radius: 3px;
-  padding: 5px 8px;
-  font-family: inherit;
-  font-size: 11px;
-  width: 100%;
-}
-
-.url-input:focus {
-  outline: none;
-  border-color: #58a6ff;
-}
-
-.urls-input {
-  width: 100%;
-  background: #0d1117;
-  color: #c9d1d9;
-  border: 1px solid #30363d;
-  border-radius: 3px;
-  padding: 6px 8px;
-  font-family: inherit;
-  font-size: 11px;
-  line-height: 1.6;
-  resize: vertical;
-}
-.urls-input:focus {
-  outline: none;
-  border-color: #58a6ff;
-}
-
-.layout-toggle .radio {
+/* ===== 設定 ===== */
+.setting-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: #c9d1d9;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   cursor: pointer;
 }
-
-.layout-toggle input[type="radio"] {
-  accent-color: #58a6ff;
-}
+.setting-row input[type="checkbox"] { accent-color: #58a6ff; }
+.setting-row input[type="range"] { accent-color: #58a6ff; flex: 1 1 auto; cursor: pointer; }
 
 /* ===== Multiview last-run の inject 結果 ===== */
 .inject-head {

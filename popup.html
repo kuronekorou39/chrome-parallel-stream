@@ -10,31 +10,40 @@
     <div class="title-row">
       <nav class="tabs">
         <button class="tab active" data-tab="multiview" type="button">Multiview</button>
-        <button class="tab" data-tab="probe" type="button">Probe</button>
+        <button class="tab" data-tab="probe" type="button">Debug</button>
       </nav>
       <span id="status" class="status"></span>
     </div>
   </header>
 
   <main>
-    <!-- ===== Multiview パネル ===== -->
+    <!-- ===== Multiview パネル(入口) ===== -->
     <div class="panel" data-panel="multiview">
-      <section class="form">
-        <h2>Streams <span class="hint">(1行に1URL・最大10)</span></h2>
-        <textarea id="urls" class="urls-input" rows="8" autocomplete="off" spellcheck="false"
-          placeholder="https://www.twitch.tv/<channel>&#10;https://www.youtube.com/watch?v=<id>&#10;https://kick.com/<channel>&#10;https://www.openrec.tv/live/<id>"></textarea>
-        <p class="hint">開いた後、各枠はドラッグで移動・右下でリサイズ・⛶で最大化。起動時は全ミュート、各枠の S でソロ。</p>
+      <div class="actions">
+        <button id="open-multiview" type="button" class="primary">▶ マルチビューを開く</button>
+      </div>
+      <p class="hint">配信の追加・配置・音量調整は専用ページで行います。専用ページのツールバーから1つずつ追加できます。</p>
+
+      <section class="settings">
+        <h2>設定</h2>
+        <label class="setting-row">
+          <input type="checkbox" id="set-startmuted" checked />
+          <span>起動時に全ミュート <span class="hint">(各枠の S で1つだけ鳴らす)</span></span>
+        </label>
+        <label class="setting-row">
+          <span>マスタ音量の初期値</span>
+          <input type="range" id="set-mastervol" min="0" max="100" value="100" />
+          <span id="set-mastervol-val" class="hint">100</span>
+        </label>
       </section>
 
-      <div class="actions">
-        <button id="open-multiview" type="button" class="primary">Open Multiview</button>
-        <button id="close-multiview" type="button">Close multiview tab</button>
-      </div>
-
       <section class="last-run">
-        <h2>Last run</h2>
-        <div id="multiview-last" class="block">
-          <span class="empty">no runs yet</span>
+        <h2>保存中の配信 <span class="hint">(専用ページで追加した分)</span></h2>
+        <div id="saved-list" class="block">
+          <span class="empty">なし</span>
+        </div>
+        <div class="actions">
+          <button id="clear-saved" type="button">保存をクリア</button>
         </div>
       </section>
     </div>
