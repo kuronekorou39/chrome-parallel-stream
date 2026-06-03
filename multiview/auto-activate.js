@@ -11,12 +11,18 @@
   const RETRY_INTERVAL_MS = 500;
   const MAX_RETRIES = 20;
 
-  // 各サイトの戦略。click → attribute-toggle → keyboard の順で試す。
+  // 各サイトの戦略。alreadyOnSelector で「既に ON」を検出できたら何もせず成功扱いにし、
+  // そうでなければ click → attribute-toggle → keyboard の順で試す。
+  // alreadyOnSelector はトグル系操作(特に YouTube の .ytp-size-button)を
+  // 既に ON の状態で叩いて OFF に倒す事故を防ぐためのガード。
   // OPENREC は enter-icon (OFF→ON 入口) のみに絞って、誤って exit-icon を
   // クリックして OFF に倒さないようにする。Kick は属性書換の固定値で OFF→ON。
   const STRATEGIES = [
     {
       hostMatch: 'twitch.tv',
+      // Twitch はシアター中ボタンの aria-label が exit 文言へ変わる。確実な ON 判定が
+      // 取りづらいため alreadyOnSelector は置かず(既定で OFF 前提)、click のみに任せる。
+      alreadyOnSelector: null,
       selectors: [
         '[data-a-target="player-theatre-mode-button"]',
         'button[aria-label*="シアター"]',
@@ -28,12 +34,16 @@
     },
     {
       hostMatch: 'youtube.com',
+      // シアター ON で <ytd-watch-flexy> に theater 属性が付く。.ytp-size-button は
+      // 純粋なトグルなので、既に ON のときは絶対に click しない。
+      alreadyOnSelector: 'ytd-watch-flexy[theater]',
       selectors: ['.ytp-size-button', 'button.ytp-size-button'],
       attributeToggle: null,
       keyboardShortcut: { key: 't', targetSelector: 'video' }
     },
     {
       hostMatch: 'kick.com',
+      alreadyOnSelector: '[data-theatre="true"]',
       selectors: [
         '[data-test-id="theatre-mode-button"]',
         'button[aria-label*="Theatre" i]',
@@ -44,6 +54,8 @@
     },
     {
       hostMatch: 'openrec.tv',
+      // exit-icon が表示中 = 既にシアター ON。その場合は何もしない。
+      alreadyOnSelector: '.theater-mode-exit-icon:not(.is-display-none)',
       selectors: ['.theater-mode-enter-icon:not(.is-display-none)'],
       attributeToggle: null,
       keyboardShortcut: { key: 't', targetSelector: 'video' }
@@ -75,6 +87,16 @@
   };
 
   function tryOnce(site) {
+    // 0. 既に ON なら何もしない(トグル系操作で OFF に倒す事故を防ぐ)。
+    if (site.alreadyOnSelector) {
+      try {
+        if (document.querySelector(site.alreadyOnSelector)) {
+          return { succeeded: true, succeededVia: 'already-on:' + site.alreadyOnSelector };
+        }
+      } catch (e) {
+        // セレクタ不正等は無視して通常戦略へ
+      }
+    }
     // 1. click
     for (const selector of site.selectors) {
       try {

@@ -16,6 +16,7 @@ try {
 const STORAGE_KEY = 'probeReport';
 const OPENED_WINDOWS_KEY = 'openedMultiviewWindows';
 const MULTIVIEW_LAST_KEY = 'multiviewLastRun';
+const PENDING_INJECT_KEY = 'pendingMultiviewInject';
 
 // ====== Phase 1: プローブ ======
 
@@ -87,65 +88,98 @@ async function runFullscreenProbeInActiveTab() {
 
 // ====== Phase 2: マルチビュー ======
 
-async function openMultiview(urls, layouts) {
+// popup から渡された URL 群を独立 popup ウィンドウでタイル配置して開く。
+// 各ウィンドウの load 完了はトップレベル登録の onUpdated リスナ(本ファイル下部)が
+// pending マップ経由で検知し、auto-activate.js を inject する。
+// 1窓ずつ try/catch で保護し、失敗 URL は failures に記録して残りを継続する。
+async function openMultiview(urls, layouts, layoutMode) {
   const windowIds = [];
-  const injectResults = [];
+  const failures = [];
+
+  // 新しい run を始める前に、前回の取りこぼし pending を掃除する。
+  await chrome.storage.local.set({ [PENDING_INJECT_KEY]: {} });
 
   for (let i = 0; i < urls.length; i++) {
     const rect = layouts[i] || {};
-    const created = await chrome.windows.create({
-      url: urls[i],
-      type: 'popup',
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-      focused: i === 0
-    });
-    windowIds.push(created.id);
-    if (created.tabs && created.tabs[0]) {
-      scheduleAutoActivate(created.tabs[0].id, urls[i], injectResults);
+    try {
+      const created = await chrome.windows.create({
+        url: urls[i],
+        type: 'popup',
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        focused: i === 0
+      });
+      windowIds.push(created.id);
+      // 途中で失敗しても close-multiview で回収できるよう、生成のたびに保存する。
+      await chrome.storage.local.set({ [OPENED_WINDOWS_KEY]: windowIds });
+      const tabId = created.tabs && created.tabs[0] ? created.tabs[0].id : null;
+      if (tabId != null) await addPendingInject(tabId, urls[i]);
+    } catch (e) {
+      failures.push({ url: urls[i], error: errorToObject(e) });
     }
   }
 
-  await chrome.storage.local.set({ [OPENED_WINDOWS_KEY]: windowIds });
   await chrome.storage.local.set({
     [MULTIVIEW_LAST_KEY]: {
       timestamp: new Date().toISOString(),
+      layout: layoutMode || null,
       urls,
       windowIds,
-      injectResults
+      failures,
+      // inject 結果はタブ load 完了後に recordInjectResult が追記していく。
+      injectResults: []
     }
   });
-  return windowIds;
+  return { windowIds, failures };
 }
 
-// タブの load 完了を待って auto-activate.js を inject する。
-// 同じ tabId に対するハンドラは1回だけ発火し、その後解除する。
-function scheduleAutoActivate(tabId, url, accumulator) {
-  const listener = (updatedTabId, changeInfo) => {
-    if (updatedTabId !== tabId) return;
-    if (changeInfo.status !== 'complete') return;
-    chrome.tabs.onUpdated.removeListener(listener);
+// inject 対象タブを storage に登録する。トップレベルのリスナがこれを参照するため、
+// SW が一度落ちても(再起動後に)復元できる。
+async function addPendingInject(tabId, url) {
+  const data = await chrome.storage.local.get(PENDING_INJECT_KEY);
+  const pending = data[PENDING_INJECT_KEY] || {};
+  pending[tabId] = url;
+  await chrome.storage.local.set({ [PENDING_INJECT_KEY]: pending });
+}
 
-    chrome.scripting
-      .executeScript({
-        target: { tabId },
-        files: ['multiview/auto-activate.js']
-      })
-      .then((results) => {
-        accumulator.push({
-          tabId,
-          url,
-          result: results && results[0] ? results[0].result : null
-        });
-      })
-      .catch((e) => {
-        console.error('[multiview] inject failed for tab', tabId, e);
-        accumulator.push({ tabId, url, error: errorToObject(e) });
-      });
-  };
-  chrome.tabs.onUpdated.addListener(listener);
+// タブの load 完了時に呼ばれる。pending に居るタブだけ auto-activate.js を inject し、
+// 結果を MULTIVIEW_LAST_KEY.injectResults に追記する。
+async function handleTabComplete(tabId) {
+  const data = await chrome.storage.local.get(PENDING_INJECT_KEY);
+  const pending = data[PENDING_INJECT_KEY] || {};
+  if (!Object.prototype.hasOwnProperty.call(pending, tabId)) return;
+
+  const url = pending[tabId];
+  // 同一タブの 'complete' が複数回来ても二重 inject しないよう、先に pending から外す。
+  delete pending[tabId];
+  await chrome.storage.local.set({ [PENDING_INJECT_KEY]: pending });
+
+  let result = null;
+  let error = null;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['multiview/auto-activate.js']
+    });
+    result = results && results[0] ? results[0].result : null;
+  } catch (e) {
+    console.error('[multiview] inject failed for tab', tabId, e);
+    error = errorToObject(e);
+  }
+  await recordInjectResult({ tabId, url, result, error });
+}
+
+// inject 結果を最新 run に追記する(read-modify-write)。
+// 旧実装は openMultiview 完了時に空配列で固定保存していたため結果が観測できなかった。
+async function recordInjectResult(entry) {
+  const data = await chrome.storage.local.get(MULTIVIEW_LAST_KEY);
+  const last = data[MULTIVIEW_LAST_KEY];
+  if (!last) return;
+  last.injectResults = last.injectResults || [];
+  last.injectResults.push(entry);
+  await chrome.storage.local.set({ [MULTIVIEW_LAST_KEY]: last });
 }
 
 async function closeMultiview() {
@@ -160,7 +194,7 @@ async function closeMultiview() {
       // すでに閉じられている等、無視
     }
   }
-  await chrome.storage.local.set({ [OPENED_WINDOWS_KEY]: [] });
+  await chrome.storage.local.set({ [OPENED_WINDOWS_KEY]: [], [PENDING_INJECT_KEY]: {} });
   return closed;
 }
 
@@ -202,8 +236,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === 'open-multiview') {
-    openMultiview(msg.urls || [], msg.layouts || [])
-      .then((windowIds) => sendResponse({ ok: true, windowIds }))
+    openMultiview(msg.urls || [], msg.layouts || [], msg.layout)
+      .then(({ windowIds, failures }) => sendResponse({ ok: true, windowIds, failures }))
       .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
     return true;
   }
@@ -216,6 +250,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   return false;
+});
+
+// ====== マルチビュー inject トリガ ======
+
+// トップレベルで登録するため SW 再起動後も復元される(動的登録だと SW 終了で消える)。
+// pending マップ(storage 永続)に居るタブの load 完了だけを拾って inject する。
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== 'complete') return;
+  handleTabComplete(tabId).catch((e) =>
+    console.error('[multiview] handleTabComplete failed for tab', tabId, e)
+  );
 });
 
 // ====== ライフサイクル ======

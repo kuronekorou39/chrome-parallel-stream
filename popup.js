@@ -88,18 +88,25 @@ async function openMultiview() {
     const resp = await chrome.runtime.sendMessage({
       type: 'open-multiview',
       urls,
-      layouts: rects
+      layouts: rects,
+      layout
     });
     if (resp && resp.ok) {
+      const failCount = (resp.failures || []).length;
       setStatus(
-        'Opened ' + (resp.windowIds || []).length + ' windows. Theater mode activating…',
-        'success'
+        'Opened ' +
+          (resp.windowIds || []).length +
+          ' windows' +
+          (failCount ? ', ' + failCount + ' failed' : '') +
+          '. シアターモード適用中… (結果は再度ポップアップを開くと表示)',
+        failCount ? 'info' : 'success'
       );
       renderLastRun({
         timestamp: new Date().toISOString(),
         urls,
         layout,
-        windowIds: resp.windowIds
+        windowIds: resp.windowIds,
+        failures: resp.failures
       });
     } else {
       setStatus('Open failed: ' + JSON.stringify(resp && resp.error), 'error');
@@ -136,7 +143,7 @@ function renderLastRun(run) {
   const html = [];
   html.push('<div class="kv">');
   html.push('<div class="k">timestamp</div><div class="v">' + escapeHtml(run.timestamp) + '</div>');
-  html.push('<div class="k">layout</div><div class="v">' + escapeHtml(run.layout) + '</div>');
+  html.push('<div class="k">layout</div><div class="v">' + escapeHtml(run.layout || '') + '</div>');
   html.push(
     '<div class="k">windowIds</div><div class="v">' +
       escapeHtml((run.windowIds || []).join(', ')) +
@@ -146,7 +153,56 @@ function renderLastRun(run) {
   for (const u of run.urls || []) {
     html.push('<div class="member">• ' + escapeHtml(u) + '</div>');
   }
+  // open に失敗した URL
+  for (const f of run.failures || []) {
+    const msg = f.error && f.error.message ? ' — ' + f.error.message : '';
+    html.push(
+      '<div class="member"><span class="tag tag-err">open失敗</span> ' +
+        escapeHtml(f.url) +
+        escapeHtml(msg) +
+        '</div>'
+    );
+  }
+  // シアターモード自動ON(inject)結果
+  html.push('<div class="inject-head">シアターモード自動ON結果</div>');
+  const injects = run.injectResults || [];
+  if (injects.length === 0) {
+    html.push(
+      '<div class="member"><span class="empty">まだ結果がありません(ページ読込待ち)</span></div>'
+    );
+  } else {
+    for (const r of injects) {
+      html.push(injectResultHtml(r));
+    }
+  }
   $('multiview-last').innerHTML = html.join('');
+}
+
+function injectResultHtml(r) {
+  const res = (r && r.result) || {};
+  let tag;
+  if (r && r.error) {
+    tag = '<span class="tag tag-err">inject失敗</span>';
+  } else if (res.succeeded) {
+    tag = '<span class="tag tag-ok">ON</span>';
+  } else if (res.skipped) {
+    tag = '<span class="tag tag-skip">対象外</span>';
+  } else {
+    tag = '<span class="tag tag-skip">未ON</span>';
+  }
+  const host = res.hostname || (r && r.url) || '';
+  const via = res.succeededVia
+    ? ' <span class="hint">' + escapeHtml(res.succeededVia) + '</span>'
+    : '';
+  let detail = '';
+  if (r && r.error) {
+    detail = ' — ' + (r.error.message || JSON.stringify(r.error));
+  } else if (res.reason) {
+    detail = ' — ' + res.reason;
+  }
+  return (
+    '<div class="member">' + tag + ' ' + escapeHtml(host) + via + escapeHtml(detail) + '</div>'
+  );
 }
 
 async function loadLastRun() {
