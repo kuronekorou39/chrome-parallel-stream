@@ -43,13 +43,31 @@ function makeCell(url) {
   cell.appendChild(badge);
 
   const frame = document.createElement('iframe');
-  frame.src = url;
+  frame.src = toEmbedUrl(url);
   frame.allow = IFRAME_ALLOW;
   frame.setAttribute('allowfullscreen', '');
   frame.referrerPolicy = 'no-referrer';
   cell.appendChild(frame);
 
   return cell;
+}
+
+// サイトごとに「iframe 埋め込みに適した URL」へ変換する。
+// Kick: フルサイトは iframe 内でルーティングが壊れ 404 になるため、公式の
+//       埋め込みプレイヤー player.kick.com/<channel> に差し替える。
+// Twitch/YouTube/OPENREC はフルサイトのまま(Twitch はシアター化を frame-theater.js が担当)。
+function toEmbedUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.replace(/^www\./, '');
+    if (host === 'kick.com') {
+      const channel = u.pathname.split('/').filter(Boolean)[0];
+      if (channel) return 'https://player.kick.com/' + encodeURIComponent(channel);
+    }
+    return rawUrl;
+  } catch (e) {
+    return rawUrl;
+  }
 }
 
 // バッジ表示用に host/チャンネルだけ抜き出す(失敗時は素の URL)。
