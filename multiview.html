@@ -3,31 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <title>Multiview</title>
-  <style>
-    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
-    #grid {
-      display: grid;
-      width: 100vw;
-      height: 100vh;
-      gap: 2px;
-      background: #000;
-    }
-    .cell { position: relative; background: #000; overflow: hidden; }
-    .cell iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
-    .cell .badge {
-      position: absolute; top: 4px; left: 4px; z-index: 2;
-      background: rgba(0,0,0,0.55); color: #c9d1d9;
-      font: 11px/1.4 monospace; padding: 1px 6px; border-radius: 3px;
-      pointer-events: none; max-width: 80%; overflow: hidden;
-      white-space: nowrap; text-overflow: ellipsis;
-    }
-    .empty {
-      color: #8b949e; font: 14px monospace; padding: 24px;
-    }
-  </style>
+  <link rel="stylesheet" href="multiview.css" />
 </head>
 <body>
-  <div id="grid"></div>
+  <div id="toolbar">
+    <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/10</span>
+    <span class="tb-sep"></span>
+    <span class="tb-item" title="マスタ音量">🔈<input type="range" id="master-vol" min="0" max="100" value="100" /></span>
+    <button id="master-mute" class="tb-btn on" title="全体ミュートの切替">全体ミュート: ON</button>
+    <span class="tb-sep"></span>
+    <input type="text" id="add-url" class="tb-input" placeholder="URL を貼って Enter / 追加" />
+    <button id="add-btn" class="tb-btn">追加</button>
+    <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
+    <span class="tb-grow"></span>
+    <span class="tb-hint">バー=移動 / 右下=リサイズ / ⛶=最大化 / S=ソロ(1つだけ音)</span>
+  </div>
+  <div id="stage">
+    <div id="stage-empty">配信がありません。拡張のポップアップから URL を入れて Open Multiview してください。</div>
+  </div>
+  <div id="shield"></div>
   <script src="multiview.js"></script>
 </body>
 </html>

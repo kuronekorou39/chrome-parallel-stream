@@ -25,8 +25,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.twitch.tv/*"],
-      "js": ["frame-theater.js"],
+      "matches": [
+        "*://*.twitch.tv/*",
+        "*://*.youtube.com/*",
+        "*://*.kick.com/*",
+        "*://*.openrec.tv/*"
+      ],
+      "js": ["stream-control.js"],
       "all_frames": true,
       "run_at": "document_idle"
     }

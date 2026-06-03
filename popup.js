@@ -44,38 +44,36 @@ function scheduleSavePrefs() {
   saveDebounceTimer = setTimeout(saveMultiviewPrefs, 400);
 }
 
+const MAX_STREAMS = 10;
+
+// textarea の各行を URL 配列に。空行は除く。
+function readUrls() {
+  return $('urls')
+    .value.split('\n')
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0)
+    .slice(0, MAX_STREAMS);
+}
+
 async function saveMultiviewPrefs() {
-  const urls = Array.from(document.querySelectorAll('.url-input')).map((i) => i.value);
-  const layoutRadio = document.querySelector('input[name="layout"]:checked');
-  const layout = layoutRadio ? layoutRadio.value : 'auto';
-  await chrome.storage.local.set({ [MULTIVIEW_PREFS_KEY]: { urls, layout } });
+  await chrome.storage.local.set({ [MULTIVIEW_PREFS_KEY]: { urls: readUrls() } });
 }
 
 async function loadMultiviewPrefs() {
   const data = await chrome.storage.local.get(MULTIVIEW_PREFS_KEY);
   const prefs = data[MULTIVIEW_PREFS_KEY] || {};
-  const urls = prefs.urls || [];
-  document.querySelectorAll('.url-input').forEach((input, i) => {
-    input.value = urls[i] || '';
-  });
-  const layout = prefs.layout || 'auto';
-  const r = document.querySelector('input[name="layout"][value="' + layout + '"]');
-  if (r) r.checked = true;
+  $('urls').value = (prefs.urls || []).join('\n');
 }
 
 async function openMultiview() {
-  const urls = Array.from(document.querySelectorAll('.url-input'))
-    .map((i) => i.value.trim())
-    .filter((u) => u.length > 0);
+  const urls = readUrls();
 
   if (urls.length === 0) {
     setStatus('No URLs entered.', 'error');
     return;
   }
 
-  const layoutRadio = document.querySelector('input[name="layout"]:checked');
-  const layout = layoutRadio ? layoutRadio.value : 'auto';
-  const run = { timestamp: new Date().toISOString(), urls, layout };
+  const run = { timestamp: new Date().toISOString(), urls };
 
   $('open-multiview').disabled = true;
   try {
@@ -119,7 +117,9 @@ function renderLastRun(run) {
   const html = [];
   html.push('<div class="kv">');
   html.push('<div class="k">timestamp</div><div class="v">' + escapeHtml(run.timestamp) + '</div>');
-  html.push('<div class="k">layout</div><div class="v">' + escapeHtml(run.layout || '') + '</div>');
+  html.push(
+    '<div class="k">streams</div><div class="v">' + (run.urls || []).length + '</div>'
+  );
   html.push('</div>');
   for (const u of run.urls || []) {
     html.push('<div class="member">• ' + escapeHtml(u) + '</div>');
@@ -444,13 +444,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Multiview
-  document.querySelectorAll('.url-input').forEach((input) => {
-    input.addEventListener('input', scheduleSavePrefs);
-    input.addEventListener('change', saveMultiviewPrefs);
-  });
-  document.querySelectorAll('input[name="layout"]').forEach((r) => {
-    r.addEventListener('change', saveMultiviewPrefs);
-  });
+  $('urls').addEventListener('input', scheduleSavePrefs);
+  $('urls').addEventListener('change', saveMultiviewPrefs);
   $('open-multiview').addEventListener('click', openMultiview);
   $('close-multiview').addEventListener('click', closeMultiview);
 

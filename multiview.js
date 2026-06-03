@@ -1,61 +1,305 @@
-// 拡張機能のページ内に複数配信をタイル表示する。
-// popup の「Open Multiview」が storage(MULTIVIEW_ACTIVE_KEY)に URL 群を書いてから
-// このページ(multiview.html)をタブで開く。ここはそれを読んで iframe グリッドを作るだけ。
-//
-// 配信サイトは X-Frame-Options / CSP(frame-ancestors)で iframe 埋め込みを拒否するので、
-// rules.json の declarativeNetRequest ルールが sub_frame 読込時にそれらのヘッダを剥がす。
+// マルチビュー本体ページの「ページ内ウィンドウマネージャ」。
+// storage(MULTIVIEW_ACTIVE_KEY)の URL 群を読み、各配信を iframe のフローティング窓として
+// ステージ上に並べる。ドラッグ移動・右下リサイズ・重ね(z-order)・最大化・整列に対応。
+// 音声はクロスオリジンで直接触れないため、各フレームの content script(stream-control.js)へ
+// postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
-const MAX_CELLS = 4;
-
+const MAX_WINDOWS = 10;
+const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
-(async function initMultiview() {
-  const grid = document.getElementById('grid');
+const stage = document.getElementById('stage');
+const stageEmpty = document.getElementById('stage-empty');
+const shield = document.getElementById('shield');
+const countEl = document.getElementById('count');
+
+let zCounter = 10;
+let idSeq = 0;
+let activeWin = null;
+const master = { volume: 1.0, muted: true };
+const wins = [];
+
+(async function init() {
+  wireToolbar();
+  window.addEventListener('message', onFrameMessage);
+  window.addEventListener('resize', () => wins.forEach((w) => setRect(w, getRect(w).x, getRect(w).y, getRect(w).w, getRect(w).h)));
+
   const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
-  const active = data[MULTIVIEW_ACTIVE_KEY] || {};
-  const urls = (active.urls || []).map((u) => (u || '').trim()).filter((u) => u.length > 0);
+  const urls = ((data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [])
+    .map((u) => (u || '').trim())
+    .filter((u) => u.length > 0)
+    .slice(0, MAX_WINDOWS);
 
-  if (urls.length === 0) {
-    grid.innerHTML =
-      '<div class="empty">表示する配信がありません。拡張機能のポップアップから URL を入れて Open Multiview してください。</div>';
-    return;
-  }
-
-  const count = Math.min(urls.length, MAX_CELLS);
-  // 1 → 1x1 / 2 → 2x1 / 3,4 → 2x2
-  grid.style.gridTemplateColumns = count <= 1 ? '1fr' : '1fr 1fr';
-  grid.style.gridTemplateRows = count <= 2 ? '1fr' : '1fr 1fr';
-
-  for (let i = 0; i < count; i++) {
-    grid.appendChild(makeCell(urls[i]));
-  }
-  document.title = 'Multiview (' + count + ')';
+  urls.forEach((u) => createWindow(u, { silent: true }));
+  tileAll();
+  updateCount();
 })();
 
-function makeCell(url) {
-  const cell = document.createElement('div');
-  cell.className = 'cell';
+// ====== ウィンドウ生成 ======
 
-  const badge = document.createElement('div');
-  badge.className = 'badge';
-  badge.textContent = labelFor(url);
-  cell.appendChild(badge);
+function createWindow(url, opts = {}) {
+  if (wins.length >= MAX_WINDOWS) return null;
+  const id = 'w' + ++idSeq;
 
+  const el = document.createElement('div');
+  el.className = 'win';
+  el.style.zIndex = ++zCounter;
+
+  const bar = document.createElement('div');
+  bar.className = 'win-bar';
+  const title = document.createElement('div');
+  title.className = 'win-title';
+  title.textContent = labelFor(url);
+
+  const controls = document.createElement('div');
+  controls.className = 'win-controls';
+  const muteBtn = mkBtn('🔇', 'muted', 'ミュート切替');
+  const soloBtn = mkBtn('S', '', 'ソロ(これだけ音を出す)');
+  const maxBtn = mkBtn('⛶', '', '最大化/復元');
+  const closeBtn = mkBtn('✕', 'close', '閉じる');
+  controls.append(muteBtn, soloBtn, maxBtn, closeBtn);
+  bar.append(title, controls);
+
+  const body = document.createElement('div');
+  body.className = 'win-body';
   const frame = document.createElement('iframe');
   frame.src = toEmbedUrl(url);
   frame.allow = IFRAME_ALLOW;
   frame.setAttribute('allowfullscreen', '');
   frame.referrerPolicy = 'no-referrer';
-  cell.appendChild(frame);
+  body.appendChild(frame);
 
-  return cell;
+  const resize = document.createElement('div');
+  resize.className = 'win-resize';
+
+  el.append(bar, body, resize);
+  stage.appendChild(el);
+
+  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null };
+  wins.push(win);
+
+  const i = wins.length - 1;
+  setRect(win, 40 + (i % 6) * 30, 40 + (i % 6) * 30, 520, 320);
+
+  el.addEventListener('mousedown', () => focusWindow(win));
+  makeDraggable(win, bar);
+  makeResizable(win, resize);
+  muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
+  soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
+  maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
+  bar.addEventListener('dblclick', () => toggleMax(win));
+  frame.addEventListener('load', () => sendAudio(win));
+
+  focusWindow(win);
+  updateWinAudioUI(win);
+  if (!opts.silent) updateCount();
+  return win;
 }
 
-// サイトごとに「iframe 埋め込みに適した URL」へ変換する。
-// Kick: フルサイトは iframe 内でルーティングが壊れ 404 になるため、公式の
-//       埋め込みプレイヤー player.kick.com/<channel> に差し替える。
-// Twitch/YouTube/OPENREC はフルサイトのまま(Twitch はシアター化を frame-theater.js が担当)。
+function mkBtn(label, cls, title) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = label;
+  if (cls) b.className = cls;
+  if (title) b.title = title;
+  return b;
+}
+
+// ====== 位置・サイズ ======
+
+function setRect(win, x, y, w, h) {
+  const sw = stage.clientWidth;
+  const sh = stage.clientHeight;
+  w = Math.max(220, Math.min(w, sw));
+  h = Math.max(150, Math.min(h, sh));
+  x = Math.max(0, Math.min(x, sw - 60));
+  y = Math.max(0, Math.min(y, sh - 30));
+  win.el.style.left = x + 'px';
+  win.el.style.top = y + 'px';
+  win.el.style.width = w + 'px';
+  win.el.style.height = h + 'px';
+}
+
+function getRect(win) {
+  return { x: win.el.offsetLeft, y: win.el.offsetTop, w: win.el.offsetWidth, h: win.el.offsetHeight };
+}
+
+function focusWindow(win) {
+  win.el.style.zIndex = ++zCounter;
+  if (activeWin === win) return;
+  if (activeWin) activeWin.el.classList.remove('active');
+  activeWin = win;
+  win.el.classList.add('active');
+}
+
+function makeDraggable(win, handle) {
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || win.maximized) return;
+    e.preventDefault();
+    focusWindow(win);
+    const r = getRect(win);
+    const sx = e.clientX;
+    const sy = e.clientY;
+    showShield('move');
+    const onMove = (ev) => setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
+    const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function makeResizable(win, handle) {
+  handle.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || win.maximized) return;
+    e.preventDefault();
+    e.stopPropagation();
+    focusWindow(win);
+    const r = getRect(win);
+    const sx = e.clientX;
+    const sy = e.clientY;
+    showShield('nwse-resize');
+    const onMove = (ev) => setRect(win, r.x, r.y, r.w + (ev.clientX - sx), r.h + (ev.clientY - sy));
+    const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+function showShield(cursor) { shield.style.cursor = cursor; shield.classList.add('on'); }
+function hideShield() { shield.classList.remove('on'); }
+
+function toggleMax(win) {
+  if (win.maximized) {
+    if (win.prevRect) setRect(win, win.prevRect.x, win.prevRect.y, win.prevRect.w, win.prevRect.h);
+    win.maximized = false;
+  } else {
+    win.prevRect = getRect(win);
+    setRect(win, 4, 4, stage.clientWidth - 8, stage.clientHeight - 8);
+    win.maximized = true;
+    focusWindow(win);
+  }
+}
+
+// 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。
+function tileAll() {
+  const n = wins.length;
+  if (!n) return;
+  const cols = Math.ceil(Math.sqrt(n));
+  const rows = Math.ceil(n / cols);
+  const gap = 4;
+  const cw = Math.floor((stage.clientWidth - gap * (cols + 1)) / cols);
+  const ch = Math.floor((stage.clientHeight - gap * (rows + 1)) / rows);
+  wins.forEach((win, i) => {
+    win.maximized = false;
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    setRect(win, gap + c * (cw + gap), gap + r * (ch + gap), cw, ch);
+  });
+}
+
+function closeWindow(win) {
+  const i = wins.indexOf(win);
+  if (i >= 0) wins.splice(i, 1);
+  win.el.remove();
+  if (activeWin === win) activeWin = null;
+  updateCount();
+}
+
+function updateCount() {
+  countEl.textContent = wins.length;
+  stageEmpty.style.display = wins.length ? 'none' : 'flex';
+  document.getElementById('add-btn').disabled = wins.length >= MAX_WINDOWS;
+}
+
+// ====== 音声 ======
+
+function toggleMute(win) {
+  win.muted = !win.muted;
+  sendAudio(win);
+}
+
+// ソロ: この窓だけ鳴らし、他は全部ミュート(マスタミュートも解除)。
+function soloWindow(win) {
+  master.muted = false;
+  updateMasterMuteUI();
+  wins.forEach((w) => { w.muted = w !== win; });
+  refreshAllAudio();
+}
+
+function setMasterVolume(v) {
+  master.volume = v;
+  wins.forEach(sendAudio);
+}
+
+function toggleMasterMute() {
+  master.muted = !master.muted;
+  updateMasterMuteUI();
+  refreshAllAudio();
+}
+
+function updateMasterMuteUI() {
+  const btn = document.getElementById('master-mute');
+  btn.textContent = '全体ミュート: ' + (master.muted ? 'ON' : 'OFF');
+  btn.classList.toggle('on', master.muted);
+}
+
+function refreshAllAudio() { wins.forEach(sendAudio); }
+
+function sendAudio(win) {
+  const eff = master.muted || win.muted;
+  try {
+    win.frame.contentWindow.postMessage(
+      { [MAGIC]: true, type: 'audio', muted: eff, volume: master.volume },
+      '*'
+    );
+  } catch (e) {
+    /* フレーム未ロード等は ready 通知で再送される */
+  }
+  updateWinAudioUI(win);
+}
+
+function updateWinAudioUI(win) {
+  const eff = master.muted || win.muted;
+  win.muteBtn.textContent = eff ? '🔇' : '🔊';
+  win.muteBtn.classList.toggle('muted', eff);
+  const onlyOneAudible = !win.muted && !master.muted && wins.filter((w) => !w.muted).length === 1;
+  win.el.classList.toggle('solo', onlyOneAudible);
+}
+
+function onFrameMessage(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true) return;
+  if (d.type === 'ready') {
+    const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+    if (win) sendAudio(win);
+  }
+}
+
+// ====== ツールバー ======
+
+function wireToolbar() {
+  document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(e.target.value / 100));
+  document.getElementById('master-mute').addEventListener('click', toggleMasterMute);
+  document.getElementById('tile-btn').addEventListener('click', tileAll);
+
+  const addUrl = document.getElementById('add-url');
+  const doAdd = () => {
+    const u = addUrl.value.trim();
+    if (!u || wins.length >= MAX_WINDOWS) return;
+    createWindow(u);
+    addUrl.value = '';
+  };
+  document.getElementById('add-btn').addEventListener('click', doAdd);
+  addUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+
+  updateMasterMuteUI();
+}
+
+// ====== URL ヘルパ ======
+
+// Kick はフルサイトが iframe 内で 404 になるため公式埋め込みプレイヤーに変換する。
 function toEmbedUrl(rawUrl) {
   try {
     const u = new URL(rawUrl);
@@ -70,7 +314,6 @@ function toEmbedUrl(rawUrl) {
   }
 }
 
-// バッジ表示用に host/チャンネルだけ抜き出す(失敗時は素の URL)。
 function labelFor(url) {
   try {
     const u = new URL(url);

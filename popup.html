@@ -20,35 +20,10 @@
     <!-- ===== Multiview パネル ===== -->
     <div class="panel" data-panel="multiview">
       <section class="form">
-        <h2>Streams <span class="hint">(up to 4)</span></h2>
-        <div class="url-row">
-          <label for="url-0">Stream 1</label>
-          <input id="url-0" class="url-input" data-idx="0" type="url" autocomplete="off" placeholder="https://www.twitch.tv/<channel>" />
-        </div>
-        <div class="url-row">
-          <label for="url-1">Stream 2</label>
-          <input id="url-1" class="url-input" data-idx="1" type="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=<id>" />
-        </div>
-        <div class="url-row">
-          <label for="url-2">Stream 3</label>
-          <input id="url-2" class="url-input" data-idx="2" type="url" autocomplete="off" placeholder="https://kick.com/<channel>" />
-        </div>
-        <div class="url-row">
-          <label for="url-3">Stream 4</label>
-          <input id="url-3" class="url-input" data-idx="3" type="url" autocomplete="off" placeholder="https://www.openrec.tv/live/<id>" />
-        </div>
-      </section>
-
-      <section class="layout-toggle">
-        <h2>Layout</h2>
-        <label class="radio">
-          <input type="radio" name="layout" value="auto" checked />
-          <span>Auto <span class="hint">(tiled by stream count)</span></span>
-        </label>
-        <label class="radio">
-          <input type="radio" name="layout" value="manual" />
-          <span>Manual <span class="hint">(centered, place yourself)</span></span>
-        </label>
+        <h2>Streams <span class="hint">(1行に1URL・最大10)</span></h2>
+        <textarea id="urls" class="urls-input" rows="8" autocomplete="off" spellcheck="false"
+          placeholder="https://www.twitch.tv/<channel>&#10;https://www.youtube.com/watch?v=<id>&#10;https://kick.com/<channel>&#10;https://www.openrec.tv/live/<id>"></textarea>
+        <p class="hint">開いた後、各枠はドラッグで移動・右下でリサイズ・⛶で最大化。起動時は全ミュート、各枠の S でソロ。</p>
       </section>
 
       <div class="actions">

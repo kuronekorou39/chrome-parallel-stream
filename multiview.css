@@ -1,0 +1,98 @@
+/* マルチビュー本体ページ。上部ツールバー + 下部ステージ(フローティング窓)。 */
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #000;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  color: #c9d1d9;
+}
+body { display: flex; flex-direction: column; }
+
+/* ===== ツールバー ===== */
+#toolbar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: #0d1117;
+  border-bottom: 1px solid #21262d;
+  font-size: 12px;
+  z-index: 100000;
+}
+.tb-item { display: inline-flex; align-items: center; gap: 6px; color: #8b949e; }
+#count {
+  font-weight: bold; color: #f0f6fc;
+  background: #21262d; border-radius: 10px; padding: 1px 9px; min-width: 22px; text-align: center;
+}
+.tb-sep { width: 1px; height: 18px; background: #30363d; }
+.tb-grow { flex: 1 1 auto; }
+.tb-hint { color: #6e7681; font-size: 11px; white-space: nowrap; }
+
+#master-vol { width: 110px; accent-color: #58a6ff; cursor: pointer; }
+
+.tb-btn {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 4px; padding: 4px 10px; font-family: inherit; font-size: 11px; cursor: pointer;
+}
+.tb-btn:hover { background: #30363d; border-color: #58a6ff; }
+.tb-btn.on { background: #3c0d11; border-color: #f85149; color: #f85149; }
+
+.tb-input {
+  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 3px;
+  padding: 4px 8px; font-family: inherit; font-size: 11px; width: 230px;
+}
+.tb-input:focus { outline: none; border-color: #58a6ff; }
+
+/* ===== ステージ ===== */
+#stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
+#stage-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #6e7681; font-size: 13px; text-align: center; padding: 20px;
+}
+
+/* ===== フローティング窓 ===== */
+.win {
+  position: absolute; display: flex; flex-direction: column;
+  background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  min-width: 220px; min-height: 150px;
+}
+.win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
+.win.solo { border-color: #3fb950; }
+
+.win-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  height: 26px; padding: 0 6px; cursor: move; user-select: none;
+  background: #161b22; border-bottom: 1px solid #21262d;
+}
+.win-title {
+  flex: 1 1 auto; font-size: 11px; color: #8b949e;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.win-controls { display: flex; gap: 2px; flex: 0 0 auto; }
+.win-controls button {
+  background: transparent; color: #8b949e; border: none; border-radius: 3px;
+  width: 22px; height: 20px; font-size: 12px; cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.win-controls button:hover { background: #30363d; color: #f0f6fc; }
+.win-controls button.active { color: #3fb950; }
+.win-controls button.muted { color: #f85149; }
+.win-controls .close:hover { background: #3c0d11; color: #f85149; }
+
+.win-body { position: relative; flex: 1 1 auto; background: #000; }
+.win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+.win-resize {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
+  cursor: nwse-resize; z-index: 3;
+  background:
+    linear-gradient(135deg, transparent 50%, #58a6ff 50%, #58a6ff 60%, transparent 60%,
+    transparent 70%, #58a6ff 70%, #58a6ff 80%, transparent 80%);
+  opacity: 0.6;
+}
+.win-resize:hover { opacity: 1; }
+
+/* ドラッグ/リサイズ中に iframe へマウスイベントを吸わせないシールド */
+#shield { position: fixed; inset: 0; z-index: 99999; cursor: inherit; display: none; }
+#shield.on { display: block; }

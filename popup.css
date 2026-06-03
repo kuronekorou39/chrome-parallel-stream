@@ -199,6 +199,23 @@ section {
   border-color: #58a6ff;
 }
 
+.urls-input {
+  width: 100%;
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.urls-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
 .layout-toggle .radio {
   display: flex;
   align-items: center;
