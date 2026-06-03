@@ -1,7 +1,9 @@
 // popup の描画とアクション。
-// background.js に問い合わせて report を取得し、各セクションに流し込む。
+// 2タブ構成: Multiview (本機能) / Probe (Phase 1のケイパビリティ調査結果)
 
 const STORAGE_KEY = 'probeReport';
+const MULTIVIEW_PREFS_KEY = 'multiviewPrefs';
+const MULTIVIEW_LAST_KEY = 'multiviewLastRun';
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,6 +22,139 @@ function escapeHtml(s) {
     "'": '&#39;'
   })[ch]);
 }
+
+// ---------- タブ切替 ----------
+
+function activateTab(name) {
+  document
+    .querySelectorAll('.tab')
+    .forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  document
+    .querySelectorAll('.panel')
+    .forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== name));
+}
+
+// ---------- Multiview ----------
+
+let saveDebounceTimer = null;
+function scheduleSavePrefs() {
+  clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(saveMultiviewPrefs, 400);
+}
+
+async function saveMultiviewPrefs() {
+  const urls = Array.from(document.querySelectorAll('.url-input')).map((i) => i.value);
+  const layoutRadio = document.querySelector('input[name="layout"]:checked');
+  const layout = layoutRadio ? layoutRadio.value : 'auto';
+  await chrome.storage.local.set({ [MULTIVIEW_PREFS_KEY]: { urls, layout } });
+}
+
+async function loadMultiviewPrefs() {
+  const data = await chrome.storage.local.get(MULTIVIEW_PREFS_KEY);
+  const prefs = data[MULTIVIEW_PREFS_KEY] || {};
+  const urls = prefs.urls || [];
+  document.querySelectorAll('.url-input').forEach((input, i) => {
+    input.value = urls[i] || '';
+  });
+  const layout = prefs.layout || 'auto';
+  const r = document.querySelector('input[name="layout"][value="' + layout + '"]');
+  if (r) r.checked = true;
+}
+
+async function openMultiview() {
+  const urls = Array.from(document.querySelectorAll('.url-input'))
+    .map((i) => i.value.trim())
+    .filter((u) => u.length > 0);
+
+  if (urls.length === 0) {
+    setStatus('No URLs entered.', 'error');
+    return;
+  }
+
+  const layoutRadio = document.querySelector('input[name="layout"]:checked');
+  const layout = layoutRadio ? layoutRadio.value : 'auto';
+
+  const screenSize = {
+    availLeft: window.screen.availLeft || 0,
+    availTop: window.screen.availTop || 0,
+    availWidth: window.screen.availWidth,
+    availHeight: window.screen.availHeight
+  };
+  const rects = window.MultiviewLayout.compute(urls.length, layout, screenSize);
+
+  setStatus('Opening ' + urls.length + ' streams…', 'info');
+  $('open-multiview').disabled = true;
+  try {
+    const resp = await chrome.runtime.sendMessage({
+      type: 'open-multiview',
+      urls,
+      layouts: rects
+    });
+    if (resp && resp.ok) {
+      setStatus(
+        'Opened ' + (resp.windowIds || []).length + ' windows. Theater mode activating…',
+        'success'
+      );
+      renderLastRun({
+        timestamp: new Date().toISOString(),
+        urls,
+        layout,
+        windowIds: resp.windowIds
+      });
+    } else {
+      setStatus('Open failed: ' + JSON.stringify(resp && resp.error), 'error');
+    }
+  } catch (e) {
+    setStatus('Open error: ' + e.message, 'error');
+  } finally {
+    $('open-multiview').disabled = false;
+  }
+}
+
+async function closeMultiview() {
+  setStatus('Closing opened windows…', 'info');
+  $('close-multiview').disabled = true;
+  try {
+    const resp = await chrome.runtime.sendMessage({ type: 'close-multiview' });
+    if (resp && resp.ok) {
+      setStatus('Closed ' + (resp.closed || []).length + ' windows.', 'success');
+    } else {
+      setStatus('Close failed: ' + JSON.stringify(resp && resp.error), 'error');
+    }
+  } catch (e) {
+    setStatus('Close error: ' + e.message, 'error');
+  } finally {
+    $('close-multiview').disabled = false;
+  }
+}
+
+function renderLastRun(run) {
+  if (!run) {
+    $('multiview-last').innerHTML = '<span class="empty">no runs yet</span>';
+    return;
+  }
+  const html = [];
+  html.push('<div class="kv">');
+  html.push('<div class="k">timestamp</div><div class="v">' + escapeHtml(run.timestamp) + '</div>');
+  html.push('<div class="k">layout</div><div class="v">' + escapeHtml(run.layout) + '</div>');
+  html.push(
+    '<div class="k">windowIds</div><div class="v">' +
+      escapeHtml((run.windowIds || []).join(', ')) +
+      '</div>'
+  );
+  html.push('</div>');
+  for (const u of run.urls || []) {
+    html.push('<div class="member">• ' + escapeHtml(u) + '</div>');
+  }
+  $('multiview-last').innerHTML = html.join('');
+}
+
+async function loadLastRun() {
+  const data = await chrome.storage.local.get(MULTIVIEW_LAST_KEY);
+  if (data[MULTIVIEW_LAST_KEY]) renderLastRun(data[MULTIVIEW_LAST_KEY]);
+}
+
+// ---------- Probe ----------
 
 async function loadReport() {
   const data = await chrome.storage.local.get(STORAGE_KEY);
@@ -64,7 +199,6 @@ async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch (e) {
-    // フォールバック: textarea + execCommand
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -76,16 +210,11 @@ async function copyToClipboard(text) {
   }
 }
 
-// ---------- レンダリング ----------
-
 function render(report) {
   if (!report) {
-    setStatus('No report yet. Click "Re-run probes".', 'info');
     renderEmptyAll();
     return;
   }
-  setStatus(`Last run: ${report.timestamp || 'unknown'}`);
-
   renderCustomApis(report);
   renderStandardApis(report);
   renderWindowsProbe(report);
@@ -122,11 +251,9 @@ function renderCustomApis(report) {
       '<span class="empty">標準外の chrome.* namespace は検出されませんでした。</span>';
     return;
   }
-  const blocks = customs.map((ns) => {
-    const detail = surface.detail[ns];
-    return apiBlockHtml(ns, detail, /*isCustom*/ true);
-  });
-  target.innerHTML = blocks.join('');
+  target.innerHTML = customs
+    .map((ns) => apiBlockHtml(ns, surface.detail[ns], /*isCustom*/ true))
+    .join('');
 }
 
 function renderStandardApis(report) {
@@ -141,38 +268,28 @@ function renderStandardApis(report) {
     target.innerHTML = '<span class="empty">none</span>';
     return;
   }
-  const blocks = standards.map((ns) =>
-    apiBlockHtml(ns, surface.detail[ns], /*isCustom*/ false)
-  );
-  target.innerHTML = blocks.join('');
+  target.innerHTML = standards
+    .map((ns) => apiBlockHtml(ns, surface.detail[ns], /*isCustom*/ false))
+    .join('');
 }
 
 function apiBlockHtml(ns, detail, isCustom) {
   if (!detail) return '';
-  const marker = isCustom
-    ? '<span class="custom-marker">★ CUSTOM</span> '
-    : '';
+  const marker = isCustom ? '<span class="custom-marker">★ CUSTOM</span> ' : '';
   const nameCls = isCustom ? 'api-name' : 'api-name standard';
-  let html = `<div class="api-block">${marker}<span class="${nameCls}">chrome.${escapeHtml(
-    ns
-  )}</span> <span class="api-typeof">[${escapeHtml(detail.typeof)}]</span>`;
-  const members = detail.members || [];
-  for (const m of members) {
-    html += `<div class="member"><span class="name">${escapeHtml(
-      m.name
-    )}</span> <span class="api-typeof">[${escapeHtml(m.typeof)}]</span></div>`;
-    if (m.subMembers && m.subMembers.length) {
-      for (const sm of m.subMembers) {
-        html += `<div class="sub-member">${escapeHtml(
-          sm.name
-        )} [${escapeHtml(sm.typeof)}]</div>`;
-      }
+  let html =
+    `<div class="api-block">${marker}<span class="${nameCls}">chrome.${escapeHtml(ns)}</span>` +
+    ` <span class="api-typeof">[${escapeHtml(detail.typeof)}]</span>`;
+  for (const m of detail.members || []) {
+    html +=
+      `<div class="member"><span class="name">${escapeHtml(m.name)}</span>` +
+      ` <span class="api-typeof">[${escapeHtml(m.typeof)}]</span></div>`;
+    for (const sm of m.subMembers || []) {
+      html += `<div class="sub-member">${escapeHtml(sm.name)} [${escapeHtml(sm.typeof)}]</div>`;
     }
   }
   if (detail.error) {
-    html += `<div class="member"><span class="tag tag-err">err</span> ${escapeHtml(
-      detail.error
-    )}</div>`;
+    html += `<div class="member"><span class="tag tag-err">err</span> ${escapeHtml(detail.error)}</div>`;
   }
   html += '</div>';
   return html;
@@ -191,17 +308,10 @@ function renderWindowsProbe(report) {
     (probe.methods || []).join(', ') || '(none)'
   )}</div></div>`;
   for (const t of probe.createTests || []) {
-    html += `<div class="api-block"><div><span class="api-name">type:</span> ${escapeHtml(
-      t.type
-    )}`;
-    if (t.createError) {
-      html += ` <span class="tag tag-err">create failed</span>`;
-    } else if (t.createResult) {
-      html += ` <span class="tag tag-ok">created</span>`;
-    }
-    html += `</div><pre class="json">${escapeHtml(
-      JSON.stringify(t, null, 2)
-    )}</pre></div>`;
+    html += `<div class="api-block"><div><span class="api-name">type:</span> ${escapeHtml(t.type)}`;
+    if (t.createError) html += ` <span class="tag tag-err">create failed</span>`;
+    else if (t.createResult) html += ` <span class="tag tag-ok">created</span>`;
+    html += `</div><pre class="json">${escapeHtml(JSON.stringify(t, null, 2))}</pre></div>`;
   }
   if (probe.notes && probe.notes.length) {
     html += `<div>notes: ${escapeHtml(probe.notes.join(' / '))}</div>`;
@@ -222,9 +332,7 @@ function renderFullscreenProbe(report) {
       (probe.url ? `<div>url: ${escapeHtml(probe.url)}</div>` : '');
     return;
   }
-  target.innerHTML = `<pre class="json">${escapeHtml(
-    JSON.stringify(probe, null, 2)
-  )}</pre>`;
+  target.innerHTML = `<pre class="json">${escapeHtml(JSON.stringify(probe, null, 2))}</pre>`;
 }
 
 function renderWebviewProbe(report) {
@@ -234,22 +342,17 @@ function renderWebviewProbe(report) {
     target.innerHTML = '<span class="empty">webview probe did not run</span>';
     return;
   }
-  target.innerHTML = `<pre class="json">${escapeHtml(
-    JSON.stringify(probe, null, 2)
-  )}</pre>`;
+  target.innerHTML = `<pre class="json">${escapeHtml(JSON.stringify(probe, null, 2))}</pre>`;
 }
 
 function renderErrors(report) {
   const target = $('errors');
   const errs = report.errors || {};
-  const keys = Object.keys(errs);
-  if (keys.length === 0) {
+  if (Object.keys(errs).length === 0) {
     target.innerHTML = '<span class="empty">no errors</span>';
     return;
   }
-  target.innerHTML = `<pre class="json">${escapeHtml(
-    JSON.stringify(errs, null, 2)
-  )}</pre>`;
+  target.innerHTML = `<pre class="json">${escapeHtml(JSON.stringify(errs, null, 2))}</pre>`;
 }
 
 function renderMeta(report) {
@@ -261,8 +364,6 @@ function renderMeta(report) {
     <div class="k">language</div><div class="v">${escapeHtml(report.language)}</div>
   </div>`;
 }
-
-// ---------- Markdown 変換（Claudeに貼り戻す用） ----------
 
 function reportToMarkdown(report) {
   if (!report) return '# Parallel Stream Probe Report\n\n_No report yet._\n';
@@ -276,7 +377,6 @@ function reportToMarkdown(report) {
   L.push(`- language: \`${report.language}\``);
   L.push('');
 
-  // Custom APIs
   L.push('## Custom APIs (★)');
   const surface = report.apiSurface || {};
   const customs = surface.customNamespaces || [];
@@ -300,13 +400,11 @@ function reportToMarkdown(report) {
   }
   L.push('');
 
-  // Standard APIs
   L.push('## Standard APIs (reference)');
   const stds = surface.standardNamespaces || [];
   L.push(stds.length ? stds.map((s) => `\`${s}\``).join(', ') : '_None._');
   L.push('');
 
-  // Windows
   L.push('## Windows Probe');
   if (report.windowsProbe) {
     L.push(`- available: \`${report.windowsProbe.available}\``);
@@ -326,7 +424,6 @@ function reportToMarkdown(report) {
   }
   L.push('');
 
-  // Fullscreen
   L.push('## Fullscreen Probe');
   if (report.fullscreenProbe) {
     L.push('```json');
@@ -337,7 +434,6 @@ function reportToMarkdown(report) {
   }
   L.push('');
 
-  // Webview
   L.push('## Webview / Custom Namespace Probe');
   if (report.webviewProbe) {
     L.push('```json');
@@ -348,7 +444,6 @@ function reportToMarkdown(report) {
   }
   L.push('');
 
-  // Errors
   L.push('## Errors');
   const errs = report.errors || {};
   if (Object.keys(errs).length === 0) {
@@ -365,10 +460,30 @@ function reportToMarkdown(report) {
 // ---------- 初期化 ----------
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // タブ
+  document.querySelectorAll('.tab').forEach((t) => {
+    t.addEventListener('click', () => activateTab(t.dataset.tab));
+  });
+
+  // Multiview
+  document.querySelectorAll('.url-input').forEach((input) => {
+    input.addEventListener('input', scheduleSavePrefs);
+    input.addEventListener('change', saveMultiviewPrefs);
+  });
+  document.querySelectorAll('input[name="layout"]').forEach((r) => {
+    r.addEventListener('change', saveMultiviewPrefs);
+  });
+  $('open-multiview').addEventListener('click', openMultiview);
+  $('close-multiview').addEventListener('click', closeMultiview);
+
+  // Probe
   $('rerun').addEventListener('click', rerun);
   $('copy-json').addEventListener('click', copyJson);
   $('copy-md').addEventListener('click', copyMarkdown);
 
+  // 初期データロード
+  await loadMultiviewPrefs();
+  await loadLastRun();
   const report = await loadReport();
   render(report);
 });

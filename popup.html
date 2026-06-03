@@ -2,59 +2,114 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>Parallel Stream Probe</title>
+  <title>Parallel Stream</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
   <header>
     <div class="title-row">
-      <h1>Parallel Stream Probe</h1>
+      <nav class="tabs">
+        <button class="tab active" data-tab="multiview" type="button">Multiview</button>
+        <button class="tab" data-tab="probe" type="button">Probe</button>
+      </nav>
       <span id="status" class="status"></span>
-    </div>
-    <div class="actions">
-      <button id="rerun" type="button">Re-run probes</button>
-      <button id="copy-json" type="button">Copy report as JSON</button>
-      <button id="copy-md" type="button">Copy report as Markdown</button>
     </div>
   </header>
 
   <main>
-    <section>
-      <h2>Custom APIs <span class="hint">(標準外として検出された namespace)</span></h2>
-      <div id="custom-apis" class="block"></div>
-    </section>
+    <!-- ===== Multiview パネル ===== -->
+    <div class="panel" data-panel="multiview">
+      <section class="form">
+        <h2>Streams <span class="hint">(up to 4)</span></h2>
+        <div class="url-row">
+          <label for="url-0">Stream 1</label>
+          <input id="url-0" class="url-input" data-idx="0" type="url" autocomplete="off" placeholder="https://www.twitch.tv/<channel>" />
+        </div>
+        <div class="url-row">
+          <label for="url-1">Stream 2</label>
+          <input id="url-1" class="url-input" data-idx="1" type="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=<id>" />
+        </div>
+        <div class="url-row">
+          <label for="url-2">Stream 3</label>
+          <input id="url-2" class="url-input" data-idx="2" type="url" autocomplete="off" placeholder="https://kick.com/<channel>" />
+        </div>
+        <div class="url-row">
+          <label for="url-3">Stream 4</label>
+          <input id="url-3" class="url-input" data-idx="3" type="url" autocomplete="off" placeholder="https://www.openrec.tv/live/<id>" />
+        </div>
+      </section>
 
-    <section>
-      <h2>Windows Probe Result</h2>
-      <div id="windows-probe" class="block"></div>
-    </section>
+      <section class="layout-toggle">
+        <h2>Layout</h2>
+        <label class="radio">
+          <input type="radio" name="layout" value="auto" checked />
+          <span>Auto <span class="hint">(tiled by stream count)</span></span>
+        </label>
+        <label class="radio">
+          <input type="radio" name="layout" value="manual" />
+          <span>Manual <span class="hint">(centered, place yourself)</span></span>
+        </label>
+      </section>
 
-    <section>
-      <h2>Fullscreen Probe Result</h2>
-      <div id="fullscreen-probe" class="block"></div>
-    </section>
+      <div class="actions">
+        <button id="open-multiview" type="button" class="primary">Open Multiview</button>
+        <button id="close-multiview" type="button">Close opened windows</button>
+      </div>
 
-    <section>
-      <h2>Webview / Custom Namespace Probe</h2>
-      <div id="webview-probe" class="block"></div>
-    </section>
+      <section class="last-run">
+        <h2>Last run</h2>
+        <div id="multiview-last" class="block">
+          <span class="empty">no runs yet</span>
+        </div>
+      </section>
+    </div>
 
-    <section class="collapsible">
-      <h2>Standard APIs <span class="hint">(参考: 想定範囲内)</span></h2>
-      <div id="standard-apis" class="block"></div>
-    </section>
+    <!-- ===== Probe パネル ===== -->
+    <div class="panel hidden" data-panel="probe">
+      <div class="actions">
+        <button id="rerun" type="button">Re-run probes</button>
+        <button id="copy-json" type="button">Copy report as JSON</button>
+        <button id="copy-md" type="button">Copy report as Markdown</button>
+      </div>
 
-    <section>
-      <h2>Errors</h2>
-      <div id="errors" class="block"></div>
-    </section>
+      <section>
+        <h2>Custom APIs <span class="hint">(標準外として検出された namespace)</span></h2>
+        <div id="custom-apis" class="block"></div>
+      </section>
 
-    <section>
-      <h2>Meta</h2>
-      <div id="meta" class="block"></div>
-    </section>
+      <section>
+        <h2>Windows Probe Result</h2>
+        <div id="windows-probe" class="block"></div>
+      </section>
+
+      <section>
+        <h2>Fullscreen Probe Result</h2>
+        <div id="fullscreen-probe" class="block"></div>
+      </section>
+
+      <section>
+        <h2>Webview / Custom Namespace Probe</h2>
+        <div id="webview-probe" class="block"></div>
+      </section>
+
+      <section>
+        <h2>Standard APIs <span class="hint">(参考: 想定範囲内)</span></h2>
+        <div id="standard-apis" class="block"></div>
+      </section>
+
+      <section>
+        <h2>Errors</h2>
+        <div id="errors" class="block"></div>
+      </section>
+
+      <section>
+        <h2>Meta</h2>
+        <div id="meta" class="block"></div>
+      </section>
+    </div>
   </main>
 
+  <script src="multiview/layout.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -33,16 +33,40 @@ header {
 
 .title-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-h1 {
-  font-size: 14px;
-  margin: 0;
-  color: #f0f6fc;
+/* ===== タブ ===== */
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tab {
+  background: transparent;
+  color: #8b949e;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
   letter-spacing: 0.02em;
+}
+
+.tab:hover {
+  color: #c9d1d9;
+}
+
+.tab.active {
+  color: #f0f6fc;
+  border-bottom-color: #58a6ff;
+}
+
+.panel.hidden {
+  display: none;
 }
 
 h2 {
@@ -64,6 +88,10 @@ h2 {
 .status {
   color: #8b949e;
   font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
 }
 
 .status.error {
@@ -72,6 +100,10 @@ h2 {
 
 .status.success {
   color: #3fb950;
+}
+
+.status.info {
+  color: #58a6ff;
 }
 
 .actions {
@@ -93,13 +125,29 @@ button {
   transition: background 0.1s ease;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   background: #30363d;
   border-color: #58a6ff;
 }
 
 button:active {
   background: #1f2937;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+  background: #388bfd;
+  border-color: #388bfd;
 }
 
 section {
@@ -121,7 +169,51 @@ section {
   font-style: italic;
 }
 
-/* ★ Custom API 表示の強調 */
+/* ===== Multiview フォーム ===== */
+.url-row {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.url-row label {
+  color: #8b949e;
+  font-size: 11px;
+}
+
+.url-input {
+  background: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  width: 100%;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+}
+
+.layout-toggle .radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #c9d1d9;
+  margin-bottom: 4px;
+  cursor: pointer;
+}
+
+.layout-toggle input[type="radio"] {
+  accent-color: #58a6ff;
+}
+
+/* ===== Probe 表示 ===== */
 .custom-marker {
   color: #f0883e;
   font-weight: bold;
