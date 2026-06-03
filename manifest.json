@@ -23,5 +23,10 @@
     "default_popup": "popup.html",
     "default_title": "Parallel Stream Probe"
   },
-  "content_scripts": []
+  "content_scripts": [],
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "ruleset_streams", "enabled": true, "path": "rules.json" }
+    ]
+  }
 }
