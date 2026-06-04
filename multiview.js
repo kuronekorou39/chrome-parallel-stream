@@ -122,22 +122,24 @@ function createWindow(url, opts = {}) {
     if (channel) {
       const chat = document.createElement('iframe');
       chat.className = 'win-chat';
-      chat.src = 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat';
       body.appendChild(chat);
+      // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
+      loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
     }
   } else {
     frame = document.createElement('iframe');
-    frame.src = toEmbedUrl(url);
     // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
     frame.allow = IFRAME_ALLOW;
     body.appendChild(frame);
+    const src = toEmbedUrl(url);
+    if (hostOf(url).includes('openrec.tv')) {
+      // OpenRec もログインCookieを緩めてから読み込む(iframe 内でログイン状態にする)。
+      loadFrameWithLogin(frame, 'openrec.tv', src);
+    } else {
+      frame.src = src;
+    }
     // ※ iframe は生成後 DOM 上で一切 move しないこと。再ペアレントするとブラウザ仕様で
     //   iframe がリロードされ埋め込みが壊れる。最大化/整列/前面化は style 変更のみで行う。
-  }
-
-  // OpenRec はログイン cookie(SameSite)を iframe に引き継げないため、注意書きを出す。
-  if (hostOf(url).includes('openrec.tv')) {
-    body.appendChild(makeNote('⚠ OpenRec はログイン状態を引き継げません(別サイト扱いのため未ログイン表示になります)'));
   }
 
   const resize = document.createElement('div');
@@ -181,21 +183,6 @@ function mkBtn(label, cls, title) {
   if (cls) b.className = cls;
   if (title) b.title = title;
   return b;
-}
-
-// 枠の上部に出す、×で閉じられる注意バナー。
-function makeNote(text) {
-  const note = document.createElement('div');
-  note.className = 'win-note';
-  const span = document.createElement('span');
-  span.textContent = text;
-  const x = document.createElement('button');
-  x.type = 'button';
-  x.className = 'win-note-x';
-  x.textContent = '✕';
-  x.addEventListener('click', (e) => { e.stopPropagation(); note.remove(); });
-  note.append(span, x);
-  return note;
 }
 
 function hostOf(url) {
@@ -401,6 +388,15 @@ function tileAll() {
     const r = Math.floor(i / cols);
     setRect(win, gap + c * (cw + gap), gap + r * (ch + gap), cw, ch);
   });
+}
+
+// ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
+// src を読み込む。これでフレーム内でログイン状態になり、チャット投稿などができる。
+function loadFrameWithLogin(frameEl, domain, src) {
+  chrome.runtime
+    .sendMessage({ type: 'relax-cookies', domains: [domain] })
+    .then(() => { frameEl.src = src; })
+    .catch(() => { frameEl.src = src; }); // 失敗しても一応読み込む
 }
 
 // Kick 枠のチャット表示/非表示を切り替える。

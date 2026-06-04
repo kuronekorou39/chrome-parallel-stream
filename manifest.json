@@ -9,6 +9,7 @@
     "scripting",
     "activeTab",
     "storage",
+    "cookies",
     "sidePanel",
     "declarativeNetRequest",
     "webNavigation"

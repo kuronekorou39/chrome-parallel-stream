@@ -127,8 +127,55 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'relax-cookies') {
+    Promise.all((msg.domains || []).map((d) => relaxCookies(d)))
+      .then((counts) => sendResponse({ ok: true, counts }))
+      .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
+    return true;
+  }
+
   return false;
 });
+
+// 対象ドメインの Cookie を SameSite=None; Secure に再設定する。
+// 既定(Lax)だと別サイト扱いの埋め込みフレームへログインCookieが送られず未ログインになる。
+// None にすると埋め込み内でも送られ、フレーム内でログイン状態になり投稿等ができる。
+// ※ ユーザーの Cookie を改変する操作(ユーザー同意のうえで実行)。サイトが Cookie を
+//   再設定すると元に戻りうるため、各ウィンドウ生成時に都度呼ぶ。
+async function relaxCookies(domain) {
+  let cookies;
+  try {
+    cookies = await chrome.cookies.getAll({ domain });
+  } catch (e) {
+    return 0;
+  }
+  let changed = 0;
+  for (const c of cookies) {
+    if (c.sameSite === 'no_restriction' && c.secure) continue; // 既に緩い
+    const host = c.domain.replace(/^\./, '');
+    const details = {
+      url: 'https://' + host + c.path,
+      name: c.name,
+      value: c.value,
+      path: c.path,
+      secure: true, // SameSite=None には Secure が必須
+      httpOnly: c.httpOnly,
+      sameSite: 'no_restriction',
+      storeId: c.storeId
+    };
+    if (!c.hostOnly) details.domain = c.domain; // host-only cookie は domain を付けない
+    if (!c.session && typeof c.expirationDate === 'number') {
+      details.expirationDate = c.expirationDate;
+    }
+    try {
+      await chrome.cookies.set(details);
+      changed++;
+    } catch (e) {
+      // 一部 cookie は再設定不可。無視して継続。
+    }
+  }
+  return changed;
+}
 
 // Kick のチャンネルから HLS 再生URL(Amazon IVS の m3u8)を取得する。
 // kick.com/api/v2 は Cloudflare 配下。service worker からの fetch は本物の Chrome の
