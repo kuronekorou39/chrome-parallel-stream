@@ -10,10 +10,6 @@ const MAX_WINDOWS = 10;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
-// Kick の埋め込みプレイヤーをリサイズせずに表示するための固定描画サイズ(16:9)。
-const KICK_BASE_W = 1280;
-const KICK_BASE_H = 720;
-
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -96,20 +92,15 @@ function createWindow(url, opts = {}) {
 
   const body = document.createElement('div');
   body.className = 'win-body';
-  const embedSrc = toEmbedUrl(url);
   const frame = document.createElement('iframe');
-  frame.src = embedSrc;
+  frame.src = toEmbedUrl(url);
   // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
   frame.allow = IFRAME_ALLOW;
+  body.appendChild(frame);
 
-  // Kick の埋め込みプレイヤーは iframe をリサイズすると再初期化して 404 になるため、
-  // 固定サイズで描画し CSS transform で拡縮する(iframe 自身の実寸は変えない)。
-  const scaled = hostOf(embedSrc).includes('player.kick.com');
-  if (scaled) {
-    setupScaledFrame(body, frame);
-  } else {
-    body.appendChild(frame);
-  }
+  // ※ iframe は生成後 DOM 上で一切 move しないこと。再ペアレントするとブラウザ仕様で
+  //   iframe がリロードされ、player.kick.cx 等の埋め込みが文脈を失って壊れる。
+  //   最大化・整列・前面化はすべて style 変更のみで行う(appendChild で移し替えない)。
 
   // OpenRec はログイン cookie(SameSite)を iframe に引き継げないため、注意書きを出す。
   if (hostOf(url).includes('openrec.tv')) {
@@ -122,7 +113,7 @@ function createWindow(url, opts = {}) {
   el.append(bar, body, resize);
   stage.appendChild(el);
 
-  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null, scaled };
+  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null };
   wins.push(win);
 
   const i = wins.length - 1;
@@ -177,29 +168,6 @@ function hostOf(url) {
   } catch (e) {
     return '';
   }
-}
-
-// リサイズに弱い埋め込み(Kick)を「固定サイズ iframe + CSS scale」で表示する。
-// iframe の実寸は KICK_BASE_W×H 固定のまま、枠サイズに合わせて wrap を拡縮するので、
-// プレイヤーはリサイズを一切検知せず 404 にならない。ResizeObserver で枠変化に追従。
-function setupScaledFrame(body, frame) {
-  const wrap = document.createElement('div');
-  wrap.className = 'scale-wrap';
-  wrap.style.width = KICK_BASE_W + 'px';
-  wrap.style.height = KICK_BASE_H + 'px';
-  wrap.appendChild(frame);
-  body.appendChild(wrap);
-
-  const ro = new ResizeObserver(() => {
-    const bw = body.clientWidth;
-    const bh = body.clientHeight;
-    if (!bw || !bh) return;
-    const s = Math.min(bw / KICK_BASE_W, bh / KICK_BASE_H);
-    const cx = (bw - KICK_BASE_W * s) / 2;
-    const cy = (bh - KICK_BASE_H * s) / 2;
-    wrap.style.transform = 'translate(' + cx + 'px, ' + cy + 'px) scale(' + s + ')';
-  });
-  ro.observe(body);
 }
 
 // ====== 位置・サイズ ======
@@ -272,22 +240,10 @@ function makeResizable(win, handle) {
     const r = getRect(win);
     const sx = e.clientX;
     const sy = e.clientY;
-    // scaled(Kick)以外は、リサイズ中 iframe を現在ピクセルで固定し、ドラッグ中の
-    // 連続リサイズで埋め込みが再読込されるのを防ぐ(実サイズ変更は mouseup の1回に集約)。
-    // scaled の窓は固定サイズ+transform なので凍結不要(ResizeObserver が拡縮を担当)。
-    if (!win.scaled) {
-      win.frame.style.width = win.frame.offsetWidth + 'px';
-      win.frame.style.height = win.frame.offsetHeight + 'px';
-    }
     showShield('nwse-resize');
     const onMove = (ev) => setRect(win, r.x, r.y, r.w + (ev.clientX - sx), r.h + (ev.clientY - sy));
     const onUp = () => {
       hideShield();
-      if (!win.scaled) {
-        // iframe を CSS の 100% に戻し、最終サイズへ一度だけ追従させる。
-        win.frame.style.width = '';
-        win.frame.style.height = '';
-      }
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -465,14 +421,15 @@ function wireToolbar() {
 
 // ====== URL ヘルパ ======
 
-// Kick はフルサイトが iframe 内で 404 になるため公式埋め込みプレイヤーに変換する。
+// Kick: 公式 player.kick.com は埋め込み元(chrome-extension)を許可せず、操作を契機に
+// origin 再検証で 404 に落ちる。埋め込み耐性の高いミラー player.kick.cx に変換する。
 function toEmbedUrl(rawUrl) {
   try {
     const u = new URL(rawUrl);
     const host = u.hostname.replace(/^www\./, '');
     if (host === 'kick.com') {
       const channel = u.pathname.split('/').filter(Boolean)[0];
-      if (channel) return 'https://player.kick.com/' + encodeURIComponent(channel);
+      if (channel) return 'https://player.kick.cx/' + encodeURIComponent(channel);
     }
     return rawUrl;
   } catch (e) {
