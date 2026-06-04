@@ -12,13 +12,25 @@ body { display: flex; flex-direction: column; }
 /* ===== ツールバー ===== */
 #toolbar {
   flex: 0 0 auto;
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 6px 10px;
   background: #0d1117;
   border-bottom: 1px solid #21262d;
   font-size: 12px;
   z-index: 100000;
 }
+
+/* 主要サイトのワンクリック追加チップ */
+.site-chip {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-left-width: 3px; border-radius: 4px;
+  padding: 4px 8px; font-family: inherit; font-size: 11px; cursor: pointer;
+}
+.site-chip:hover { background: #30363d; }
+.site-chip[data-site="twitch"] { border-left-color: #9147ff; }
+.site-chip[data-site="youtube"] { border-left-color: #ff0033; }
+.site-chip[data-site="kick"] { border-left-color: #53fc18; }
+.site-chip[data-site="openrec"] { border-left-color: #ffd200; }
 .tb-item { display: inline-flex; align-items: center; gap: 6px; color: #8b949e; }
 #count {
   font-weight: bold; color: #f0f6fc;

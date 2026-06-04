@@ -9,12 +9,18 @@
   <div id="toolbar">
     <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/10</span>
     <span class="tb-sep"></span>
-    <span class="tb-item" title="マスタ音量">🔈<input type="range" id="master-vol" min="0" max="100" value="100" /></span>
-    <button id="master-mute" class="tb-btn on" title="全体ミュートの切替">全体ミュート: ON</button>
+    <span class="tb-item">開く</span>
+    <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
+    <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
+    <button class="site-chip" data-site="kick" type="button" title="Kick を開く">Kick</button>
+    <button class="site-chip" data-site="openrec" type="button" title="OPENREC を開く">OPENREC</button>
     <span class="tb-sep"></span>
     <input type="text" id="add-url" class="tb-input" placeholder="URL を貼って Enter / 追加" />
     <button id="add-btn" class="tb-btn">追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
+    <span class="tb-sep"></span>
+    <span class="tb-item" title="マスタ音量">🔈<input type="range" id="master-vol" min="0" max="100" value="100" /></span>
+    <button id="master-mute" class="tb-btn on" title="全体ミュートの切替">全体ミュート: ON</button>
     <span class="tb-grow"></span>
     <span class="tb-hint">バー=移動 / 右下=リサイズ / ⛶=最大化 / S=ソロ(1つだけ音)</span>
   </div>

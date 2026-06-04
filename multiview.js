@@ -10,6 +10,14 @@ const MAX_WINDOWS = 10;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
+// ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
+const SITES = {
+  twitch: { url: 'https://www.twitch.tv/' },
+  youtube: { url: 'https://www.youtube.com/' },
+  kick: { url: 'https://kick.com/' },
+  openrec: { url: 'https://www.openrec.tv/' }
+};
+
 const stage = document.getElementById('stage');
 const stageEmpty = document.getElementById('stage-empty');
 const shield = document.getElementById('shield');
@@ -86,9 +94,8 @@ function createWindow(url, opts = {}) {
   body.className = 'win-body';
   const frame = document.createElement('iframe');
   frame.src = toEmbedUrl(url);
+  // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
   frame.allow = IFRAME_ALLOW;
-  frame.setAttribute('allowfullscreen', '');
-  frame.referrerPolicy = 'no-referrer';
   body.appendChild(frame);
 
   const resize = document.createElement('div');
@@ -176,6 +183,9 @@ function focusWindow(win) {
 function makeDraggable(win, handle) {
   handle.addEventListener('mousedown', (e) => {
     if (e.button !== 0 || win.maximized) return;
+    // コントロールボタン(ミュート/ソロ/最大化/閉じる)上ではドラッグを開始しない。
+    // 開始するとシールドが click を奪い、ボタンが効かなくなるため。
+    if (e.target.closest('.win-controls')) return;
     e.preventDefault();
     focusWindow(win);
     const r = getRect(win);
@@ -341,6 +351,14 @@ function wireToolbar() {
   };
   document.getElementById('add-btn').addEventListener('click', doAdd);
   addUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+
+  // 主要サイトのワンクリック追加。
+  document.querySelectorAll('.site-chip').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const site = SITES[btn.dataset.site];
+      if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
+    });
+  });
 
   updateMasterMuteUI();
 }
