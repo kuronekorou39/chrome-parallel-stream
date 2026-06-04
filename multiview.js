@@ -98,6 +98,11 @@ function createWindow(url, opts = {}) {
   frame.allow = IFRAME_ALLOW;
   body.appendChild(frame);
 
+  // OpenRec はログイン cookie(SameSite)を iframe に引き継げないため、注意書きを出す。
+  if (hostOf(url).includes('openrec.tv')) {
+    body.appendChild(makeNote('⚠ OpenRec はログイン状態を引き継げません(別サイト扱いのため未ログイン表示になります)'));
+  }
+
   const resize = document.createElement('div');
   resize.className = 'win-resize';
 
@@ -136,6 +141,29 @@ function mkBtn(label, cls, title) {
   if (cls) b.className = cls;
   if (title) b.title = title;
   return b;
+}
+
+// 枠の上部に出す、×で閉じられる注意バナー。
+function makeNote(text) {
+  const note = document.createElement('div');
+  note.className = 'win-note';
+  const span = document.createElement('span');
+  span.textContent = text;
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'win-note-x';
+  x.textContent = '✕';
+  x.addEventListener('click', (e) => { e.stopPropagation(); note.remove(); });
+  note.append(span, x);
+  return note;
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch (e) {
+    return '';
+  }
 }
 
 // ====== 位置・サイズ ======
@@ -208,9 +236,21 @@ function makeResizable(win, handle) {
     const r = getRect(win);
     const sx = e.clientX;
     const sy = e.clientY;
+    // リサイズ中は iframe を現在ピクセルで固定し、ドラッグ中の連続リサイズで
+    // 埋め込みプレイヤー(Kick 等)が再初期化/404 になるのを防ぐ。
+    // 枠(.win)だけ追従させ、iframe の実サイズ変更は mouseup の1回に集約する。
+    win.frame.style.width = win.frame.offsetWidth + 'px';
+    win.frame.style.height = win.frame.offsetHeight + 'px';
     showShield('nwse-resize');
     const onMove = (ev) => setRect(win, r.x, r.y, r.w + (ev.clientX - sx), r.h + (ev.clientY - sy));
-    const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => {
+      hideShield();
+      // iframe を CSS の 100% に戻し、最終サイズへ一度だけ追従させる。
+      win.frame.style.width = '';
+      win.frame.style.height = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
@@ -235,11 +275,31 @@ function toggleMax(win) {
 function tileAll() {
   const n = wins.length;
   if (!n) return;
-  const cols = Math.ceil(Math.sqrt(n));
-  const rows = Math.ceil(n / cols);
   const gap = 4;
-  const cw = Math.floor((stage.clientWidth - gap * (cols + 1)) / cols);
-  const ch = Math.floor((stage.clientHeight - gap * (rows + 1)) / rows);
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const TARGET = 16 / 9; // 配信は横長動画なので各枠を 16:9 に近づける
+
+  // cols を 1..n で総当たりし、セルのアスペクト比が 16:9 に最も近い分割を選ぶ。
+  // これにより縦長ステージでは縦積み(1列)になり、各枠が横長を保つ。
+  let best = null;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cw = (W - gap * (cols + 1)) / cols;
+    const ch = (H - gap * (rows + 1)) / rows;
+    if (cw <= 0 || ch <= 0) continue;
+    // 対数比で評価し、縦長/横長のズレを対称に扱う。
+    const score = Math.abs(Math.log(cw / ch / TARGET));
+    if (!best || score < best.score) best = { cols, rows, score };
+  }
+  if (!best) {
+    const cols = Math.ceil(Math.sqrt(n));
+    best = { cols, rows: Math.ceil(n / cols) };
+  }
+
+  const { cols, rows } = best;
+  const cw = Math.floor((W - gap * (cols + 1)) / cols);
+  const ch = Math.floor((H - gap * (rows + 1)) / rows);
   wins.forEach((win, i) => {
     win.maximized = false;
     const c = i % cols;

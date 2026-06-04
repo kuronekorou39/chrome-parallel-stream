@@ -95,6 +95,21 @@ body { display: flex; flex-direction: column; }
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
+/* 枠内の注意バナー(OpenRec のログイン非引継ぎ等) */
+.win-note {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(60, 13, 17, 0.94); color: #ffb4ac;
+  font-size: 11px; line-height: 1.45; padding: 5px 8px;
+  border-bottom: 1px solid #f85149;
+}
+.win-note span { flex: 1 1 auto; }
+.win-note-x {
+  flex: 0 0 auto; background: transparent; border: none; color: #ffb4ac;
+  cursor: pointer; font-size: 12px; padding: 0 4px; line-height: 1;
+}
+.win-note-x:hover { color: #fff; }
+
 .win-resize {
   position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
   cursor: nwse-resize; z-index: 3;
