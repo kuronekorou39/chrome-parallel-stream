@@ -94,6 +94,17 @@ body { display: flex; flex-direction: column; }
 
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Kick: 映像(左)+ チャット(右)の2分割 */
+.win-body.kick-split { display: flex; }
+.win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
+.win-body .win-chat {
+  position: static; inset: auto;
+  flex: 0 0 300px; width: 300px; height: 100%;
+  border: 0; display: none; background: #0d1117;
+}
+.win-body.kick-split.chat-on .win-chat { display: block; }
+
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
 .win-error {

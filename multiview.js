@@ -81,32 +81,50 @@ function createWindow(url, opts = {}) {
   title.className = 'win-title';
   title.textContent = labelFor(url);
 
+  const isKick = hostOf(url).includes('kick.com');
+
   const controls = document.createElement('div');
   controls.className = 'win-controls';
   const muteBtn = mkBtn('🔇', 'muted', 'ミュート切替');
   const soloBtn = mkBtn('S', '', 'ソロ(これだけ音を出す)');
-  const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(チャット/ログイン/操作用)');
+  const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
+  const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
-  controls.append(muteBtn, soloBtn, openBtn, maxBtn, closeBtn);
+  controls.append(muteBtn, soloBtn, openBtn);
+  if (chatBtn) controls.append(chatBtn);
+  controls.append(maxBtn, closeBtn);
   bar.append(title, controls);
 
   const body = document.createElement('div');
   body.className = 'win-body';
-  // Kick は拡張ページの iframe 内だとプレイヤーの内部リクエスト(IVS)が origin で弾かれ、
-  // 最大化など再描画の契機で 404 になる。iframe をやめて HLS を <video> で直接再生する
-  // (video 要素はリサイズ/再ペアレントの影響を受けない)。
   let frame = null;
   let video = null;
-  if (hostOf(url).includes('kick.com')) {
+  if (isKick) {
+    // Kick は拡張ページの iframe 内だとプレイヤーの内部リクエスト(IVS)が origin で弾かれ、
+    // 最大化など再描画の契機で 404 になる。そこで映像は HLS を <video> で直接再生し
+    // (リサイズ/再ペアレントの影響を受けない)、チャットだけ本物の kick.com の popout を
+    // 横に並べる(プレイヤーが無いので 404 にならず、拡張ページ配下ならログインも通る想定)。
+    body.classList.add('kick-split', 'chat-on');
+    const media = document.createElement('div');
+    media.className = 'win-media';
     video = document.createElement('video');
     video.className = 'win-video';
     video.autoplay = true;
     video.muted = true; // 自動再生のため(マスタ/ソロで解除)
     video.playsInline = true;
     video.controls = true; // 再生/一時停止・音量・全画面・PiP のネイティブUI
-    body.appendChild(video);
-    setupKickVideo(video, url, body);
+    media.appendChild(video);
+    body.appendChild(media);
+    setupKickVideo(video, url, media);
+
+    const channel = kickChannelOf(url);
+    if (channel) {
+      const chat = document.createElement('iframe');
+      chat.className = 'win-chat';
+      chat.src = 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat';
+      body.appendChild(chat);
+    }
   } else {
     frame = document.createElement('iframe');
     frame.src = toEmbedUrl(url);
@@ -128,7 +146,7 @@ function createWindow(url, opts = {}) {
   el.append(bar, body, resize);
   stage.appendChild(el);
 
-  const win = { id, url, el, frame, video, muteBtn, muted: true, maximized: false, prevRect: null };
+  const win = { id, url, el, body, frame, video, muteBtn, chatBtn, muted: true, maximized: false, prevRect: null };
   wins.push(win);
 
   const i = wins.length - 1;
@@ -140,6 +158,7 @@ function createWindow(url, opts = {}) {
   muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
   soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
+  if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
@@ -384,8 +403,14 @@ function tileAll() {
   });
 }
 
-// 元サイトを新しいタブで開く。Kick はここで本物のページ(ログイン済み)に行けば
-// コメント/操作ができる。iframe サイトもフル機能を使いたい時の導線。
+// Kick 枠のチャット表示/非表示を切り替える。
+function toggleChat(win) {
+  if (!win.body) return;
+  const on = win.body.classList.toggle('chat-on');
+  if (win.chatBtn) win.chatBtn.classList.toggle('active', on);
+}
+
+// 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
 function openOriginal(win) {
   try {
     chrome.tabs.create({ url: win.url });
