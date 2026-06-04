@@ -85,9 +85,10 @@ function createWindow(url, opts = {}) {
   controls.className = 'win-controls';
   const muteBtn = mkBtn('🔇', 'muted', 'ミュート切替');
   const soloBtn = mkBtn('S', '', 'ソロ(これだけ音を出す)');
+  const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(チャット/ログイン/操作用)');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
-  controls.append(muteBtn, soloBtn, maxBtn, closeBtn);
+  controls.append(muteBtn, soloBtn, openBtn, maxBtn, closeBtn);
   bar.append(title, controls);
 
   const body = document.createElement('div');
@@ -103,6 +104,7 @@ function createWindow(url, opts = {}) {
     video.autoplay = true;
     video.muted = true; // 自動再生のため(マスタ/ソロで解除)
     video.playsInline = true;
+    video.controls = true; // 再生/一時停止・音量・全画面・PiP のネイティブUI
     body.appendChild(video);
     setupKickVideo(video, url, body);
   } else {
@@ -137,6 +139,7 @@ function createWindow(url, opts = {}) {
   makeResizable(win, resize);
   muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
   soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
+  openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
@@ -379,6 +382,16 @@ function tileAll() {
     const r = Math.floor(i / cols);
     setRect(win, gap + c * (cw + gap), gap + r * (ch + gap), cw, ch);
   });
+}
+
+// 元サイトを新しいタブで開く。Kick はここで本物のページ(ログイン済み)に行けば
+// コメント/操作ができる。iframe サイトもフル機能を使いたい時の導線。
+function openOriginal(win) {
+  try {
+    chrome.tabs.create({ url: win.url });
+  } catch (e) {
+    window.open(win.url, '_blank', 'noopener');
+  }
 }
 
 function closeWindow(win) {
