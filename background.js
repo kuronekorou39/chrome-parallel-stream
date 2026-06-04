@@ -120,8 +120,35 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg.type === 'get-kick-playback') {
+    fetchKickPlayback(msg.channel)
+      .then((playbackUrl) => sendResponse({ ok: true, playbackUrl }))
+      .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
+    return true;
+  }
+
   return false;
 });
+
+// Kick のチャンネルから HLS 再生URL(Amazon IVS の m3u8)を取得する。
+// kick.com/api/v2 は Cloudflare 配下。service worker からの fetch は本物の Chrome の
+// ネットワークスタックを使い、credentials:'include' でユーザーの kick.com クッキー
+// (cf_clearance 等)を同送するため、拡張ページ(null origin 扱い)より突破しやすい。
+async function fetchKickPlayback(channel) {
+  if (!channel) throw new Error('no channel');
+  const res = await fetch('https://kick.com/api/v2/channels/' + encodeURIComponent(channel), {
+    credentials: 'include',
+    headers: { Accept: 'application/json' }
+  });
+  if (!res.ok) throw new Error('Kick API HTTP ' + res.status);
+  const data = await res.json();
+  const url =
+    data.playback_url ||
+    (data.livestream && data.livestream.playback_url) ||
+    null;
+  if (!url) throw new Error('playback_url なし(オフライン配信の可能性)');
+  return url;
+}
 
 // ====== ライフサイクル ======
 

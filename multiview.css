@@ -94,6 +94,13 @@ body { display: flex; flex-direction: column; }
 
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* Kick 用の直接再生 video */
+.win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
+.win-error {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 16px; color: #ffb4ac; font-size: 12px; line-height: 1.6;
+  background: #161b22;
+}
 
 /* 枠内の注意バナー(OpenRec のログイン非引継ぎ等) */
 .win-note {

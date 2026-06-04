@@ -92,15 +92,28 @@ function createWindow(url, opts = {}) {
 
   const body = document.createElement('div');
   body.className = 'win-body';
-  const frame = document.createElement('iframe');
-  frame.src = toEmbedUrl(url);
-  // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
-  frame.allow = IFRAME_ALLOW;
-  body.appendChild(frame);
-
-  // ※ iframe は生成後 DOM 上で一切 move しないこと。再ペアレントするとブラウザ仕様で
-  //   iframe がリロードされ、player.kick.cx 等の埋め込みが文脈を失って壊れる。
-  //   最大化・整列・前面化はすべて style 変更のみで行う(appendChild で移し替えない)。
+  // Kick は拡張ページの iframe 内だとプレイヤーの内部リクエスト(IVS)が origin で弾かれ、
+  // 最大化など再描画の契機で 404 になる。iframe をやめて HLS を <video> で直接再生する
+  // (video 要素はリサイズ/再ペアレントの影響を受けない)。
+  let frame = null;
+  let video = null;
+  if (hostOf(url).includes('kick.com')) {
+    video = document.createElement('video');
+    video.className = 'win-video';
+    video.autoplay = true;
+    video.muted = true; // 自動再生のため(マスタ/ソロで解除)
+    video.playsInline = true;
+    body.appendChild(video);
+    setupKickVideo(video, url, body);
+  } else {
+    frame = document.createElement('iframe');
+    frame.src = toEmbedUrl(url);
+    // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
+    frame.allow = IFRAME_ALLOW;
+    body.appendChild(frame);
+    // ※ iframe は生成後 DOM 上で一切 move しないこと。再ペアレントするとブラウザ仕様で
+    //   iframe がリロードされ埋め込みが壊れる。最大化/整列/前面化は style 変更のみで行う。
+  }
 
   // OpenRec はログイン cookie(SameSite)を iframe に引き継げないため、注意書きを出す。
   if (hostOf(url).includes('openrec.tv')) {
@@ -113,7 +126,7 @@ function createWindow(url, opts = {}) {
   el.append(bar, body, resize);
   stage.appendChild(el);
 
-  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null };
+  const win = { id, url, el, frame, video, muteBtn, muted: true, maximized: false, prevRect: null };
   wins.push(win);
 
   const i = wins.length - 1;
@@ -127,7 +140,8 @@ function createWindow(url, opts = {}) {
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
-  frame.addEventListener('load', () => sendAudio(win));
+  if (frame) frame.addEventListener('load', () => sendAudio(win));
+  if (video) sendAudio(win);
 
   focusWindow(win);
   updateWinAudioUI(win);
@@ -168,6 +182,69 @@ function hostOf(url) {
   } catch (e) {
     return '';
   }
+}
+
+// ====== Kick: HLS 直再生 ======
+
+// チャンネルの HLS 再生URLを background(SW)経由で取得し、hls.js で video に流す。
+function setupKickVideo(video, url, body) {
+  const channel = kickChannelOf(url);
+  if (!channel) {
+    showVideoError(body, 'Kick はチャンネルURL(kick.com/<channel>)を入れてください');
+    return;
+  }
+  chrome.runtime
+    .sendMessage({ type: 'get-kick-playback', channel })
+    .then((resp) => {
+      if (!resp || !resp.ok) {
+        const m = resp && resp.error ? resp.error.message || JSON.stringify(resp.error) : '不明';
+        showVideoError(body, 'Kick 再生URL取得に失敗: ' + m);
+        return;
+      }
+      playHls(video, resp.playbackUrl, body);
+    })
+    .catch((e) => showVideoError(body, 'Kick 取得エラー: ' + e.message));
+}
+
+function playHls(video, src, body) {
+  // Chrome は HLS ネイティブ非対応。Safari 等のため native を一応分岐し、通常は hls.js。
+  if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = src;
+    video.play().catch(() => {});
+    return;
+  }
+  if (typeof Hls === 'undefined' || !Hls.isSupported()) {
+    showVideoError(body, 'この環境は HLS 再生に未対応(hls.js 未読込)');
+    return;
+  }
+  // capLevelToPlayerSize=false: サイズ変化で別品質の再取得をしない(無駄/事故防止)。
+  // enableWorker=false: MV3 の CSP(script-src 'self')は blob worker を弾くため、
+  // メインスレッド解析にして確実に動かす(配信数本なら負荷は許容)。
+  const hls = new Hls({ capLevelToPlayerSize: false, enableWorker: false });
+  hls.on(Hls.Events.ERROR, (_evt, data) => {
+    if (data && data.fatal) {
+      showVideoError(body, 'HLS エラー: ' + data.type + ' / ' + data.details);
+    }
+  });
+  hls.loadSource(src);
+  hls.attachMedia(video);
+  video.play().catch(() => {});
+  video._hls = hls;
+}
+
+function kickChannelOf(url) {
+  try {
+    return new URL(url).pathname.split('/').filter(Boolean)[0] || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function showVideoError(body, msg) {
+  const d = document.createElement('div');
+  d.className = 'win-error';
+  d.textContent = msg;
+  body.appendChild(d);
 }
 
 // ====== 位置・サイズ ======
@@ -307,6 +384,9 @@ function tileAll() {
 function closeWindow(win) {
   const i = wins.indexOf(win);
   if (i >= 0) wins.splice(i, 1);
+  if (win.video && win.video._hls) {
+    try { win.video._hls.destroy(); } catch (e) { /* noop */ }
+  }
   win.el.remove();
   if (activeWin === win) {
     activeWin = null;
@@ -361,13 +441,23 @@ function refreshAllAudio() { wins.forEach(sendAudio); }
 
 function sendAudio(win) {
   const eff = master.muted || win.muted;
-  try {
-    win.frame.contentWindow.postMessage(
-      { [MAGIC]: true, type: 'audio', muted: eff, volume: master.volume },
-      '*'
-    );
-  } catch (e) {
-    /* フレーム未ロード等は ready 通知で再送される */
+  if (win.video) {
+    // 自前の <video>(Kick)は直接制御する。
+    try {
+      win.video.muted = eff;
+      if (!eff) win.video.volume = master.volume;
+    } catch (e) {
+      /* noop */
+    }
+  } else if (win.frame) {
+    try {
+      win.frame.contentWindow.postMessage(
+        { [MAGIC]: true, type: 'audio', muted: eff, volume: master.volume },
+        '*'
+      );
+    } catch (e) {
+      /* フレーム未ロード等は ready 通知で再送される */
+    }
   }
   updateWinAudioUI(win);
 }
@@ -421,20 +511,10 @@ function wireToolbar() {
 
 // ====== URL ヘルパ ======
 
-// Kick: 公式 player.kick.com は埋め込み元(chrome-extension)を許可せず、操作を契機に
-// origin 再検証で 404 に落ちる。埋め込み耐性の高いミラー player.kick.cx に変換する。
+// iframe で開くサイトの src 変換用(現状は変換不要。Kick は iframe を使わず video 直再生に
+// 分岐済み)。将来サイト別の埋め込みURL変換が要るときの拡張ポイント。
 function toEmbedUrl(rawUrl) {
-  try {
-    const u = new URL(rawUrl);
-    const host = u.hostname.replace(/^www\./, '');
-    if (host === 'kick.com') {
-      const channel = u.pathname.split('/').filter(Boolean)[0];
-      if (channel) return 'https://player.kick.cx/' + encodeURIComponent(channel);
-    }
-    return rawUrl;
-  } catch (e) {
-    return rawUrl;
-  }
+  return rawUrl;
 }
 
 function labelFor(url) {

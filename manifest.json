@@ -28,8 +28,6 @@
       "matches": [
         "*://*.twitch.tv/*",
         "*://*.youtube.com/*",
-        "*://*.kick.com/*",
-        "*://*.kick.cx/*",
         "*://*.openrec.tv/*"
       ],
       "js": ["stream-control.js"],
