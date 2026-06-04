@@ -10,6 +10,10 @@ const MAX_WINDOWS = 10;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
+// Kick の埋め込みプレイヤーをリサイズせずに表示するための固定描画サイズ(16:9)。
+const KICK_BASE_W = 1280;
+const KICK_BASE_H = 720;
+
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -92,11 +96,20 @@ function createWindow(url, opts = {}) {
 
   const body = document.createElement('div');
   body.className = 'win-body';
+  const embedSrc = toEmbedUrl(url);
   const frame = document.createElement('iframe');
-  frame.src = toEmbedUrl(url);
+  frame.src = embedSrc;
   // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
   frame.allow = IFRAME_ALLOW;
-  body.appendChild(frame);
+
+  // Kick の埋め込みプレイヤーは iframe をリサイズすると再初期化して 404 になるため、
+  // 固定サイズで描画し CSS transform で拡縮する(iframe 自身の実寸は変えない)。
+  const scaled = hostOf(embedSrc).includes('player.kick.com');
+  if (scaled) {
+    setupScaledFrame(body, frame);
+  } else {
+    body.appendChild(frame);
+  }
 
   // OpenRec はログイン cookie(SameSite)を iframe に引き継げないため、注意書きを出す。
   if (hostOf(url).includes('openrec.tv')) {
@@ -109,7 +122,7 @@ function createWindow(url, opts = {}) {
   el.append(bar, body, resize);
   stage.appendChild(el);
 
-  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null };
+  const win = { id, url, el, frame, muteBtn, muted: true, maximized: false, prevRect: null, scaled };
   wins.push(win);
 
   const i = wins.length - 1;
@@ -164,6 +177,29 @@ function hostOf(url) {
   } catch (e) {
     return '';
   }
+}
+
+// リサイズに弱い埋め込み(Kick)を「固定サイズ iframe + CSS scale」で表示する。
+// iframe の実寸は KICK_BASE_W×H 固定のまま、枠サイズに合わせて wrap を拡縮するので、
+// プレイヤーはリサイズを一切検知せず 404 にならない。ResizeObserver で枠変化に追従。
+function setupScaledFrame(body, frame) {
+  const wrap = document.createElement('div');
+  wrap.className = 'scale-wrap';
+  wrap.style.width = KICK_BASE_W + 'px';
+  wrap.style.height = KICK_BASE_H + 'px';
+  wrap.appendChild(frame);
+  body.appendChild(wrap);
+
+  const ro = new ResizeObserver(() => {
+    const bw = body.clientWidth;
+    const bh = body.clientHeight;
+    if (!bw || !bh) return;
+    const s = Math.min(bw / KICK_BASE_W, bh / KICK_BASE_H);
+    const cx = (bw - KICK_BASE_W * s) / 2;
+    const cy = (bh - KICK_BASE_H * s) / 2;
+    wrap.style.transform = 'translate(' + cx + 'px, ' + cy + 'px) scale(' + s + ')';
+  });
+  ro.observe(body);
 }
 
 // ====== 位置・サイズ ======
@@ -236,18 +272,22 @@ function makeResizable(win, handle) {
     const r = getRect(win);
     const sx = e.clientX;
     const sy = e.clientY;
-    // リサイズ中は iframe を現在ピクセルで固定し、ドラッグ中の連続リサイズで
-    // 埋め込みプレイヤー(Kick 等)が再初期化/404 になるのを防ぐ。
-    // 枠(.win)だけ追従させ、iframe の実サイズ変更は mouseup の1回に集約する。
-    win.frame.style.width = win.frame.offsetWidth + 'px';
-    win.frame.style.height = win.frame.offsetHeight + 'px';
+    // scaled(Kick)以外は、リサイズ中 iframe を現在ピクセルで固定し、ドラッグ中の
+    // 連続リサイズで埋め込みが再読込されるのを防ぐ(実サイズ変更は mouseup の1回に集約)。
+    // scaled の窓は固定サイズ+transform なので凍結不要(ResizeObserver が拡縮を担当)。
+    if (!win.scaled) {
+      win.frame.style.width = win.frame.offsetWidth + 'px';
+      win.frame.style.height = win.frame.offsetHeight + 'px';
+    }
     showShield('nwse-resize');
     const onMove = (ev) => setRect(win, r.x, r.y, r.w + (ev.clientX - sx), r.h + (ev.clientY - sy));
     const onUp = () => {
       hideShield();
-      // iframe を CSS の 100% に戻し、最終サイズへ一度だけ追従させる。
-      win.frame.style.width = '';
-      win.frame.style.height = '';
+      if (!win.scaled) {
+        // iframe を CSS の 100% に戻し、最終サイズへ一度だけ追従させる。
+        win.frame.style.width = '';
+        win.frame.style.height = '';
+      }
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };

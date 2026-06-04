@@ -92,8 +92,12 @@ body { display: flex; flex-direction: column; }
 .win-controls button.muted { color: #f85149; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
-.win-body { position: relative; flex: 1 1 auto; background: #000; }
+.win-body { position: relative; flex: 1 1 auto; background: #000; overflow: hidden; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Kick 用: 固定サイズの iframe を transform で拡縮するラッパ(iframe 自身はリサイズしない) */
+.scale-wrap { position: absolute; top: 0; left: 0; transform-origin: top left; }
+.scale-wrap iframe { position: static; inset: auto; width: 100%; height: 100%; border: 0; display: block; }
 
 /* 枠内の注意バナー(OpenRec のログイン非引継ぎ等) */
 .win-note {
