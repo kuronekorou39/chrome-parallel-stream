@@ -34,6 +34,12 @@ const wins = [];
   window.addEventListener('message', onFrameMessage);
   window.addEventListener('resize', relayoutOnResize);
 
+  // 枠の外(ステージ背景)をクリック/タップしたらフォーカス(選択・ヘッダ)を解除する。
+  // 枠内クリックは e.target が枠の子要素になるので解除されない。
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.target === stage || e.target === stageEmpty) clearSelection();
+  });
+
   // iframe(Twitch/YouTube/OpenRec の枠やKickチャット)内のクリックは親に伝わらないので、
   // 「iframe にフォーカスが移った=その枠がクリックされた」を window blur で検知して、
   // その枠を選択しヘッダを一時表示する(タッチでもヘッダを出せるように)。
