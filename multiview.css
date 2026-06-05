@@ -41,10 +41,6 @@ body { display: flex; flex-direction: column; }
 .tb-hint { color: #6e7681; font-size: 11px; white-space: nowrap; }
 
 #master-vol { width: 110px; accent-color: #58a6ff; cursor: pointer; }
-#opacity-slider { width: 90px; accent-color: #58a6ff; cursor: pointer; }
-.filter-grp { gap: 6px; }
-.filter-grp > span { display: inline-flex; align-items: center; gap: 3px; }
-#f-bright, #f-contrast, #f-sat { width: 62px; accent-color: #58a6ff; cursor: pointer; }
 
 .tb-btn {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
@@ -110,6 +106,27 @@ body { display: flex; flex-direction: column; }
 .win-controls button.active { color: #3fb950; }
 .win-controls button.muted { color: #f85149; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
+
+/* 🎨 で開く「この枠だけ」の調整パネル(透明度・明るさ・コントラスト・彩度) */
+.win-adjust {
+  position: absolute; top: 42px; right: 6px; z-index: 7;
+  display: none; flex-direction: column; gap: 6px;
+  background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 8px;
+  padding: 10px; width: 200px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.55);
+}
+.win.adjust-open .win-adjust { display: flex; }
+/* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
+.win.adjust-open .win-bar { opacity: 1; transform: none; pointer-events: auto; }
+.adj-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #c9d1d9; cursor: pointer; }
+.adj-row > span { flex: 0 0 84px; }
+.adj-row input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
+.adj-reset {
+  align-self: flex-end; margin-top: 2px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px;
+  padding: 4px 10px; font-family: inherit; font-size: 11px; cursor: pointer;
+}
+.adj-reset:hover { background: #30363d; border-color: #58a6ff; }
 
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }

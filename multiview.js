@@ -107,11 +107,12 @@ function createWindow(url, opts = {}) {
   const soloBtn = mkBtn('S', '', 'ソロ(これだけ音を出す)');
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
+  const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(muteBtn, soloBtn, openBtn);
   if (chatBtn) controls.append(chatBtn);
-  controls.append(maxBtn, closeBtn);
+  controls.append(adjustBtn, maxBtn, closeBtn);
   bar.append(title, controls);
 
   const body = document.createElement('div');
@@ -186,6 +187,8 @@ function createWindow(url, opts = {}) {
   const i = wins.length - 1;
   setRect(win, 40 + (i % 6) * 30, 40 + (i % 6) * 30, 520, 320);
 
+  el.appendChild(buildAdjustPanel(win));
+
   el.addEventListener('pointerdown', () => { focusWindow(win); revealHeader(win); });
   makeDraggable(win, bar);
   makeResizable(win, resize);
@@ -195,6 +198,7 @@ function createWindow(url, opts = {}) {
   soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
+  adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
@@ -330,14 +334,6 @@ function focusWindow(win) {
   activeWin = win;
   win.el.classList.add('active');
   win.el.style.zIndex = ++zCounter;
-  syncOpacitySlider();
-  syncFilterSliders();
-}
-
-// 不透明度スライダーを「選択中の枠」の値に合わせる。
-function syncOpacitySlider() {
-  const s = document.getElementById('opacity-slider');
-  if (s && activeWin) s.value = activeWin.opacity != null ? activeWin.opacity : 100;
 }
 
 // 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
@@ -354,14 +350,68 @@ function applyFilter(win) {
     'brightness(' + f.bright + '%) contrast(' + f.contrast + '%) saturate(' + f.sat + '%)';
 }
 
-// 画質スライダーを「選択中の枠」の値に合わせる。
-function syncFilterSliders() {
-  if (!activeWin) return;
-  const f = activeWin.filter || { bright: 100, contrast: 100, sat: 100 };
-  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-  set('f-bright', f.bright);
-  set('f-contrast', f.contrast);
-  set('f-sat', f.sat);
+// 各枠ヘッダの 🎨 から開く「この枠だけ」の調整パネル(透明度・明るさ・コントラスト・彩度)。
+function buildAdjustPanel(win) {
+  const panel = document.createElement('div');
+  panel.className = 'win-adjust';
+
+  const mkRow = (label, min, max, value, oninput) => {
+    const row = document.createElement('label');
+    row.className = 'adj-row';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(min);
+    input.max = String(max);
+    input.value = String(value);
+    input.addEventListener('input', () => oninput(Number(input.value)));
+    row.append(span, input);
+    return { row, input };
+  };
+
+  const rOpacity = mkRow('透明', 20, 100, win.opacity, (v) => {
+    win.opacity = v;
+    win.el.style.opacity = v / 100;
+  });
+  const rBright = mkRow('☀ 明るさ', 20, 200, win.filter.bright, (v) => {
+    win.filter.bright = v;
+    applyFilter(win);
+  });
+  const rContrast = mkRow('◐ コントラスト', 20, 200, win.filter.contrast, (v) => {
+    win.filter.contrast = v;
+    applyFilter(win);
+  });
+  const rSat = mkRow('🎨 彩度', 0, 200, win.filter.sat, (v) => {
+    win.filter.sat = v;
+    applyFilter(win);
+  });
+
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'adj-reset';
+  reset.textContent = 'リセット';
+  reset.addEventListener('click', (e) => {
+    e.stopPropagation();
+    win.opacity = 100;
+    win.el.style.opacity = '';
+    win.filter = { bright: 100, contrast: 100, sat: 100 };
+    applyFilter(win);
+    rOpacity.input.value = '100';
+    rBright.input.value = '100';
+    rContrast.input.value = '100';
+    rSat.input.value = '100';
+  });
+
+  panel.append(rOpacity.row, rBright.row, rContrast.row, rSat.row, reset);
+  return panel;
+}
+
+// 🎨 パネルの開閉(同時に1枠だけ開く)。
+function toggleAdjust(win) {
+  const willOpen = !win.el.classList.contains('adjust-open');
+  wins.forEach((w) => w.el.classList.remove('adjust-open'));
+  if (willOpen) win.el.classList.add('adjust-open');
 }
 
 // 視聴モードでヘッダを一時的に表示し、数秒後にフェードで消す(クリック/タップ起点)。
@@ -376,7 +426,7 @@ function revealHeader(win) {
 function clearSelection() {
   if (activeWin) activeWin.el.classList.remove('active');
   activeWin = null;
-  wins.forEach((w) => { w.el.classList.remove('show-bar'); clearTimeout(w.barTimer); });
+  wins.forEach((w) => { w.el.classList.remove('show-bar', 'adjust-open'); clearTimeout(w.barTimer); });
 }
 
 function makeDraggable(win, handle) {
@@ -635,33 +685,8 @@ function wireToolbar() {
   document.getElementById('master-mute').addEventListener('click', toggleMasterMute);
   document.getElementById('tile-btn').addEventListener('click', tileAll);
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
-  document.getElementById('opacity-slider').addEventListener('input', (e) => {
-    if (!activeWin) return;
-    const v = Number(e.target.value);
-    activeWin.opacity = v;
-    activeWin.el.style.opacity = v / 100;
-    revealHeader(activeWin); // 調整中はどの枠が対象か分かるよう再表示
-  });
-
-  // 画質(明るさ/コントラスト/彩度)を選択中の枠に適用。
-  const bindFilter = (id, key) => {
-    document.getElementById(id).addEventListener('input', (e) => {
-      if (!activeWin) return;
-      activeWin.filter[key] = Number(e.target.value);
-      applyFilter(activeWin);
-      revealHeader(activeWin);
-    });
-  };
-  bindFilter('f-bright', 'bright');
-  bindFilter('f-contrast', 'contrast');
-  bindFilter('f-sat', 'sat');
-  document.getElementById('f-reset').addEventListener('click', () => {
-    if (!activeWin) return;
-    activeWin.filter = { bright: 100, contrast: 100, sat: 100 };
-    applyFilter(activeWin);
-    syncFilterSliders();
-    revealHeader(activeWin);
-  });
+  // 透明度・画質は枠ごとの設定なので、各枠ヘッダの 🎨 から開く調整パネルに置く
+  // (ツールバーに置くと音量のようなマスタ設定に見えてしまうため)。
 
   const addUrl = document.getElementById('add-url');
   const doAdd = () => {
