@@ -72,8 +72,12 @@ body { display: flex; flex-direction: column; }
   background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6);
   min-width: 220px; min-height: 150px;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
-.win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
+/* 選択の青枠は「ヘッダ一時表示中(クリック直後・数秒で消える)」と整形モードの選択枠だけ。
+   視聴モードでは自動で消えるので、枠の外をクリックして解除する手間が要らない。 */
+.win.show-bar,
+.layout-mode .win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
 .win.solo { border-color: #3fb950; }
 
 /* ヘッダは既定で非表示。マウスホバー(視聴モード)または選択中の枠でだけ表示する。

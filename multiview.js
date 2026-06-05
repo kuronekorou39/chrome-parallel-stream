@@ -640,6 +640,7 @@ function wireToolbar() {
     const v = Number(e.target.value);
     activeWin.opacity = v;
     activeWin.el.style.opacity = v / 100;
+    revealHeader(activeWin); // 調整中はどの枠が対象か分かるよう再表示
   });
 
   // 画質(明るさ/コントラスト/彩度)を選択中の枠に適用。
@@ -648,6 +649,7 @@ function wireToolbar() {
       if (!activeWin) return;
       activeWin.filter[key] = Number(e.target.value);
       applyFilter(activeWin);
+      revealHeader(activeWin);
     });
   };
   bindFilter('f-bright', 'bright');
@@ -658,6 +660,7 @@ function wireToolbar() {
     activeWin.filter = { bright: 100, contrast: 100, sat: 100 };
     applyFilter(activeWin);
     syncFilterSliders();
+    revealHeader(activeWin);
   });
 
   const addUrl = document.getElementById('add-url');
