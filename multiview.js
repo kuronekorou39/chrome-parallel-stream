@@ -34,6 +34,18 @@ const wins = [];
   window.addEventListener('message', onFrameMessage);
   window.addEventListener('resize', relayoutOnResize);
 
+  // iframe(Twitch/YouTube/OpenRec の枠やKickチャット)内のクリックは親に伝わらないので、
+  // 「iframe にフォーカスが移った=その枠がクリックされた」を window blur で検知して、
+  // その枠を選択しヘッダを一時表示する(タッチでもヘッダを出せるように)。
+  window.addEventListener('blur', () => {
+    setTimeout(() => {
+      const ae = document.activeElement;
+      if (!ae || ae.tagName !== 'IFRAME') return;
+      const win = wins.find((w) => w.el.contains(ae));
+      if (win) { focusWindow(win); revealHeader(win); }
+    }, 0);
+  });
+
   const data = await chrome.storage.local.get([MULTIVIEW_ACTIVE_KEY, MULTIVIEW_SETTINGS_KEY]);
   applySettings(data[MULTIVIEW_SETTINGS_KEY] || {});
 
@@ -167,7 +179,7 @@ function createWindow(url, opts = {}) {
   const i = wins.length - 1;
   setRect(win, 40 + (i % 6) * 30, 40 + (i % 6) * 30, 520, 320);
 
-  el.addEventListener('pointerdown', () => focusWindow(win));
+  el.addEventListener('pointerdown', () => { focusWindow(win); revealHeader(win); });
   makeDraggable(win, bar);
   makeResizable(win, resize);
   overlay.addEventListener('pointerdown', (e) => beginDrag(win, e));
@@ -318,6 +330,21 @@ function focusWindow(win) {
 function syncOpacitySlider() {
   const s = document.getElementById('opacity-slider');
   if (s && activeWin) s.value = activeWin.opacity != null ? activeWin.opacity : 100;
+}
+
+// 視聴モードでヘッダを一時的に表示し、数秒後にフェードで消す(クリック/タップ起点)。
+function revealHeader(win) {
+  if (layoutMode) return; // 整形モードではヘッダは出さない
+  win.el.classList.add('show-bar');
+  clearTimeout(win.barTimer);
+  win.barTimer = setTimeout(() => win.el.classList.remove('show-bar'), 3000);
+}
+
+// 選択(アクティブ枠・ヘッダ表示)をすべて解除する。
+function clearSelection() {
+  if (activeWin) activeWin.el.classList.remove('active');
+  activeWin = null;
+  wins.forEach((w) => { w.el.classList.remove('show-bar'); clearTimeout(w.barTimer); });
 }
 
 function makeDraggable(win, handle) {
@@ -610,6 +637,7 @@ function toggleLayoutMode() {
   layoutMode = !layoutMode;
   stage.classList.toggle('layout-mode', layoutMode);
   document.getElementById('layout-btn').classList.toggle('on', layoutMode);
+  if (!layoutMode) clearSelection(); // 視聴モードに戻ったら選択(ヘッダ/青枠)を解除
 }
 
 // ====== URL ヘルパ ======

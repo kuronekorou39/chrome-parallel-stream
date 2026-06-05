@@ -81,11 +81,12 @@ body { display: flex; flex-direction: column; }
   height: 38px; padding: 0 8px;
   background: linear-gradient(180deg, rgba(13,17,23,0.96), rgba(13,17,23,0.5));
   cursor: move; user-select: none; touch-action: none;
-  opacity: 0; transform: translateY(-6px); pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  opacity: 0; transform: translateY(-8px); pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
 }
+/* ホバー(マウス)または一時表示(クリック/タップ後・数秒で消える)でだけ出す。 */
 .win:hover .win-bar,
-.win.active .win-bar { opacity: 1; transform: none; pointer-events: auto; }
+.win.show-bar .win-bar { opacity: 1; transform: none; pointer-events: auto; }
 .layout-mode .win-bar { display: none; } /* 整形モードでは枠全体が操作対象なのでヘッダは出さない */
 
 .win-title {
