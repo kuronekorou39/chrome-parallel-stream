@@ -172,7 +172,8 @@ function createWindow(url, opts = {}) {
 
   const win = {
     id, url, el, body, frame, video, muteBtn, chatBtn,
-    muted: true, maximized: false, prevRect: null, opacity: 100
+    muted: true, maximized: false, prevRect: null, opacity: 100,
+    filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
 
@@ -324,12 +325,37 @@ function focusWindow(win) {
   win.el.classList.add('active');
   win.el.style.zIndex = ++zCounter;
   syncOpacitySlider();
+  syncFilterSliders();
 }
 
 // 不透明度スライダーを「選択中の枠」の値に合わせる。
 function syncOpacitySlider() {
   const s = document.getElementById('opacity-slider');
   if (s && activeWin) s.value = activeWin.opacity != null ? activeWin.opacity : 100;
+}
+
+// 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
+function mediaEl(win) {
+  return win.video || win.frame || null;
+}
+
+// 明るさ/コントラスト/彩度を CSS filter で適用。cross-origin iframe にも描画結果として効く。
+function applyFilter(win) {
+  const m = mediaEl(win);
+  if (!m) return;
+  const f = win.filter || { bright: 100, contrast: 100, sat: 100 };
+  m.style.filter =
+    'brightness(' + f.bright + '%) contrast(' + f.contrast + '%) saturate(' + f.sat + '%)';
+}
+
+// 画質スライダーを「選択中の枠」の値に合わせる。
+function syncFilterSliders() {
+  if (!activeWin) return;
+  const f = activeWin.filter || { bright: 100, contrast: 100, sat: 100 };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('f-bright', f.bright);
+  set('f-contrast', f.contrast);
+  set('f-sat', f.sat);
 }
 
 // 視聴モードでヘッダを一時的に表示し、数秒後にフェードで消す(クリック/タップ起点)。
@@ -608,6 +634,24 @@ function wireToolbar() {
     const v = Number(e.target.value);
     activeWin.opacity = v;
     activeWin.el.style.opacity = v / 100;
+  });
+
+  // 画質(明るさ/コントラスト/彩度)を選択中の枠に適用。
+  const bindFilter = (id, key) => {
+    document.getElementById(id).addEventListener('input', (e) => {
+      if (!activeWin) return;
+      activeWin.filter[key] = Number(e.target.value);
+      applyFilter(activeWin);
+    });
+  };
+  bindFilter('f-bright', 'bright');
+  bindFilter('f-contrast', 'contrast');
+  bindFilter('f-sat', 'sat');
+  document.getElementById('f-reset').addEventListener('click', () => {
+    if (!activeWin) return;
+    activeWin.filter = { bright: 100, contrast: 100, sat: 100 };
+    applyFilter(activeWin);
+    syncFilterSliders();
   });
 
   const addUrl = document.getElementById('add-url');

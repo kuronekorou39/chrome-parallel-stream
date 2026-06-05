@@ -21,6 +21,13 @@
     <button id="layout-btn" class="tb-btn" title="整形モード: 枠の移動・リサイズ専用(中身に触れない)">整形モード</button>
     <span class="tb-item" title="選択中の枠の不透明度(重ねた時に裏が透ける)">透明<input type="range" id="opacity-slider" min="20" max="100" value="100" /></span>
     <span class="tb-sep"></span>
+    <span class="tb-item filter-grp">画質
+      <span title="選択中の枠: 明るさ">☀<input type="range" id="f-bright" min="20" max="200" value="100" /></span>
+      <span title="選択中の枠: コントラスト">◐<input type="range" id="f-contrast" min="20" max="200" value="100" /></span>
+      <span title="選択中の枠: 彩度(色の濃さ)">🎨<input type="range" id="f-sat" min="0" max="200" value="100" /></span>
+      <button id="f-reset" class="tb-btn" title="選択中の枠の画質を初期化">リセット</button>
+    </span>
+    <span class="tb-sep"></span>
     <span class="tb-item" title="マスタ音量">🔈<input type="range" id="master-vol" min="0" max="100" value="100" /></span>
     <button id="master-mute" class="tb-btn on" title="全体ミュートの切替">全体ミュート: ON</button>
     <span class="tb-grow"></span>

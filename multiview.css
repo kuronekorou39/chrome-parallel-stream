@@ -42,6 +42,9 @@ body { display: flex; flex-direction: column; }
 
 #master-vol { width: 110px; accent-color: #58a6ff; cursor: pointer; }
 #opacity-slider { width: 90px; accent-color: #58a6ff; cursor: pointer; }
+.filter-grp { gap: 6px; }
+.filter-grp > span { display: inline-flex; align-items: center; gap: 3px; }
+#f-bright, #f-contrast, #f-sat { width: 62px; accent-color: #58a6ff; cursor: pointer; }
 
 .tb-btn {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
