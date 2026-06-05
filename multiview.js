@@ -687,6 +687,8 @@ function wireToolbar() {
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
   // 透明度・画質は枠ごとの設定なので、各枠ヘッダの 🎨 から開く調整パネルに置く
   // (ツールバーに置くと音量のようなマスタ設定に見えてしまうため)。
+  document.getElementById('toolbar-toggle').addEventListener('click', () => document.body.classList.add('toolbar-hidden'));
+  document.getElementById('toolbar-show').addEventListener('click', () => document.body.classList.remove('toolbar-hidden'));
 
   const addUrl = document.getElementById('add-url');
   const doAdd = () => {

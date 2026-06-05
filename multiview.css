@@ -12,46 +12,57 @@ body { display: flex; flex-direction: column; }
 /* ===== ツールバー ===== */
 #toolbar {
   flex: 0 0 auto;
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 10px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 14px;
   background: #0d1117;
   border-bottom: 1px solid #21262d;
-  font-size: 12px;
+  font-size: 14px;
   z-index: 100000;
 }
+body.toolbar-hidden #toolbar { display: none; }
+
+/* ツールバーを隠したときに出る復帰ボタン */
+#toolbar-show {
+  position: fixed; top: 8px; right: 10px; z-index: 100001; display: none;
+  align-items: center; gap: 6px;
+  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 7px; padding: 9px 13px; font-family: inherit; font-size: 14px; cursor: pointer;
+}
+body.toolbar-hidden #toolbar-show { display: inline-flex; }
+#toolbar-show:hover { background: #30363d; border-color: #58a6ff; }
 
 /* 主要サイトのワンクリック追加チップ */
 .site-chip {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-  border-left-width: 3px; border-radius: 4px;
-  padding: 4px 8px; font-family: inherit; font-size: 11px; cursor: pointer;
+  border-left-width: 4px; border-radius: 5px;
+  padding: 7px 12px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
 .site-chip:hover { background: #30363d; }
 .site-chip[data-site="twitch"] { border-left-color: #9147ff; }
 .site-chip[data-site="youtube"] { border-left-color: #ff0033; }
 .site-chip[data-site="kick"] { border-left-color: #53fc18; }
 .site-chip[data-site="openrec"] { border-left-color: #ffd200; }
-.tb-item { display: inline-flex; align-items: center; gap: 6px; color: #8b949e; }
+.tb-item { display: inline-flex; align-items: center; gap: 7px; color: #8b949e; }
 #count {
   font-weight: bold; color: #f0f6fc;
-  background: #21262d; border-radius: 10px; padding: 1px 9px; min-width: 22px; text-align: center;
+  background: #21262d; border-radius: 11px; padding: 3px 11px; min-width: 26px; text-align: center;
 }
-.tb-sep { width: 1px; height: 18px; background: #30363d; }
+.tb-sep { width: 1px; height: 24px; background: #30363d; }
 .tb-grow { flex: 1 1 auto; }
-.tb-hint { color: #6e7681; font-size: 11px; white-space: nowrap; }
+.tb-hint { color: #6e7681; font-size: 12px; white-space: nowrap; }
 
-#master-vol { width: 110px; accent-color: #58a6ff; cursor: pointer; }
+#master-vol { width: 130px; accent-color: #58a6ff; cursor: pointer; }
 
 .tb-btn {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-  border-radius: 4px; padding: 4px 10px; font-family: inherit; font-size: 11px; cursor: pointer;
+  border-radius: 5px; padding: 7px 13px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
 .tb-btn:hover { background: #30363d; border-color: #58a6ff; }
 .tb-btn.on { background: #3c0d11; border-color: #f85149; color: #f85149; }
 
 .tb-input {
-  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 3px;
-  padding: 4px 8px; font-family: inherit; font-size: 11px; width: 230px;
+  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px;
+  padding: 7px 11px; font-family: inherit; font-size: 13px; width: 240px;
 }
 .tb-input:focus { outline: none; border-color: #58a6ff; }
 
