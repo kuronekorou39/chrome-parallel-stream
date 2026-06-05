@@ -10,11 +10,13 @@ html, body {
 body { display: flex; flex-direction: column; }
 
 /* ===== ツールバー ===== */
+/* 別レイヤーで上に重ねる(フローに入れない)。これで出し入れしてもステージ=全画面が
+   変わらず、中の窓が動かない。背後がうっすら見えるよう半透明にする。 */
 #toolbar {
-  flex: 0 0 auto;
+  position: absolute; top: 0; left: 0; right: 0;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 14px;
-  background: #0d1117;
+  background: rgba(13,17,23,0.92);
   border-bottom: 1px solid #21262d;
   font-size: 14px;
   z-index: 100000;
