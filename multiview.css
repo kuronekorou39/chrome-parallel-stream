@@ -73,19 +73,29 @@ body { display: flex; flex-direction: column; }
 .win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
 .win.solo { border-color: #3fb950; }
 
+/* ヘッダは既定で非表示。マウスホバー(視聴モード)または選択中の枠でだけ表示する。
+   レイアウトを食わないよう絶対配置のオーバーレイにし、表示時は操作しやすいよう大きめに。 */
 .win-bar {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
-  height: 26px; padding: 0 6px; cursor: move; user-select: none;
-  background: #161b22; border-bottom: 1px solid #21262d;
+  position: absolute; top: 0; left: 0; right: 0; z-index: 6;
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 8px;
+  background: linear-gradient(180deg, rgba(13,17,23,0.96), rgba(13,17,23,0.5));
+  cursor: move; user-select: none; touch-action: none;
+  opacity: 0; transform: translateY(-6px); pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
 }
+.win:hover .win-bar,
+.win.active .win-bar { opacity: 1; transform: none; pointer-events: auto; }
+.layout-mode .win-bar { display: none; } /* 整形モードでは枠全体が操作対象なのでヘッダは出さない */
+
 .win-title {
-  flex: 1 1 auto; font-size: 11px; color: #8b949e;
+  flex: 1 1 auto; font-size: 12px; color: #c9d1d9;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.win-controls { display: flex; gap: 2px; flex: 0 0 auto; }
+.win-controls { display: flex; gap: 3px; flex: 0 0 auto; }
 .win-controls button {
-  background: transparent; color: #8b949e; border: none; border-radius: 3px;
-  width: 22px; height: 20px; font-size: 12px; cursor: pointer; line-height: 1;
+  background: rgba(48,54,61,0.6); color: #c9d1d9; border: none; border-radius: 5px;
+  width: 34px; height: 30px; font-size: 16px; cursor: pointer; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .win-controls button:hover { background: #30363d; color: #f0f6fc; }
@@ -116,32 +126,34 @@ body { display: flex; flex-direction: column; }
 
 /* ===== 整形モード(枠の配置調整専用) ===== */
 /* 中身を覆って枠ごとドラッグ移動するオーバーレイ。通常時は非表示。 */
-.win-overlay { position: absolute; inset: 0; z-index: 4; cursor: move; display: none; }
+.win-overlay { position: absolute; inset: 0; z-index: 4; cursor: move; display: none; touch-action: none; }
 .layout-mode .win-overlay { display: block; }
 .layout-mode .win { outline: 2px dashed #58a6ff; outline-offset: -1px; }
 
 /* 全辺/角のリサイズハンドル。通常時は非表示、整形モードで有効。 */
-.win-edge { position: absolute; z-index: 5; display: none; }
+.win-edge { position: absolute; z-index: 5; display: none; touch-action: none; }
 .layout-mode .win-edge { display: block; }
-.win-edge-n { top: -4px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
-.win-edge-s { bottom: -4px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
-.win-edge-e { right: -4px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
-.win-edge-w { left: -4px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
-.win-edge-ne { top: -4px; right: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
-.win-edge-nw { top: -4px; left: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
-.win-edge-se { bottom: -4px; right: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
-.win-edge-sw { bottom: -4px; left: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
+/* タッチでも掴めるよう大きめ。枠の overflow:hidden で切れないよう内側に置く。 */
+.win-edge-n { top: 0; left: 16px; right: 16px; height: 12px; cursor: ns-resize; }
+.win-edge-s { bottom: 0; left: 16px; right: 16px; height: 12px; cursor: ns-resize; }
+.win-edge-e { right: 0; top: 16px; bottom: 16px; width: 12px; cursor: ew-resize; }
+.win-edge-w { left: 0; top: 16px; bottom: 16px; width: 12px; cursor: ew-resize; }
+.win-edge-ne { top: 0; right: 0; width: 18px; height: 18px; cursor: nesw-resize; }
+.win-edge-nw { top: 0; left: 0; width: 18px; height: 18px; cursor: nwse-resize; }
+.win-edge-se { bottom: 0; right: 0; width: 18px; height: 18px; cursor: nwse-resize; }
+.win-edge-sw { bottom: 0; left: 0; width: 18px; height: 18px; cursor: nesw-resize; }
+/* 整形モードで角のつまみを見えるようにする(タッチで掴みやすく) */
+.layout-mode .win-edge-ne, .layout-mode .win-edge-nw,
+.layout-mode .win-edge-se, .layout-mode .win-edge-sw {
+  background: rgba(88,166,255,0.7); border-radius: 3px;
+}
 
 .win-resize {
-  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;
-  cursor: nwse-resize; z-index: 3;
+  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nwse-resize; z-index: 3; touch-action: none;
   background:
     linear-gradient(135deg, transparent 50%, #58a6ff 50%, #58a6ff 60%, transparent 60%,
     transparent 70%, #58a6ff 70%, #58a6ff 80%, transparent 80%);
   opacity: 0.6;
 }
 .win-resize:hover { opacity: 1; }
-
-/* ドラッグ/リサイズ中に iframe へマウスイベントを吸わせないシールド */
-#shield { position: fixed; inset: 0; z-index: 99999; cursor: inherit; display: none; }
-#shield.on { display: block; }

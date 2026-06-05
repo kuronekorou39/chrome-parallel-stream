@@ -20,7 +20,6 @@ const SITES = {
 
 const stage = document.getElementById('stage');
 const stageEmpty = document.getElementById('stage-empty');
-const shield = document.getElementById('shield');
 const countEl = document.getElementById('count');
 
 let zCounter = 10;
@@ -168,11 +167,11 @@ function createWindow(url, opts = {}) {
   const i = wins.length - 1;
   setRect(win, 40 + (i % 6) * 30, 40 + (i % 6) * 30, 520, 320);
 
-  el.addEventListener('mousedown', () => focusWindow(win));
+  el.addEventListener('pointerdown', () => focusWindow(win));
   makeDraggable(win, bar);
   makeResizable(win, resize);
-  overlay.addEventListener('mousedown', (e) => beginDrag(win, e));
-  edges.forEach((h) => h.addEventListener('mousedown', (e) => beginResize(win, h.dataset.dir, e)));
+  overlay.addEventListener('pointerdown', (e) => beginDrag(win, e));
+  edges.forEach((h) => h.addEventListener('pointerdown', (e) => beginResize(win, h.dataset.dir, e)));
   muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
   soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
@@ -322,42 +321,50 @@ function syncOpacitySlider() {
 }
 
 function makeDraggable(win, handle) {
-  handle.addEventListener('mousedown', (e) => {
-    // コントロールボタン上ではドラッグを開始しない(シールドが click を奪うのを防ぐ)。
+  handle.addEventListener('pointerdown', (e) => {
+    // コントロールボタン上ではドラッグを開始しない(クリック/タップを奪わないため)。
     if (e.target.closest('.win-controls')) return;
     beginDrag(win, e);
   });
 }
 
 function makeResizable(win, handle) {
-  handle.addEventListener('mousedown', (e) => beginResize(win, 'se', e));
+  handle.addEventListener('pointerdown', (e) => beginResize(win, 'se', e));
 }
 
-// 枠を移動する。bar / 整形モードのオーバーレイの両方から呼ばれる。
+// マウス/タッチ/ペン共通の Pointer Events で枠を移動する。bar / 整形モードのオーバーレイ
+// の両方から呼ばれる。ポインタをキャプチャするので iframe/動画の上をドラッグしても追従する。
 function beginDrag(win, e) {
-  if (e.button !== 0 || win.maximized) return;
+  if (e.button !== 0 || !e.isPrimary || win.maximized) return;
   e.preventDefault();
   focusWindow(win);
+  const cap = e.currentTarget;
   const r = getRect(win);
   const sx = e.clientX;
   const sy = e.clientY;
-  showShield('move');
+  try { cap.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
   const onMove = (ev) => setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
-  const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  const onUp = () => {
+    cap.removeEventListener('pointermove', onMove);
+    cap.removeEventListener('pointerup', onUp);
+    cap.removeEventListener('pointercancel', onUp);
+  };
+  cap.addEventListener('pointermove', onMove);
+  cap.addEventListener('pointerup', onUp);
+  cap.addEventListener('pointercancel', onUp);
 }
 
 // dir は 'n','s','e','w' とその組合せ('se' 等)。指定した辺/角からリサイズする。
 function beginResize(win, dir, e) {
-  if (e.button !== 0 || win.maximized) return;
+  if (e.button !== 0 || !e.isPrimary || win.maximized) return;
   e.preventDefault();
   e.stopPropagation();
   focusWindow(win);
+  const cap = e.currentTarget;
   const r = getRect(win);
   const sx = e.clientX;
   const sy = e.clientY;
-  showShield(cursorForDir(dir));
+  try { cap.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
   const onMove = (ev) => {
     const dx = ev.clientX - sx;
     const dy = ev.clientY - sy;
@@ -371,9 +378,14 @@ function beginResize(win, dir, e) {
     if (dir.includes('n')) { h = Math.max(150, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
     setRect(win, x, y, w, h);
   };
-  const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  const onUp = () => {
+    cap.removeEventListener('pointermove', onMove);
+    cap.removeEventListener('pointerup', onUp);
+    cap.removeEventListener('pointercancel', onUp);
+  };
+  cap.addEventListener('pointermove', onMove);
+  cap.addEventListener('pointerup', onUp);
+  cap.addEventListener('pointercancel', onUp);
 }
 
 function cursorForDir(dir) {
@@ -382,9 +394,6 @@ function cursorForDir(dir) {
   if (dir === 'ne' || dir === 'sw') return 'nesw-resize';
   return 'nwse-resize'; // nw, se
 }
-
-function showShield(cursor) { shield.style.cursor = cursor; shield.classList.add('on'); }
-function hideShield() { shield.classList.remove('on'); }
 
 function toggleMax(win) {
   if (win.maximized) {
