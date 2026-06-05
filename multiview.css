@@ -87,7 +87,6 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
    視聴モードでは自動で消えるので、枠の外をクリックして解除する手間が要らない。 */
 .win.show-bar,
 .layout-mode .win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
-.win.solo { border-color: #3fb950; }
 
 /* ヘッダは既定で非表示。マウスホバー(視聴モード)または選択中の枠でだけ表示する。
    レイアウトを食わないよう絶対配置のオーバーレイにし、表示時は操作しやすいよう大きめに。 */
@@ -117,7 +116,6 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
 }
 .win-controls button:hover { background: #30363d; color: #f0f6fc; }
 .win-controls button.active { color: #3fb950; }
-.win-controls button.muted { color: #f85149; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
 /* 🎨 で開く「この枠だけ」の調整パネル(透明度・明るさ・コントラスト・彩度) */

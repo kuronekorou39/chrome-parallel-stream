@@ -169,19 +169,6 @@ section {
   font-style: italic;
 }
 
-/* ===== 設定 ===== */
-.setting-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: #c9d1d9;
-  margin-bottom: 6px;
-  cursor: pointer;
-}
-.setting-row input[type="checkbox"] { accent-color: #58a6ff; }
-.setting-row input[type="range"] { accent-color: #58a6ff; flex: 1 1 auto; cursor: pointer; }
-
 /* ===== Probe 表示 ===== */
 .custom-marker {
   color: #f0883e;

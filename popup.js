@@ -4,8 +4,6 @@
 const STORAGE_KEY = 'probeReport';
 // 専用ページ(multiview.html)が保持する「保存中の配信」セット。専用ページ側が更新する。
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
-// 専用ページの起動時設定(全ミュート・マスタ音量初期値)。
-const MULTIVIEW_SETTINGS_KEY = 'multiviewSettings';
 
 const $ = (id) => document.getElementById(id);
 
@@ -61,26 +59,6 @@ async function openMultiview() {
   } finally {
     $('open-multiview').disabled = false;
   }
-}
-
-// ---- 設定(専用ページが起動時に読む) ----
-
-async function loadSettings() {
-  const data = await chrome.storage.local.get(MULTIVIEW_SETTINGS_KEY);
-  const s = data[MULTIVIEW_SETTINGS_KEY] || {};
-  $('set-startmuted').checked = s.startMuted !== false; // 既定 ON
-  const vol = typeof s.masterVolume === 'number' ? Math.round(s.masterVolume * 100) : 100;
-  $('set-mastervol').value = vol;
-  $('set-mastervol-val').textContent = vol;
-}
-
-async function saveSettings() {
-  const startMuted = $('set-startmuted').checked;
-  const masterVolume = Number($('set-mastervol').value) / 100;
-  $('set-mastervol-val').textContent = $('set-mastervol').value;
-  await chrome.storage.local.set({
-    [MULTIVIEW_SETTINGS_KEY]: { startMuted, masterVolume }
-  });
 }
 
 // ---- 保存中の配信(専用ページで追加した分のプレビュー) ----
@@ -418,8 +396,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Multiview(入口)
   $('open-multiview').addEventListener('click', openMultiview);
-  $('set-startmuted').addEventListener('change', saveSettings);
-  $('set-mastervol').addEventListener('input', saveSettings);
   $('clear-saved').addEventListener('click', clearSaved);
 
   // Debug (probe)
@@ -428,7 +404,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('copy-md').addEventListener('click', copyMarkdown);
 
   // 初期データロード
-  await loadSettings();
   await renderSavedList();
   const report = await loadReport();
   render(report);

@@ -5,7 +5,6 @@
 // postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
-const MULTIVIEW_SETTINGS_KEY = 'multiviewSettings';
 const MAX_WINDOWS = 10;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
@@ -26,12 +25,10 @@ let zCounter = 10;
 let idSeq = 0;
 let activeWin = null;
 let layoutMode = false;
-const master = { volume: 1.0, muted: true };
 const wins = [];
 
 (async function init() {
   wireToolbar();
-  window.addEventListener('message', onFrameMessage);
   window.addEventListener('resize', relayoutOnResize);
 
   // 枠の外(ステージ背景)をクリック/タップしたらフォーカス(選択・ヘッダ)を解除する。
@@ -52,8 +49,7 @@ const wins = [];
     }, 0);
   });
 
-  const data = await chrome.storage.local.get([MULTIVIEW_ACTIVE_KEY, MULTIVIEW_SETTINGS_KEY]);
-  applySettings(data[MULTIVIEW_SETTINGS_KEY] || {});
+  const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
 
   const urls = ((data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [])
     .map((u) => (u || '').trim())
@@ -64,14 +60,6 @@ const wins = [];
   tileAll();
   updateCount();
 })();
-
-// popup の設定(起動時ミュート・マスタ音量初期値)を master に反映し、ツールバー UI を合わせる。
-function applySettings(s) {
-  master.muted = s.startMuted !== false; // 既定 ON
-  master.volume = typeof s.masterVolume === 'number' ? Math.max(0, Math.min(1, s.masterVolume)) : 1;
-  document.getElementById('master-vol').value = Math.round(master.volume * 100);
-  updateMasterMuteUI();
-}
 
 // 現在の配信ラインナップを storage に保存(専用ページを開き直すと復元される)。
 function saveLineup() {
@@ -103,14 +91,14 @@ function createWindow(url, opts = {}) {
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
-  const muteBtn = mkBtn('🔇', 'muted', 'ミュート切替');
-  const soloBtn = mkBtn('S', '', 'ソロ(これだけ音を出す)');
+  // 音声は各プレイヤー自前のミュート/音量で操作する方針(起動時のみ全ミュート)。
+  // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
-  controls.append(muteBtn, soloBtn, openBtn);
+  controls.append(openBtn);
   if (chatBtn) controls.append(chatBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
   bar.append(title, controls);
@@ -130,7 +118,7 @@ function createWindow(url, opts = {}) {
     video = document.createElement('video');
     video.className = 'win-video';
     video.autoplay = true;
-    video.muted = true; // 自動再生のため(マスタ/ソロで解除)
+    video.muted = true; // 起動時はミュート(轟音防止)。以後はネイティブUIで自分で解除
     video.playsInline = true;
     video.controls = true; // 再生/一時停止・音量・全画面・PiP のネイティブUI
     media.appendChild(video);
@@ -178,8 +166,8 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, muteBtn, chatBtn,
-    muted: true, maximized: false, prevRect: null, opacity: 100,
+    id, url, el, body, frame, video, chatBtn,
+    maximized: false, prevRect: null, opacity: 100,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
@@ -194,19 +182,14 @@ function createWindow(url, opts = {}) {
   makeResizable(win, resize);
   overlay.addEventListener('pointerdown', (e) => beginDrag(win, e));
   edges.forEach((h) => h.addEventListener('pointerdown', (e) => beginResize(win, h.dataset.dir, e)));
-  muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
-  soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
   adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
-  if (frame) frame.addEventListener('load', () => sendAudio(win));
-  if (video) sendAudio(win);
 
   focusWindow(win);
-  updateWinAudioUI(win);
   if (!opts.silent) {
     updateCount();
     saveLineup();
@@ -601,88 +584,27 @@ function updateCount() {
 }
 
 // ====== 音声 ======
+// 方針: 起動時のみ全ミュート(轟音防止)。以後は拡張は干渉せず、各配信プレイヤー自前の
+// ミュート/音量で操作する。唯一の全体操作として「全ミュート」ボタンだけ用意する。
 
-function toggleMute(win) {
-  win.muted = !win.muted;
-  sendAudio(win);
-  // .solo(可聴が1つだけ)はグローバル状態依存なので、他窓のハイライトも再評価する。
-  wins.forEach(updateWinAudioUI);
-}
-
-// ソロ: この窓だけ鳴らし、他は全部ミュート(マスタミュートも解除)。
-function soloWindow(win) {
-  master.muted = false;
-  updateMasterMuteUI();
-  wins.forEach((w) => { w.muted = w !== win; });
-  refreshAllAudio();
-}
-
-function setMasterVolume(v) {
-  master.volume = v;
-  wins.forEach(sendAudio);
-}
-
-function toggleMasterMute() {
-  master.muted = !master.muted;
-  updateMasterMuteUI();
-  refreshAllAudio();
-}
-
-function updateMasterMuteUI() {
-  const btn = document.getElementById('master-mute');
-  btn.textContent = '全体ミュート: ' + (master.muted ? 'ON' : 'OFF');
-  btn.classList.toggle('on', master.muted);
-}
-
-function refreshAllAudio() { wins.forEach(sendAudio); }
-
-function sendAudio(win) {
-  const eff = master.muted || win.muted;
-  if (win.video) {
-    // 自前の <video>(Kick)は直接制御する。
-    try {
-      win.video.muted = eff;
-      if (!eff) win.video.volume = master.volume;
-    } catch (e) {
-      /* noop */
+// すべての枠をミュートする(ツールバーの「全ミュート」ボタン用)。
+function muteAll() {
+  for (const win of wins) {
+    if (win.video) {
+      try { win.video.muted = true; } catch (e) { /* noop */ }
+    } else if (win.frame) {
+      // iframe 内は content script(stream-control.js)に依頼してミュート。
+      try {
+        win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'mute-all' }, '*');
+      } catch (e) { /* noop */ }
     }
-  } else if (win.frame) {
-    try {
-      win.frame.contentWindow.postMessage(
-        { [MAGIC]: true, type: 'audio', muted: eff, volume: master.volume },
-        '*'
-      );
-    } catch (e) {
-      /* フレーム未ロード等は ready 通知で再送される */
-    }
-  }
-  updateWinAudioUI(win);
-}
-
-function updateWinAudioUI(win) {
-  // マスタミュート / マスタ音量0 でも実質無音なので、アイコンはミュート表示にする。
-  const masterAudible = !master.muted && master.volume > 0;
-  const eff = !masterAudible || win.muted;
-  win.muteBtn.textContent = eff ? '🔇' : '🔊';
-  win.muteBtn.classList.toggle('muted', eff);
-  const onlyOneAudible = masterAudible && !win.muted && wins.filter((w) => !w.muted).length === 1;
-  win.el.classList.toggle('solo', onlyOneAudible);
-}
-
-function onFrameMessage(e) {
-  const d = e.data;
-  if (!d || d[MAGIC] !== true) return;
-  if (d.type === 'ready') {
-    const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
-    if (win) sendAudio(win);
   }
 }
 
 // ====== ツールバー ======
 
 function wireToolbar() {
-  document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(e.target.value / 100));
-  document.getElementById('master-mute').addEventListener('click', toggleMasterMute);
+  document.getElementById('master-mute').addEventListener('click', muteAll);
   document.getElementById('tile-btn').addEventListener('click', tileAll);
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
   // 透明度・画質は枠ごとの設定なので、各枠ヘッダの 🎨 から開く調整パネルに置く
@@ -707,8 +629,6 @@ function wireToolbar() {
       if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
     });
   });
-
-  updateMasterMuteUI();
 }
 
 // 整形モード: ON の間は各枠の中身をオーバーレイで覆い、枠ごとの移動・全辺リサイズに
