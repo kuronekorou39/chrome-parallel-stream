@@ -41,6 +41,7 @@ body { display: flex; flex-direction: column; }
 .tb-hint { color: #6e7681; font-size: 11px; white-space: nowrap; }
 
 #master-vol { width: 110px; accent-color: #58a6ff; cursor: pointer; }
+#opacity-slider { width: 90px; accent-color: #58a6ff; cursor: pointer; }
 
 .tb-btn {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
@@ -112,6 +113,24 @@ body { display: flex; flex-direction: column; }
   text-align: center; padding: 16px; color: #ffb4ac; font-size: 12px; line-height: 1.6;
   background: #161b22;
 }
+
+/* ===== 整形モード(枠の配置調整専用) ===== */
+/* 中身を覆って枠ごとドラッグ移動するオーバーレイ。通常時は非表示。 */
+.win-overlay { position: absolute; inset: 0; z-index: 4; cursor: move; display: none; }
+.layout-mode .win-overlay { display: block; }
+.layout-mode .win { outline: 2px dashed #58a6ff; outline-offset: -1px; }
+
+/* 全辺/角のリサイズハンドル。通常時は非表示、整形モードで有効。 */
+.win-edge { position: absolute; z-index: 5; display: none; }
+.layout-mode .win-edge { display: block; }
+.win-edge-n { top: -4px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.win-edge-s { bottom: -4px; left: 10px; right: 10px; height: 10px; cursor: ns-resize; }
+.win-edge-e { right: -4px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+.win-edge-w { left: -4px; top: 10px; bottom: 10px; width: 10px; cursor: ew-resize; }
+.win-edge-ne { top: -4px; right: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
+.win-edge-nw { top: -4px; left: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
+.win-edge-se { bottom: -4px; right: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
+.win-edge-sw { bottom: -4px; left: -4px; width: 14px; height: 14px; cursor: nesw-resize; }
 
 .win-resize {
   position: absolute; right: 0; bottom: 0; width: 16px; height: 16px;

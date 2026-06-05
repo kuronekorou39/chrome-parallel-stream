@@ -26,6 +26,7 @@ const countEl = document.getElementById('count');
 let zCounter = 10;
 let idSeq = 0;
 let activeWin = null;
+let layoutMode = false;
 const master = { volume: 1.0, muted: true };
 const wins = [];
 
@@ -145,10 +146,23 @@ function createWindow(url, opts = {}) {
   const resize = document.createElement('div');
   resize.className = 'win-resize';
 
-  el.append(bar, body, resize);
+  // 整形モード用: 中身を覆って枠ごとドラッグ移動するオーバーレイ + 全辺/角のリサイズハンドル。
+  const overlay = document.createElement('div');
+  overlay.className = 'win-overlay';
+  const edges = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((dir) => {
+    const h = document.createElement('div');
+    h.className = 'win-edge win-edge-' + dir;
+    h.dataset.dir = dir;
+    return h;
+  });
+
+  el.append(bar, body, resize, overlay, ...edges);
   stage.appendChild(el);
 
-  const win = { id, url, el, body, frame, video, muteBtn, chatBtn, muted: true, maximized: false, prevRect: null };
+  const win = {
+    id, url, el, body, frame, video, muteBtn, chatBtn,
+    muted: true, maximized: false, prevRect: null, opacity: 100
+  };
   wins.push(win);
 
   const i = wins.length - 1;
@@ -157,6 +171,8 @@ function createWindow(url, opts = {}) {
   el.addEventListener('mousedown', () => focusWindow(win));
   makeDraggable(win, bar);
   makeResizable(win, resize);
+  overlay.addEventListener('mousedown', (e) => beginDrag(win, e));
+  edges.forEach((h) => h.addEventListener('mousedown', (e) => beginResize(win, h.dataset.dir, e)));
   muteBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMute(win); });
   soloBtn.addEventListener('click', (e) => { e.stopPropagation(); soloWindow(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
@@ -296,46 +312,75 @@ function focusWindow(win) {
   activeWin = win;
   win.el.classList.add('active');
   win.el.style.zIndex = ++zCounter;
+  syncOpacitySlider();
+}
+
+// 不透明度スライダーを「選択中の枠」の値に合わせる。
+function syncOpacitySlider() {
+  const s = document.getElementById('opacity-slider');
+  if (s && activeWin) s.value = activeWin.opacity != null ? activeWin.opacity : 100;
 }
 
 function makeDraggable(win, handle) {
   handle.addEventListener('mousedown', (e) => {
-    if (e.button !== 0 || win.maximized) return;
-    // コントロールボタン(ミュート/ソロ/最大化/閉じる)上ではドラッグを開始しない。
-    // 開始するとシールドが click を奪い、ボタンが効かなくなるため。
+    // コントロールボタン上ではドラッグを開始しない(シールドが click を奪うのを防ぐ)。
     if (e.target.closest('.win-controls')) return;
-    e.preventDefault();
-    focusWindow(win);
-    const r = getRect(win);
-    const sx = e.clientX;
-    const sy = e.clientY;
-    showShield('move');
-    const onMove = (ev) => setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
-    const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    beginDrag(win, e);
   });
 }
 
 function makeResizable(win, handle) {
-  handle.addEventListener('mousedown', (e) => {
-    if (e.button !== 0 || win.maximized) return;
-    e.preventDefault();
-    e.stopPropagation();
-    focusWindow(win);
-    const r = getRect(win);
-    const sx = e.clientX;
-    const sy = e.clientY;
-    showShield('nwse-resize');
-    const onMove = (ev) => setRect(win, r.x, r.y, r.w + (ev.clientX - sx), r.h + (ev.clientY - sy));
-    const onUp = () => {
-      hideShield();
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
+  handle.addEventListener('mousedown', (e) => beginResize(win, 'se', e));
+}
+
+// 枠を移動する。bar / 整形モードのオーバーレイの両方から呼ばれる。
+function beginDrag(win, e) {
+  if (e.button !== 0 || win.maximized) return;
+  e.preventDefault();
+  focusWindow(win);
+  const r = getRect(win);
+  const sx = e.clientX;
+  const sy = e.clientY;
+  showShield('move');
+  const onMove = (ev) => setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
+  const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// dir は 'n','s','e','w' とその組合せ('se' 等)。指定した辺/角からリサイズする。
+function beginResize(win, dir, e) {
+  if (e.button !== 0 || win.maximized) return;
+  e.preventDefault();
+  e.stopPropagation();
+  focusWindow(win);
+  const r = getRect(win);
+  const sx = e.clientX;
+  const sy = e.clientY;
+  showShield(cursorForDir(dir));
+  const onMove = (ev) => {
+    const dx = ev.clientX - sx;
+    const dy = ev.clientY - sy;
+    let x = r.x;
+    let y = r.y;
+    let w = r.w;
+    let h = r.h;
+    if (dir.includes('e')) w = Math.max(220, r.w + dx);
+    if (dir.includes('s')) h = Math.max(150, r.h + dy);
+    if (dir.includes('w')) { w = Math.max(220, r.w - dx); x = r.x + r.w - w; } // 右辺を固定
+    if (dir.includes('n')) { h = Math.max(150, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
+    setRect(win, x, y, w, h);
+  };
+  const onUp = () => { hideShield(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function cursorForDir(dir) {
+  if (dir === 'n' || dir === 's') return 'ns-resize';
+  if (dir === 'e' || dir === 'w') return 'ew-resize';
+  if (dir === 'ne' || dir === 'sw') return 'nesw-resize';
+  return 'nwse-resize'; // nw, se
 }
 
 function showShield(cursor) { shield.style.cursor = cursor; shield.classList.add('on'); }
@@ -521,6 +566,13 @@ function wireToolbar() {
   document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(e.target.value / 100));
   document.getElementById('master-mute').addEventListener('click', toggleMasterMute);
   document.getElementById('tile-btn').addEventListener('click', tileAll);
+  document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
+  document.getElementById('opacity-slider').addEventListener('input', (e) => {
+    if (!activeWin) return;
+    const v = Number(e.target.value);
+    activeWin.opacity = v;
+    activeWin.el.style.opacity = v / 100;
+  });
 
   const addUrl = document.getElementById('add-url');
   const doAdd = () => {
@@ -541,6 +593,14 @@ function wireToolbar() {
   });
 
   updateMasterMuteUI();
+}
+
+// 整形モード: ON の間は各枠の中身をオーバーレイで覆い、枠ごとの移動・全辺リサイズに
+// 専念できる(中身=動画/チャットには触れない)。OFF で通常操作に戻る。
+function toggleLayoutMode() {
+  layoutMode = !layoutMode;
+  stage.classList.toggle('layout-mode', layoutMode);
+  document.getElementById('layout-btn').classList.toggle('on', layoutMode);
 }
 
 // ====== URL ヘルパ ======
