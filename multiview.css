@@ -108,19 +108,31 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
   flex: 1 1 auto; font-size: 12px; color: #c9d1d9;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.win-controls { display: flex; gap: 3px; flex: 0 0 auto; }
+/* 操作ボタンは左端中央に縦並べ(ページ右上のメニュー等と被らないように)。
+   ホバー/一時表示/調整パネル展開のときだけ出す。整形モードでは出さない。 */
+.win-controls {
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
+  display: flex; flex-direction: column; gap: 5px;
+  background: rgba(13,17,23,0.8); border-radius: 9px; padding: 5px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.win:hover .win-controls,
+.win.show-bar .win-controls,
+.win.adjust-open .win-controls { opacity: 1; pointer-events: auto; }
+.layout-mode .win-controls { display: none; }
 .win-controls button {
-  background: rgba(48,54,61,0.6); color: #c9d1d9; border: none; border-radius: 5px;
-  width: 34px; height: 30px; font-size: 16px; cursor: pointer; line-height: 1;
+  background: rgba(48,54,61,0.6); color: #c9d1d9; border: none; border-radius: 6px;
+  width: 36px; height: 32px; font-size: 16px; cursor: pointer; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .win-controls button:hover { background: #30363d; color: #f0f6fc; }
 .win-controls button.active { color: #3fb950; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
-/* 🎨 で開く「この枠だけ」の調整パネル(透明度・明るさ・コントラスト・彩度) */
+/* 🎨 で開く「この枠だけ」の調整パネル。左の操作列のすぐ右に出す。 */
 .win-adjust {
-  position: absolute; top: 42px; right: 6px; z-index: 7;
+  position: absolute; left: 54px; top: 50%; transform: translateY(-50%); z-index: 7;
   display: none; flex-direction: column; gap: 6px;
   background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 8px;
   padding: 10px; width: 200px;

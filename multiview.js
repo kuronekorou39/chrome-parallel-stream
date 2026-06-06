@@ -25,6 +25,7 @@ let zCounter = 10;
 let idSeq = 0;
 let activeWin = null;
 let layoutMode = false;
+let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をまとめて設定する。
 const wins = [];
 
 (async function init() {
@@ -101,7 +102,8 @@ function createWindow(url, opts = {}) {
   controls.append(openBtn);
   if (chatBtn) controls.append(chatBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
-  bar.append(title, controls);
+  // 操作ボタンは左端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
+  bar.append(title);
 
   const body = document.createElement('div');
   body.className = 'win-body';
@@ -162,7 +164,7 @@ function createWindow(url, opts = {}) {
     return h;
   });
 
-  el.append(bar, body, resize, overlay, ...edges);
+  el.append(bar, controls, body, resize, overlay, ...edges);
   stage.appendChild(el);
 
   const win = {
@@ -188,6 +190,9 @@ function createWindow(url, opts = {}) {
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
+  // 現在のマスタ音量を新しい枠にも適用(iframe は読込完了後にも再送)。
+  if (frame) frame.addEventListener('load', () => applyVolume(win, masterVolume));
+  applyVolume(win, masterVolume);
 
   focusWindow(win);
   if (!opts.silent) {
@@ -589,14 +594,18 @@ function updateCount() {
 // つまみ操作時にだけ適用(継続的な上書きはしない)ので、以後は各プレイヤーで個別調整も可能。
 
 function setMasterVolume(v) {
+  masterVolume = v;
   for (const win of wins) applyVolume(win, v);
 }
 
+// 音量のみ設定する(ミュートは触らない=各プレイヤー自前のミュートで「1つだけ聞く」が可能)。
+// マスタ0 のときは volume=0 で実質無音。
 function applyVolume(win, v) {
   if (win.video) {
-    try { win.video.volume = v; win.video.muted = v <= 0; } catch (e) { /* noop */ }
+    try { win.video.volume = v; } catch (e) { /* noop */ }
   } else if (win.frame) {
-    // iframe 内は content script(stream-control.js)に依頼して全 video の音量を設定。
+    // iframe 内は content script(stream-control.js)に依頼。プレイヤーが音量を上書き
+    // するので、stream-control 側で定期的に再適用(enforce)させる。
     try {
       win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: v }, '*');
     } catch (e) { /* noop */ }
