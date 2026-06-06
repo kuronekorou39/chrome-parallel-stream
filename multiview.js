@@ -584,27 +584,29 @@ function updateCount() {
 }
 
 // ====== 音声 ======
-// 方針: 起動時のみ全ミュート(轟音防止)。以後は拡張は干渉せず、各配信プレイヤー自前の
-// ミュート/音量で操作する。唯一の全体操作として「全ミュート」ボタンだけ用意する。
+// 方針: 起動時のみ全ミュート(轟音防止)。マスタ音量つまみで全枠まとめて音量を設定できる。
+// クロスオリジン埋め込みはタブ出力音を直接絞れないため、各枠の音量をまとめて設定する形。
+// つまみ操作時にだけ適用(継続的な上書きはしない)ので、以後は各プレイヤーで個別調整も可能。
 
-// すべての枠をミュートする(ツールバーの「全ミュート」ボタン用)。
-function muteAll() {
-  for (const win of wins) {
-    if (win.video) {
-      try { win.video.muted = true; } catch (e) { /* noop */ }
-    } else if (win.frame) {
-      // iframe 内は content script(stream-control.js)に依頼してミュート。
-      try {
-        win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'mute-all' }, '*');
-      } catch (e) { /* noop */ }
-    }
+function setMasterVolume(v) {
+  for (const win of wins) applyVolume(win, v);
+}
+
+function applyVolume(win, v) {
+  if (win.video) {
+    try { win.video.volume = v; win.video.muted = v <= 0; } catch (e) { /* noop */ }
+  } else if (win.frame) {
+    // iframe 内は content script(stream-control.js)に依頼して全 video の音量を設定。
+    try {
+      win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: v }, '*');
+    } catch (e) { /* noop */ }
   }
 }
 
 // ====== ツールバー ======
 
 function wireToolbar() {
-  document.getElementById('master-mute').addEventListener('click', muteAll);
+  document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(Number(e.target.value) / 100));
   document.getElementById('tile-btn').addEventListener('click', tileAll);
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
   // 透明度・画質は枠ごとの設定なので、各枠ヘッダの 🎨 から開く調整パネルに置く
