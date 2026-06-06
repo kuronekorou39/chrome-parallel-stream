@@ -27,22 +27,32 @@
   // 親(multiview.html)からの「音量設定」指示(マスタ音量つまみ)。value(0〜1)を全 video に適用。
   // muted は触らない(各プレイヤー自前のミュートで「1つだけ聞く」ができるように)。
   let desiredVol = null; // null = まだマスタ未操作(プレイヤー任せ)
-  function applyVol() {
-    if (desiredVol === null) return;
-    const vids = document.querySelectorAll('video');
-    for (const v of vids) {
+
+  // プレイヤーが volumechange でマスタ値からズラしたときだけ戻す(ポーリングしない)。
+  // 自分で戻した直後は値が一致するので再発火せず、イベントループにもならない。
+  function enforce(v) {
+    if (desiredVol !== null && Math.abs(v.volume - desiredVol) > 0.005) {
       try { v.volume = desiredVol; } catch (err) { /* noop */ }
     }
   }
+
+  function applyToAll() {
+    document.querySelectorAll('video').forEach((v) => {
+      if (!v.__mvVol) {
+        v.__mvVol = true;
+        v.addEventListener('volumechange', () => enforce(v));
+      }
+      if (desiredVol !== null) { try { v.volume = desiredVol; } catch (err) { /* noop */ } }
+    });
+  }
+
   window.addEventListener('message', (e) => {
     if (e.source !== window.parent) return; // 親以外からの偽装を弾く
     const d = e.data;
     if (!d || d[MAGIC] !== true || d.type !== 'set-volume') return;
     desiredVol = Math.max(0, Math.min(1, Number(d.value)));
-    applyVol();
+    applyToAll();
   });
-  // プレイヤーは自分で video.volume を上書きするので、定期的に再適用してマスタ音量を保つ。
-  setInterval(applyVol, 500);
 
   // ---- Twitch のみ: シアターモードを1回 click して player を最大化 ----
   if (host.includes('twitch.tv')) {

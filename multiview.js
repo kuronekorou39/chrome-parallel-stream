@@ -605,7 +605,7 @@ function applyVolume(win, v) {
     try { win.video.volume = v; } catch (e) { /* noop */ }
   } else if (win.frame) {
     // iframe 内は content script(stream-control.js)に依頼。プレイヤーが音量を上書き
-    // するので、stream-control 側で定期的に再適用(enforce)させる。
+    // した瞬間(volumechange)だけ stream-control がマスタ値へ戻す(ポーリングなし)。
     try {
       win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: v }, '*');
     } catch (e) { /* noop */ }
