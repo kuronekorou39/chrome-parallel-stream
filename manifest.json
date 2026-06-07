@@ -34,6 +34,13 @@
       "js": ["stream-control.js"],
       "all_frames": true,
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["yt-ad-skip-main.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_idle"
     }
   ],
   "declarative_net_request": {

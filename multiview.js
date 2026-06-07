@@ -5,6 +5,7 @@
 // postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
+const AD_SKIP_KEY = 'adSkipEnabled'; // 広告スキップのオン/オフ。各枠の stream-control.js が storage で追従する。
 const MAX_WINDOWS = 20;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
@@ -118,7 +119,7 @@ function createWindow(url, opts = {}) {
   if (chatBtn) controls.append(chatBtn);
   if (secretBtn) controls.append(secretBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
-  // 操作ボタンは左端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
+  // 操作ボタンは右端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
   bar.append(title);
 
   const body = document.createElement('div');
@@ -659,6 +660,16 @@ function wireToolbar() {
   document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(Number(e.target.value) / 100));
   document.getElementById('tile-btn').addEventListener('click', tileAll);
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
+
+  // 広告スキップのオン/オフ(YouTube枠が対象)。ここは状態を storage に保存するだけで、実際の
+  // 検知・スキップは各枠の content script(stream-control.js)が storage を見て行う。既定はオフ。
+  const adskipBtn = document.getElementById('adskip-btn');
+  chrome.storage.local.get(AD_SKIP_KEY, (d) => adskipBtn.classList.toggle('adskip-on', d[AD_SKIP_KEY] === true));
+  adskipBtn.addEventListener('click', () => {
+    const enabled = !adskipBtn.classList.contains('adskip-on');
+    adskipBtn.classList.toggle('adskip-on', enabled);
+    chrome.storage.local.set({ [AD_SKIP_KEY]: enabled });
+  });
   // 透明度・画質は枠ごとの設定なので、各枠ヘッダの 🎨 から開く調整パネルに置く
   // (ツールバーに置くと音量のようなマスタ設定に見えてしまうため)。
   document.getElementById('toolbar-toggle').addEventListener('click', () => document.body.classList.add('toolbar-hidden'));

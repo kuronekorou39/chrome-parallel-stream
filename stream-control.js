@@ -86,4 +86,72 @@
       }
     }, 500);
   }
+
+  // ---- YouTube のみ: 広告を自動スキップ ----
+  // 別プロジェクト(chrome-ad-skipper)の YouTube 広告スキップ技術をこのプロジェクトへ移植したもの。
+  // 検知(#movie_player の ad-showing クラス)はこの content script(ISOLATED world)で行い、実際の
+  // スキップ(player.skipAd() 等の内部API / 広告 video のシーク)は YouTube の JS コンテキストでしか
+  // 触れないので、MAIN world の yt-ad-skip-main.js へ postMessage で依頼する。ボタンで飛ばせる
+  // スキップ可能広告は、この ISOLATED 側でも直接 click しておく(内部APIが変わったときの保険)。
+  if (host.includes('youtube.com')) {
+    const AD_SKIP_SOURCE = 'mvAdSkip'; // yt-ad-skip-main.js 側と一致させること
+    const AD_SKIP_KEY = 'adSkipEnabled'; // multiview ツールバーのトグルが書き込む storage キー
+    const PLAYER_SELECTOR = '#movie_player';
+    const POLL_INTERVAL = 300;        // ad-showing の監視間隔
+    const SKIP_RETRY_INTERVAL = 1500; // 同一広告中にスキップを再試行する間隔
+    const SKIP_BUTTON_SELECTORS = [
+      '.ytp-ad-skip-button-modern',
+      '.ytp-ad-skip-button',
+      '.ytp-skip-ad-button',
+      '.ytp-ad-overlay-close-button' // 動画下部のオーバーレイ広告を閉じる
+    ];
+    let adSkipEnabled = false; // デフォルト OFF。ユーザーがツールバーのトグルで ON にするまで何もしない。
+    let adPlaying = false;
+    let lastSkipAttempt = 0;
+
+    // オン/オフは multiview ツールバーのトグルが storage に書き込む。起動時に現在値を読み、
+    // 以後は storage.onChanged で追従する(枠を開いたままトグルしても即反映される)。
+    try {
+      chrome.storage.local.get(AD_SKIP_KEY, (d) => { adSkipEnabled = d[AD_SKIP_KEY] === true; });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes[AD_SKIP_KEY]) {
+          adSkipEnabled = changes[AD_SKIP_KEY].newValue === true;
+          if (!adSkipEnabled) adPlaying = false; // OFF にしたら検知状態もリセット
+        }
+      });
+    } catch (e) { /* noop */ }
+
+    const clickSkipButtons = () => {
+      for (const sel of SKIP_BUTTON_SELECTORS) {
+        const btn = document.querySelector(sel);
+        if (btn) { try { btn.click(); } catch (e) { /* noop */ } }
+      }
+    };
+
+    const checkAd = () => {
+      if (!adSkipEnabled) return; // OFF のときは検知もスキップ依頼もしない(MAIN world も黙ったまま)
+      const player = document.querySelector(PLAYER_SELECTOR);
+      if (!player) return;
+      if (player.classList.contains('ad-showing')) {
+        if (!adPlaying) { adPlaying = true; lastSkipAttempt = 0; }
+        const now = Date.now();
+        if (now - lastSkipAttempt > SKIP_RETRY_INTERVAL) {
+          lastSkipAttempt = now;
+          clickSkipButtons();
+          window.postMessage({ source: AD_SKIP_SOURCE, type: 'skip-ad' }, '*');
+        }
+      } else if (adPlaying) {
+        adPlaying = false;
+        setTimeout(() => window.postMessage({ source: AD_SKIP_SOURCE, type: 'resume-playback' }, '*'), 300);
+      }
+    };
+
+    // class 変化に即応(MutationObserver)しつつ、取りこぼし用にポーリングも回す。
+    (function observePlayer() {
+      const player = document.querySelector(PLAYER_SELECTOR);
+      if (!player) { setTimeout(observePlayer, 1000); return; }
+      new MutationObserver(checkAd).observe(player, { attributes: true, attributeFilter: ['class'] });
+    })();
+    setInterval(checkAd, POLL_INTERVAL);
+  }
 })();
