@@ -657,7 +657,12 @@ function applyVolume(win, v) {
 // ====== ツールバー ======
 
 function wireToolbar() {
-  document.getElementById('master-vol').addEventListener('input', (e) => setMasterVolume(Number(e.target.value) / 100));
+  document.getElementById('master-vol').addEventListener('input', (e) => {
+    const v = Number(e.target.value) / 100;
+    setMasterVolume(v);
+    const icon = document.getElementById('master-vol-icon');
+    if (icon) icon.textContent = v <= 0 ? '🔇' : '🔊';
+  });
   document.getElementById('tile-btn').addEventListener('click', tileAll);
   document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
 
