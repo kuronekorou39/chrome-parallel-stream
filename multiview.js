@@ -5,7 +5,7 @@
 // postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
-const MAX_WINDOWS = 10;
+const MAX_WINDOWS = 20;
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
@@ -31,6 +31,7 @@ const wins = [];
 (async function init() {
   wireToolbar();
   window.addEventListener('resize', relayoutOnResize);
+  window.addEventListener('message', onFrameUrl);
 
   // 枠の外(ステージ背景)をクリック/タップしたらフォーカス(選択・ヘッダ)を解除する。
   // 枠内クリックは e.target が枠の子要素になるので解除されない。
@@ -61,6 +62,18 @@ const wins = [];
   tileAll();
   updateCount();
 })();
+
+// content script(stream-control.js)から「この枠が今開いている URL」を受け取り、
+// 枠内で別の配信ページへ移動したら、その URL を保存して次回復元できるようにする。
+function onFrameUrl(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true || d.type !== 'frame-url' || !d.href) return;
+  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  if (!win || win.url === d.href) return;
+  win.url = d.href;
+  if (win.titleEl) win.titleEl.textContent = labelFor(d.href);
+  saveLineup();
+}
 
 // 現在の配信ラインナップを storage に保存(専用ページを開き直すと復元される)。
 function saveLineup() {
@@ -168,7 +181,7 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatBtn,
+    id, url, el, body, frame, video, chatBtn, titleEl: title,
     maximized: false, prevRect: null, opacity: 100,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };

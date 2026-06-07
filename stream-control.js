@@ -54,6 +54,21 @@
     applyToAll();
   });
 
+  // ---- 枠が今開いている URL を親(multiview)へ知らせる ----
+  // 直下フレーム(枠本体)からのものだけ親=multiview に届く。枠内で別ページへ移動したら
+  // 親が保存し直し、次回その URL を直接復元できる。読込時 + SPA(pushState 等)遷移時に通知。
+  function reportUrl() {
+    try {
+      window.parent.postMessage({ [MAGIC]: true, type: 'frame-url', href: location.href }, '*');
+    } catch (e) { /* noop */ }
+  }
+  reportUrl();
+  if (window.navigation && typeof window.navigation.addEventListener === 'function') {
+    window.navigation.addEventListener('navigate', () => setTimeout(reportUrl, 0));
+  }
+  window.addEventListener('popstate', () => setTimeout(reportUrl, 0));
+  window.addEventListener('hashchange', () => setTimeout(reportUrl, 0));
+
   // ---- Twitch のみ: シアターモードを1回 click して player を最大化 ----
   if (host.includes('twitch.tv')) {
     const SELECTORS = [
