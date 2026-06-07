@@ -132,20 +132,21 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
 .win-controls button.active { color: #3fb950; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
-/* 🎨 で開く「この枠だけ」の調整パネル。左の操作列のすぐ右に出す。 */
+/* 🎨 で開く「この枠だけ」の調整パネル。右の操作列のすぐ左に出す。 */
 .win-adjust {
   position: absolute; right: 54px; top: 50%; transform: translateY(-50%); z-index: 7;
   display: none; flex-direction: column; gap: 6px;
   background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 8px;
-  padding: 10px; width: 200px;
+  padding: 10px; width: 230px;
   box-shadow: 0 6px 18px rgba(0,0,0,0.55);
 }
 .win.adjust-open .win-adjust { display: flex; }
 /* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
 .win.adjust-open .win-bar { opacity: 1; transform: none; pointer-events: auto; }
 .adj-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #c9d1d9; cursor: pointer; }
-.adj-row > span { flex: 0 0 84px; }
-.adj-row input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
+.adj-row > span { flex: 0 0 92px; white-space: nowrap; }
+/* min-width:0 と width:auto で flex の既定 min-width:auto による『はみ出し』を防ぐ。 */
+.adj-row input[type="range"] { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; accent-color: #58a6ff; cursor: pointer; }
 .adj-reset {
   align-self: flex-end; margin-top: 2px;
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px;
