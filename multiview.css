@@ -154,6 +154,17 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
+/* シークレット(credentialless)枠の表示バッジ。.secret のときだけ出す。 */
+.win-secret-badge {
+  position: absolute; top: 6px; right: 6px; z-index: 3; display: none;
+  background: rgba(60,13,17,0.92); color: #ffb4ac; border: 1px solid #f85149;
+  font-size: 11px; padding: 4px 8px; border-radius: 6px;
+  pointer-events: none; max-width: 75%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.win.secret .win-secret-badge { display: block; }
+.win.secret { border-color: #f0883e; }
+
 /* Kick: 映像(左)+ チャット(右)の2分割 */
 .win-body.kick-split { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }

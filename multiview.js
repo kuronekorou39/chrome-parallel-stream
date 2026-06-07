@@ -109,11 +109,14 @@ function createWindow(url, opts = {}) {
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
+  // Kick は <video> 直再生でセッションを使わないため対象外。
+  const secretBtn = isKick ? null : mkBtn('🕶', '', 'シークレット(別/ログアウトのセッション。閉じる/再読込で消える)');
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(openBtn);
   if (chatBtn) controls.append(chatBtn);
+  if (secretBtn) controls.append(secretBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
   // 操作ボタンは左端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
   bar.append(title);
@@ -149,19 +152,14 @@ function createWindow(url, opts = {}) {
       loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
     }
   } else {
-    frame = document.createElement('iframe');
-    // allow に fullscreen を含むので allowfullscreen 属性は付けない(コンソール警告回避)。
-    frame.allow = IFRAME_ALLOW;
-    body.appendChild(frame);
-    const src = toEmbedUrl(url);
-    if (hostOf(url).includes('openrec.tv')) {
-      // OpenRec もログインCookieを緩めてから読み込む(iframe 内でログイン状態にする)。
-      loadFrameWithLogin(frame, 'openrec.tv', src);
-    } else {
-      frame.src = src;
-    }
-    // ※ iframe は生成後 DOM 上で一切 move しないこと。再ペアレントするとブラウザ仕様で
-    //   iframe がリロードされ埋め込みが壊れる。最大化/整列/前面化は style 変更のみで行う。
+    // iframe は win 確定後に mountSiteFrame() で生成する(シークレット切替で作り直すため)。
+    // シークレット中であることを示すバッジ(.secret のときだけ表示)。
+    const badge = document.createElement('div');
+    badge.className = 'win-secret-badge';
+    badge.textContent = '🕶 一時セッション(閉じる/再読込で消えます)';
+    body.appendChild(badge);
+    // ※ iframe は生成後 DOM 上で move しないこと(再ペアレントすると埋め込みが壊れる)。
+    //   シークレット切替は新しい iframe を作り直す(move ではない)ので問題ない。
   }
 
   const resize = document.createElement('div');
@@ -181,8 +179,8 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatBtn, titleEl: title,
-    maximized: false, prevRect: null, opacity: 100,
+    id, url, el, body, frame, video, chatBtn, secretBtn, titleEl: title,
+    secret: false, maximized: false, prevRect: null, opacity: 100,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
@@ -202,9 +200,10 @@ function createWindow(url, opts = {}) {
   adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
+  if (secretBtn) secretBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSecret(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
-  // 現在のマスタ音量を新しい枠にも適用(iframe は読込完了後にも再送)。
-  if (frame) frame.addEventListener('load', () => applyVolume(win, masterVolume));
+  // サイト枠(非Kick)の iframe を生成。Kick は <video> なので applyVolume だけ。
+  if (!isKick) mountSiteFrame(win);
   applyVolume(win, masterVolume);
 
   focusWindow(win);
@@ -568,6 +567,35 @@ function toggleChat(win) {
   if (!win.body) return;
   const on = win.body.classList.toggle('chat-on');
   if (win.chatBtn) win.chatBtn.classList.toggle('active', on);
+}
+
+// サイト枠(Twitch/YouTube/OPENREC)の iframe を(再)生成して body に載せる。
+// win.secret=true なら credentialless = まっさらな別セッション(Cookie等は一時領域に隔離され、
+// 閉じる/再読込で消える)=シークレット相当。セッションを変えるため切替時は作り直す。
+function mountSiteFrame(win) {
+  if (win.frame) win.frame.remove();
+  const frame = document.createElement('iframe');
+  frame.allow = IFRAME_ALLOW;
+  if (win.secret) frame.credentialless = true;
+  win.body.appendChild(frame);
+  win.frame = frame;
+  frame.addEventListener('load', () => applyVolume(win, masterVolume));
+  const src = toEmbedUrl(win.url);
+  // シークレット枠は本セッションのログインを引き継がない。OpenRec の cookie 緩和は通常枠のみ。
+  if (!win.secret && hostOf(win.url).includes('openrec.tv')) {
+    loadFrameWithLogin(frame, 'openrec.tv', src);
+  } else {
+    frame.src = src;
+  }
+  applyVolume(win, masterVolume);
+}
+
+// シークレット(credentialless)セッションの ON/OFF。iframe を作り直すので中身はリセットされる。
+function toggleSecret(win) {
+  win.secret = !win.secret;
+  win.el.classList.toggle('secret', win.secret);
+  if (win.secretBtn) win.secretBtn.classList.toggle('active', win.secret);
+  mountSiteFrame(win);
 }
 
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
