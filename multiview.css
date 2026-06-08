@@ -9,29 +9,65 @@ html, body {
 }
 body { display: flex; flex-direction: column; }
 
+/* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
+body.idle, body.idle * { cursor: none !important; }
+
 /* ===== ツールバー ===== */
 /* 別レイヤーで上に重ねる(フローに入れない)。これで出し入れしてもステージ=全画面が
-   変わらず、中の窓が動かない。背後がうっすら見えるよう半透明にする。 */
+   変わらず、中の窓が動かない。背後が透けて見えるよう半透明にする(ボタン類は各自不透明)。 */
 #toolbar {
   position: absolute; top: 0; left: 0; right: 0;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 14px;
-  background: rgba(13,17,23,0.92);
+  background: rgba(13,17,23,0.5);
   border-bottom: 1px solid #21262d;
   font-size: 14px;
   z-index: 100000;
 }
-body.toolbar-hidden #toolbar { display: none; }
 
-/* ツールバーを隠したときに出る復帰ボタン */
+/* ヘッダにポインタが乗っている間(操作中)は透過を解いてはっきり見せる。 */
+#toolbar:hover { background: rgba(13,17,23,0.98); }
+
+/* ===== メニュー位置(上/下=横バー, 左/右=縦バー)。JS が body.tb-pos-* / tb-vertical を付ける ===== */
+body.tb-pos-top #toolbar    { top: 0; bottom: auto; left: 0; right: 0; }
+body.tb-pos-bottom #toolbar { top: auto; bottom: 0; left: 0; right: 0; border-bottom: none; border-top: 1px solid #21262d; }
+body.tb-pos-left #toolbar   { top: 0; bottom: 0; left: 0; right: auto; border-bottom: none; border-right: 1px solid #21262d; }
+body.tb-pos-right #toolbar  { top: 0; bottom: 0; left: auto; right: 0; border-bottom: none; border-left: 1px solid #21262d; }
+
+/* 縦バー: 縦積みにして各コントロールを幅いっぱいに。 */
+body.tb-vertical #toolbar {
+  flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+  width: 240px; max-height: 100%; overflow-y: auto;
+}
+body.tb-vertical .tb-sep { width: 100%; height: 1px; }
+body.tb-vertical .tb-input,
+body.tb-vertical #master-vol { width: 100%; }
+body.tb-vertical .tb-grow,
+body.tb-vertical .tb-hint { display: none; }
+
+/* 出し入れアニメ: 位置に応じた方向へスライド+フェード。初回適用はアニメさせない(tb-ready で有効化)。 */
+body.tb-ready #toolbar { transition: background 0.2s ease, transform 0.28s ease, opacity 0.28s ease; }
+body.toolbar-hidden #toolbar { opacity: 0; pointer-events: none; }
+body.tb-pos-top.toolbar-hidden #toolbar    { transform: translateY(-100%); }
+body.tb-pos-bottom.toolbar-hidden #toolbar { transform: translateY(100%); }
+body.tb-pos-left.toolbar-hidden #toolbar   { transform: translateX(-100%); }
+body.tb-pos-right.toolbar-hidden #toolbar  { transform: translateX(100%); }
+
+/* ツールバーを隠したときに出る復帰ボタン(隠れたバーの方向側に、フェードで現れる)。 */
 #toolbar-show {
-  position: fixed; top: 8px; right: 10px; z-index: 100001; display: none;
-  align-items: center; gap: 6px;
+  position: fixed; z-index: 100001;
+  display: inline-flex; align-items: center; gap: 6px;
+  opacity: 0; pointer-events: none;
   background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
   border-radius: 7px; padding: 9px 13px; font-family: inherit; font-size: 14px; cursor: pointer;
+  transition: opacity 0.2s ease;
 }
-body.toolbar-hidden #toolbar-show { display: inline-flex; }
+body.toolbar-hidden #toolbar-show { opacity: 1; pointer-events: auto; }
 #toolbar-show:hover { background: #30363d; border-color: #58a6ff; }
+body.tb-pos-top #toolbar-show,
+body.tb-pos-right #toolbar-show { top: 8px; right: 10px; bottom: auto; left: auto; }
+body.tb-pos-bottom #toolbar-show { bottom: 8px; right: 10px; top: auto; left: auto; }
+body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: auto; }
 
 /* 主要サイトのワンクリック追加チップ */
 .site-chip {
@@ -95,7 +131,7 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
 .win-bar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 6;
   display: flex; align-items: center; gap: 8px;
-  height: 38px; padding: 0 8px;
+  height: 38px; padding: 0 48px 0 8px; /* 右は操作列(.win-controls)と重ならないよう空ける */
   background: linear-gradient(180deg, rgba(13,17,23,0.96), rgba(13,17,23,0.5));
   cursor: move; user-select: none; touch-action: none;
   opacity: 0; transform: translateY(-8px); pointer-events: none;
@@ -157,17 +193,6 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
-/* シークレット(credentialless)枠の表示バッジ。.secret のときだけ出す。 */
-.win-secret-badge {
-  position: absolute; top: 6px; right: 6px; z-index: 3; display: none;
-  background: rgba(60,13,17,0.92); color: #ffb4ac; border: 1px solid #f85149;
-  font-size: 11px; padding: 4px 8px; border-radius: 6px;
-  pointer-events: none; max-width: 75%;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.win.secret .win-secret-badge { display: block; }
-.win.secret { border-color: #f0883e; }
-
 /* Kick: 映像(左)+ チャット(右)の2分割 */
 .win-body.kick-split { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
@@ -219,3 +244,52 @@ body.toolbar-hidden #toolbar-show { display: inline-flex; }
   opacity: 0.6;
 }
 .win-resize:hover { opacity: 1; }
+
+/* ===== メニュー位置ダイアログ(中央モーダル) ===== */
+.pos-dialog-overlay {
+  position: fixed; inset: 0; z-index: 100002;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease, background 0.18s ease;
+}
+.pos-dialog-overlay.open { opacity: 1; pointer-events: auto; background: rgba(0,0,0,0.25); }
+.pos-dialog {
+  background: rgba(13,17,23,0.98); border: 1px solid #30363d; border-radius: 12px;
+  padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  transform: scale(0.96); transition: transform 0.18s ease;
+}
+.pos-dialog-overlay.open .pos-dialog { transform: scale(1); }
+.pos-dialog-title { text-align: center; color: #c9d1d9; font-size: 14px; margin-bottom: 14px; }
+.pos-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(3, 64px);
+  grid-template-rows: repeat(3, 56px);
+  grid-template-areas:
+    ".    top    ."
+    "left center right"
+    ".    bottom .";
+}
+.pos-pick {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 8px;
+  font-family: inherit; font-size: 18px; cursor: pointer;
+}
+.pos-pick span { font-size: 11px; color: #8b949e; }
+.pos-pick:hover { background: #30363d; border-color: #58a6ff; }
+.pos-pick.active { border-color: #58a6ff; background: rgba(31,111,235,0.2); color: #f0f6fc; }
+.pos-pick.active span { color: #c9d1d9; }
+.pos-pick.pos-top { grid-area: top; }
+.pos-pick.pos-bottom { grid-area: bottom; }
+.pos-pick.pos-left { grid-area: left; }
+.pos-pick.pos-right { grid-area: right; }
+.pos-grid-center {
+  grid-area: center; display: flex; align-items: center; justify-content: center;
+  color: #6e7681; font-size: 12px; border: 1px dashed #30363d; border-radius: 8px;
+}
+.pos-dialog-close {
+  display: block; margin: 16px auto 0;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  padding: 8px 20px; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.pos-dialog-close:hover { background: #30363d; border-color: #58a6ff; }

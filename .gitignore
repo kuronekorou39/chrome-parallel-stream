@@ -6,3 +6,6 @@ scratch/
 # 拡張機能ロード時に Chrome が declarativeNetRequest ルールから自動生成する。
 # ソースではなくビルド成果物なので追跡しない。
 _metadata/
+
+# 配布用にまとめた拡張機能パッケージ(都度生成できるビルド成果物なので追跡しない)。
+chrome-parallel-stream.zip

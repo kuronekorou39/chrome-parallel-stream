@@ -19,14 +19,30 @@
     <button id="add-btn" class="tb-btn">追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="layout-btn" class="tb-btn" title="整形モード: 枠の移動・リサイズ専用(中身に触れない)">整形モード</button>
-    <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定はオフ。押すとオン)">広告スキップ</button>
+    <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定はオフ。押すとオン)。Twitchの広告はvaftで常時ブロックされるためこのボタンの対象外。">広告スキップ</button>
     <span class="tb-sep"></span>
     <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート。以後は各プレイヤーでも個別調整可)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
     <span class="tb-grow"></span>
     <span class="tb-hint">枠をクリックでヘッダ表示 / 🎨=透明・画質 / ⛶=最大化 / 音は各プレイヤーで</span>
+    <button id="layout-pos-btn" class="tb-btn" title="メニューの位置を変える">位置</button>
     <button id="toolbar-toggle" class="tb-btn" title="ツールバーを隠す">▲ 隠す</button>
   </div>
   <button id="toolbar-show" title="ツールバーを表示">≡ メニュー</button>
+
+  <div id="pos-dialog" class="pos-dialog-overlay">
+    <div class="pos-dialog" role="dialog" aria-label="メニューの位置">
+      <div class="pos-dialog-title">メニューの位置</div>
+      <div class="pos-grid">
+        <button class="pos-pick pos-top" data-pos="top" type="button" title="上に配置">⬆<span>上</span></button>
+        <button class="pos-pick pos-left" data-pos="left" type="button" title="左に配置">⬅<span>左</span></button>
+        <div class="pos-grid-center">画面</div>
+        <button class="pos-pick pos-right" data-pos="right" type="button" title="右に配置">➡<span>右</span></button>
+        <button class="pos-pick pos-bottom" data-pos="bottom" type="button" title="下に配置">⬇<span>下</span></button>
+      </div>
+      <button id="pos-dialog-close" class="pos-dialog-close" type="button">閉じる</button>
+    </div>
+  </div>
+
   <div id="stage">
     <div id="stage-empty">配信がありません。上のツールバーの入力欄に URL を貼って「追加」を押すと、1つずつ枠が増えていきます。</div>
   </div>

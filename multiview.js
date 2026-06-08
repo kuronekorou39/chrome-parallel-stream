@@ -7,6 +7,9 @@
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
 const AD_SKIP_KEY = 'adSkipEnabled'; // 広告スキップのオン/オフ。各枠の stream-control.js が storage で追従する。
 const MAX_WINDOWS = 20;
+const IDLE_HIDE_MS = 3000; // この時間ポインタが動かないとカーソル+ツールバーを自動で隠す(復帰は ≡メニュー)
+const TOOLBAR_POS_KEY = 'toolbarPos'; // ツールバーの配置(top/bottom/left/right)を保存する storage キー
+const TOOLBAR_POSITIONS = ['top', 'bottom', 'left', 'right'];
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
@@ -31,6 +34,7 @@ const wins = [];
 
 (async function init() {
   wireToolbar();
+  setupIdleHide();
   window.addEventListener('resize', relayoutOnResize);
   window.addEventListener('message', onFrameUrl);
 
@@ -110,14 +114,11 @@ function createWindow(url, opts = {}) {
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
-  // Kick は <video> 直再生でセッションを使わないため対象外。
-  const secretBtn = isKick ? null : mkBtn('🕶', '', 'シークレット(別/ログアウトのセッション。閉じる/再読込で消える)');
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(openBtn);
   if (chatBtn) controls.append(chatBtn);
-  if (secretBtn) controls.append(secretBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
   // 操作ボタンは右端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
   bar.append(title);
@@ -153,14 +154,8 @@ function createWindow(url, opts = {}) {
       loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
     }
   } else {
-    // iframe は win 確定後に mountSiteFrame() で生成する(シークレット切替で作り直すため)。
-    // シークレット中であることを示すバッジ(.secret のときだけ表示)。
-    const badge = document.createElement('div');
-    badge.className = 'win-secret-badge';
-    badge.textContent = '🕶 一時セッション(閉じる/再読込で消えます)';
-    body.appendChild(badge);
+    // iframe は win 確定後に mountSiteFrame() で生成する。
     // ※ iframe は生成後 DOM 上で move しないこと(再ペアレントすると埋め込みが壊れる)。
-    //   シークレット切替は新しい iframe を作り直す(move ではない)ので問題ない。
   }
 
   const resize = document.createElement('div');
@@ -180,8 +175,8 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatBtn, secretBtn, titleEl: title,
-    secret: false, maximized: false, prevRect: null, opacity: 100,
+    id, url, el, body, frame, video, chatBtn, titleEl: title,
+    maximized: false, prevRect: null, opacity: 100,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
@@ -201,7 +196,6 @@ function createWindow(url, opts = {}) {
   adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
-  if (secretBtn) secretBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleSecret(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
   // サイト枠(非Kick)の iframe を生成。Kick は <video> なので applyVolume だけ。
   if (!isKick) mountSiteFrame(win);
@@ -563,6 +557,14 @@ function loadFrameWithLogin(frameEl, domain, src) {
     .catch(() => { frameEl.src = src; }); // 失敗しても一応読み込む
 }
 
+// 埋め込み内でログインを使いたいサイトの cookie 緩和対象ドメインを返す(対象外は null)。
+// YouTube は埋め込みログインの仕組みが別で、緩和がむしろ逆効果になりうるため対象にしない。
+function loginDomainOf(host) {
+  if (host.includes('twitch.tv')) return 'twitch.tv';
+  if (host.includes('openrec.tv')) return 'openrec.tv';
+  return null;
+}
+
 // Kick 枠のチャット表示/非表示を切り替える。
 function toggleChat(win) {
   if (!win.body) return;
@@ -570,33 +572,22 @@ function toggleChat(win) {
   if (win.chatBtn) win.chatBtn.classList.toggle('active', on);
 }
 
-// サイト枠(Twitch/YouTube/OPENREC)の iframe を(再)生成して body に載せる。
-// win.secret=true なら credentialless = まっさらな別セッション(Cookie等は一時領域に隔離され、
-// 閉じる/再読込で消える)=シークレット相当。セッションを変えるため切替時は作り直す。
+// サイト枠(Twitch/YouTube/OPENREC)の iframe を生成して body に載せる。
 function mountSiteFrame(win) {
-  if (win.frame) win.frame.remove();
   const frame = document.createElement('iframe');
   frame.allow = IFRAME_ALLOW;
-  if (win.secret) frame.credentialless = true;
   win.body.appendChild(frame);
   win.frame = frame;
   frame.addEventListener('load', () => applyVolume(win, masterVolume));
   const src = toEmbedUrl(win.url);
-  // シークレット枠は本セッションのログインを引き継がない。OpenRec の cookie 緩和は通常枠のみ。
-  if (!win.secret && hostOf(win.url).includes('openrec.tv')) {
-    loadFrameWithLogin(frame, 'openrec.tv', src);
+  // ログインCookieを埋め込みへ通す(SameSite緩和)。対象サイトのみ。
+  const loginDomain = loginDomainOf(hostOf(win.url));
+  if (loginDomain) {
+    loadFrameWithLogin(frame, loginDomain, src);
   } else {
     frame.src = src;
   }
   applyVolume(win, masterVolume);
-}
-
-// シークレット(credentialless)セッションの ON/OFF。iframe を作り直すので中身はリセットされる。
-function toggleSecret(win) {
-  win.secret = !win.secret;
-  win.el.classList.toggle('secret', win.secret);
-  if (win.secretBtn) win.secretBtn.classList.toggle('active', win.secret);
-  mountSiteFrame(win);
 }
 
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
@@ -697,6 +688,63 @@ function wireToolbar() {
       if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
     });
   });
+
+  // メニュー位置: ダイアログ配線 + 保存値の復元(初回はアニメさせないため tb-ready を遅延付与)。
+  setupPosDialog();
+  chrome.storage.local.get(TOOLBAR_POS_KEY, (d) => {
+    applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'top', false);
+    requestAnimationFrame(() => document.body.classList.add('tb-ready'));
+  });
+}
+
+// マウスを一定時間動かさなかったら、カーソルを消してツールバーを隠す(視聴に集中できるように)。
+// 復帰は ≡メニュー(#toolbar-show)から。マウスを動かした時はカーソルだけ戻し、ツールバーは出さない
+// (= 明示的にボタンを押した時だけ出す)。タッチ(pointer)でも同様に働く。
+function setupIdleHide() {
+  const toolbar = document.getElementById('toolbar');
+  let idleTimer = null;
+  const goIdle = () => {
+    // ツールバー上にポインタがある(操作中)なら隠さない。離れて静止すれば次の動きで再武装され隠れる。
+    if (toolbar.matches(':hover')) return;
+    document.body.classList.add('idle', 'toolbar-hidden');
+  };
+  const arm = () => {
+    document.body.classList.remove('idle'); // カーソルを戻す(toolbar-hidden は触らない)
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(goIdle, IDLE_HIDE_MS);
+  };
+  ['pointermove', 'pointerdown'].forEach((ev) => document.addEventListener(ev, arm, { passive: true }));
+  arm();
+}
+
+// ツールバーの配置(上/下/左/右)を適用。body のクラスで CSS が位置とレイアウト(横/縦バー)を切替える。
+// save=false は起動時の復元用(storage へ書き戻さない)。
+function applyToolbarPos(pos, save = true) {
+  if (!TOOLBAR_POSITIONS.includes(pos)) pos = 'top';
+  const vertical = pos === 'left' || pos === 'right';
+  TOOLBAR_POSITIONS.forEach((p) => document.body.classList.toggle('tb-pos-' + p, p === pos));
+  document.body.classList.toggle('tb-vertical', vertical);
+  document.querySelectorAll('.pos-pick').forEach((b) => b.classList.toggle('active', b.dataset.pos === pos));
+  if (save) {
+    try { chrome.storage.local.set({ [TOOLBAR_POS_KEY]: pos }); } catch (e) { /* noop */ }
+  }
+}
+
+// 「位置」ダイアログ(中央モーダル)の開閉と、十字ボタンの配線。
+function setupPosDialog() {
+  const dialog = document.getElementById('pos-dialog');
+  const close = () => dialog.classList.remove('open');
+  document.getElementById('layout-pos-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    dialog.classList.add('open');
+  });
+  document.getElementById('pos-dialog-close').addEventListener('click', close);
+  // パネルの外(オーバーレイ)をクリックしたら閉じる。
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) close(); });
+  // 押しても閉じない(実際の配置を見て確かめ、見比べられるように)。閉じるのは「閉じる」か外クリック。
+  dialog.querySelectorAll('.pos-pick').forEach((b) =>
+    b.addEventListener('click', () => applyToolbarPos(b.dataset.pos))
+  );
 }
 
 // 整形モード: ON の間は各枠の中身をオーバーレイで覆い、枠ごとの移動・全辺リサイズに
