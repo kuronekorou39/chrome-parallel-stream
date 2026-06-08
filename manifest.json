@@ -41,6 +41,13 @@
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://*.twitch.tv/*"],
+      "js": ["vendor/vaft-twitch.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ],
   "declarative_net_request": {
