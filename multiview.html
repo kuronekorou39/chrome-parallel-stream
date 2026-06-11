@@ -10,6 +10,7 @@
     <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/20</span>
     <button id="add-open-btn" class="tb-btn tb-btn-primary" title="枠を追加">＋ 追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
+    <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)">🎚 一覧</button>
     <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定オフ)。Twitchは vaft で常時ブロック。">広告スキップ</button>
     <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
     <button id="perf-btn" class="tb-btn" title="パフォーマンス(FPS・CPU・メモリ)を表示">📊</button>
@@ -60,8 +61,22 @@
 
   <div id="stage">
     <div id="stage-empty">配信がありません。メニューの「＋ 追加」から、サイトを選ぶか URL を貼って枠を追加できます。</div>
+
+    <div id="mixer-panel" class="mixer-panel" hidden>
+      <div class="mixer-head">
+        <span class="mixer-title">🎚 枠一覧 / ミキサー</span>
+        <button id="mixer-close" class="mixer-x" type="button" title="閉じる">✕</button>
+      </div>
+      <div class="mixer-master">
+        <span class="mixer-master-label">マスタ</span>
+        <span id="mixer-master-icon">🔇</span>
+        <input type="range" id="mixer-master" min="0" max="100" value="0" />
+      </div>
+      <div class="mixer-list"></div>
+      <div class="mixer-resize"></div>
+    </div>
   </div>
-  <script src="vendor/hls.min.js"></script>
+  <script src="hls.min.js"></script>
   <script src="multiview.js"></script>
 </body>
 </html>

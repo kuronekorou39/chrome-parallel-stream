@@ -84,6 +84,7 @@ const wins = [];
           setRect(win, it.x, it.y, it.w, it.h);
           if (it.max) toggleMax(win);
         }
+        if (it.hidden) hideWindow(win); // 隠した状態も復元(位置・サイズは保持)
       }
     });
   } else {
@@ -105,6 +106,7 @@ function onFrameUrl(e) {
   win.url = d.href;
   if (win.titleEl) win.titleEl.textContent = labelFor(d.href);
   saveLineup();
+  renderMixer(); // 一覧のラベルも更新
 }
 
 // content script(stream-control.js)から広告検知の状態を受け取り、その枠に
@@ -125,7 +127,7 @@ function saveLineup() {
     return {
       url: w.url,
       x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
-      max: !!w.maximized, vol: w.vol != null ? w.vol : 1
+      max: !!w.maximized, vol: w.vol != null ? w.vol : 1, hidden: !!w.hidden
     };
   });
   try {
@@ -241,7 +243,7 @@ function createWindow(url, opts = {}) {
 
   const win = {
     id, url, el, body, frame, video, chatBtn, bar, barX: 0, titleEl: title, volSlider,
-    maximized: false, prevRect: null, opacity: 100, vol: 1,
+    maximized: false, hidden: false, prevRect: null, opacity: 100, vol: 1,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
@@ -257,9 +259,8 @@ function createWindow(url, opts = {}) {
   // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
   volSlider.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
   volSlider.addEventListener('input', () => {
-    win.vol = Number(volSlider.value) / 100;
+    setWinVol(win, Number(volSlider.value) / 100); // 台形/ミキサー両方のスライダーを同期
     volIcon.textContent = win.vol <= 0 ? '🔇' : '🔊';
-    applyVolume(win, masterVolume);
     revealHeader(win); // 操作中はヘッダを消さない(特にタッチ)
   });
   volSlider.addEventListener('change', () => saveLineup());
@@ -278,6 +279,7 @@ function createWindow(url, opts = {}) {
   if (!opts.silent) {
     updateCount();
     saveLineup();
+    renderMixer();
   }
   return win;
 }
@@ -376,7 +378,15 @@ function setRect(win, x, y, w, h) {
   win.el.style.top = y + 'px';
   win.el.style.width = w + 'px';
   win.el.style.height = h + 'px';
+  updateWinWidthClass(win, w);
   clampBarX(win);
+}
+
+// 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
+// w を直接見るのでレイアウト読み取り(reflow)を起こさない。閾値は旧 @container と同じ。
+function updateWinWidthClass(win, w) {
+  win.el.classList.toggle('cq-hide-title', w < 600);
+  win.el.classList.toggle('cq-hide-vol', w < 500);
 }
 
 // 台形ハンドルのスライド量を現在の枠幅で再クランプ(リサイズ/最大化で枠からはみ出さないように)。
@@ -719,6 +729,7 @@ function closeWindow(win) {
   }
   updateCount();
   saveLineup();
+  renderMixer();
 }
 
 function updateCount() {
@@ -742,12 +753,14 @@ function clampVol(v) {
   return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
 }
 
-// マスタ音量つまみ/アイコンを masterVolume に同期させる(復元時に呼ぶ)。
+// マスタ音量つまみ/アイコンを masterVolume に同期させる(ツールバー + ミキサーの両方)。
 function syncMasterUI() {
-  const slider = document.getElementById('master-vol');
-  if (slider) slider.value = Math.round(masterVolume * 100);
-  const icon = document.getElementById('master-vol-icon');
-  if (icon) icon.textContent = masterVolume <= 0 ? '🔇' : '🔊';
+  const v = Math.round(masterVolume * 100);
+  const icon = masterVolume <= 0 ? '🔇' : '🔊';
+  const s1 = document.getElementById('master-vol'); if (s1) s1.value = v;
+  const i1 = document.getElementById('master-vol-icon'); if (i1) i1.textContent = icon;
+  const s2 = document.getElementById('mixer-master'); if (s2) s2.value = v;
+  const i2 = document.getElementById('mixer-master-icon'); if (i2) i2.textContent = icon;
 }
 
 // 音量のみ設定する(ミュートは触らない=各プレイヤー自前のミュートで「1つだけ聞く」が可能)。
@@ -756,7 +769,7 @@ function syncMasterUI() {
 // マスタを動かすと全枠が同倍率で増減 → 枠ごとの大小関係(win.vol の比)は保たれる。
 // 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
 function applyVolume(win, v) {
-  const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
+  const eff = win.hidden ? 0 : Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
   if (win.video) {
     try { win.video.volume = eff; } catch (e) { /* noop */ }
   } else if (win.frame) {
@@ -766,14 +779,159 @@ function applyVolume(win, v) {
   }
 }
 
+// ====== 枠一覧 / ミキサーパネル ======
+
+// 枠ごとの音量を設定し、台形ハンドルとミキサー両方のスライダー表示を同期させる。
+function setWinVol(win, v01) {
+  win.vol = Math.max(0, Math.min(1, v01));
+  applyVolume(win, masterVolume);
+  syncVolUI(win);
+}
+function syncVolUI(win) {
+  const v = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+  if (win.volSlider) win.volSlider.value = v;
+  const row = document.querySelector('#mixer-panel .mixer-row[data-id="' + win.id + '"] .mixer-row-vol');
+  if (row) row.value = v;
+}
+
+// 枠を「隠す/表示する」。隠しても位置・サイズ・URLは保持。実音量を0にして音も消す(=一旦閉じる)。
+function hideWindow(win) {
+  win.hidden = true;
+  win.el.style.display = 'none';
+  applyVolume(win, masterVolume); // hidden → 実音量0
+  renderMixer();
+  saveLineup();
+}
+function showWindow(win) {
+  win.hidden = false;
+  win.el.style.display = '';
+  applyVolume(win, masterVolume);
+  focusWindow(win); // 出したら最前面へ
+  renderMixer();
+  saveLineup();
+}
+function toggleHidden(win) { win.hidden ? showWindow(win) : hideWindow(win); }
+
+// 枠一覧(ミキサー)を再描画。パネルが閉じている間は何もしない。
+function renderMixer() {
+  const panel = document.getElementById('mixer-panel');
+  if (!panel || panel.hidden) return;
+  const list = panel.querySelector('.mixer-list');
+  list.innerHTML = '';
+  if (!wins.length) {
+    const empty = document.createElement('div');
+    empty.className = 'mixer-empty';
+    empty.textContent = '枠がありません';
+    list.appendChild(empty);
+    return;
+  }
+  wins.forEach((win) => {
+    const row = document.createElement('div');
+    row.className = 'mixer-row' + (win.hidden ? ' is-hidden' : '');
+    row.dataset.id = win.id;
+
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'mixer-row-label';
+    label.textContent = labelFor(win.url);
+    label.title = 'クリックで最前面に表示';
+    label.addEventListener('click', () => { if (win.hidden) showWindow(win); else focusWindow(win); });
+
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'mixer-row-eye';
+    eye.textContent = win.hidden ? '🙈' : '👁';
+    eye.title = win.hidden ? '表示する' : '隠す(位置・サイズは保持・音も消す)';
+    eye.addEventListener('click', () => toggleHidden(win));
+
+    const vol = document.createElement('input');
+    vol.type = 'range'; vol.min = '0'; vol.max = '100';
+    vol.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+    vol.className = 'mixer-row-vol';
+    vol.title = 'この枠の音量';
+    vol.addEventListener('input', () => setWinVol(win, Number(vol.value) / 100));
+    vol.addEventListener('change', () => saveLineup());
+
+    row.append(label, eye, vol);
+    list.appendChild(row);
+  });
+}
+
+// ミキサーパネルの配線(トグル/閉じる/マスタ/ドラッグ/リサイズ)。
+function setupMixer() {
+  const panel = document.getElementById('mixer-panel');
+  makePanelDraggable(panel, panel.querySelector('.mixer-head'));
+  const rz = panel.querySelector('.mixer-resize');
+  if (rz) makePanelResizable(panel, rz);
+  document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
+  document.getElementById('mixer-btn').addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) { syncMasterUI(); renderMixer(); }
+  });
+  const mm = document.getElementById('mixer-master');
+  mm.addEventListener('input', () => { setMasterVolume(Number(mm.value) / 100); syncMasterUI(); });
+  mm.addEventListener('change', () => saveLineup());
+}
+
+// 汎用: ハンドルをつかんで要素を移動(ステージ内にクランプ)。ミキサーパネル用。
+function makePanelDraggable(el, handle) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    if (e.target.closest('button, input')) return; // ボタン/つまみ上は移動しない
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY;
+    const sl = el.offsetLeft, st = el.offsetTop;
+    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    const onMove = (ev) => {
+      const maxL = Math.max(0, stage.clientWidth - 60);
+      const maxT = Math.max(0, stage.clientHeight - 40);
+      el.style.left = Math.max(0, Math.min(maxL, sl + ev.clientX - sx)) + 'px';
+      el.style.top = Math.max(0, Math.min(maxT, st + ev.clientY - sy)) + 'px';
+    };
+    const end = () => {
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+}
+
+// 汎用: 右下ハンドルで要素をリサイズ。ミキサーパネル用。
+function makePanelResizable(el, handle) {
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const sx = e.clientX, sy = e.clientY;
+    const sw = el.offsetWidth, sh = el.offsetHeight;
+    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    const onMove = (ev) => {
+      el.style.width = Math.max(240, sw + ev.clientX - sx) + 'px';
+      el.style.height = Math.max(160, sh + ev.clientY - sy) + 'px';
+    };
+    const end = () => {
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+}
+
 // ====== ツールバー ======
 
 function wireToolbar() {
   const masterSlider = document.getElementById('master-vol');
   masterSlider.addEventListener('input', (e) => {
     setMasterVolume(Number(e.target.value) / 100);
-    const icon = document.getElementById('master-vol-icon');
-    if (icon) icon.textContent = masterVolume <= 0 ? '🔇' : '🔊';
+    syncMasterUI(); // ツールバー+ミキサーのアイコン/つまみを同期
   });
   // つまみを離した時に保存(input 連発で storage を叩かないよう change で一度だけ)。
   masterSlider.addEventListener('change', () => saveLineup());
@@ -823,6 +981,7 @@ function wireToolbar() {
   // メニュー位置: ダイアログ配線 + 保存値の復元(初回はアニメさせないため tb-ready を遅延付与)。
   setupPosDialog();
   setupPerfPanel();
+  setupMixer();
   chrome.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));

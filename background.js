@@ -5,9 +5,9 @@
 
 try {
   importScripts(
-    'probes/api-surface.js',
-    'probes/windows-probe.js',
-    'probes/webview-probe.js'
+    'api-surface.js',
+    'windows-probe.js',
+    'webview-probe.js'
   );
 } catch (e) {
   console.error('[background] importScripts failed:', e);
@@ -70,7 +70,7 @@ async function runFullscreenProbeInActiveTab() {
   }
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ['probes/fullscreen-probe.js']
+    files: ['fullscreen-probe.js']
   });
   return {
     targetTab: { id: tab.id, url, title: tab.title },
@@ -199,11 +199,7 @@ async function fetchKickPlayback(channel) {
 
 // ====== ライフサイクル ======
 
-chrome.runtime.onInstalled.addListener(() => {
-  runAllProbes().catch((e) => console.error('[background] initial probe failed:', e));
-});
-
-chrome.runtime.onStartup &&
-  chrome.runtime.onStartup.addListener(() => {
-    console.log('[background] runtime onStartup fired');
-  });
+// Phase 1 のケイパビリティ調査(runAllProbes)は windows-probe が chrome.windows.create / remove で
+// テスト用ウィンドウを複数開閉する。これを拡張ロード時(onInstalled)に自動実行していたため、読み込みの
+// たびに「謎の空ウィンドウが複数開いて閉じる」挙動になっていた。マルチビュー本体には不要なので自動実行は
+// やめる。調査が必要なときは popup の Probe タブ(rerun-probes メッセージ)から手動で実行する。

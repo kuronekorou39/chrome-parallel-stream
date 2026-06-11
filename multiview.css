@@ -2,7 +2,7 @@
 
 * { box-sizing: border-box; }
 html, body {
-  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  margin: 0; padding: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
   background: #000;
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
   color: #c9d1d9;
@@ -116,6 +116,53 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .add-url-row { display: flex; gap: 8px; margin-bottom: 14px; }
 .add-url-row .tb-input { flex: 1 1 auto; width: auto; font-size: 15px; padding: 10px 12px; }
 
+/* ===== 枠一覧 / ミキサーパネル(移動・リサイズ自由の浮動パネル) ===== */
+.mixer-panel {
+  position: absolute; top: 64px; left: 64px; width: 340px; height: 400px;
+  display: flex; flex-direction: column; z-index: 90000;
+  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.7); overflow: hidden; color: #c9d1d9;
+}
+.mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
+.mixer-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  background: #161b22; border-bottom: 1px solid #21262d; cursor: move; user-select: none; touch-action: none;
+}
+.mixer-title { flex: 1 1 auto; font-size: 14px; font-weight: bold; color: #f0f6fc; }
+.mixer-x {
+  flex: 0 0 auto; background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  width: 30px; height: 30px; font-size: 16px; cursor: pointer;
+}
+.mixer-x:hover { background: #3c0d11; color: #f85149; }
+.mixer-master {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #21262d;
+}
+.mixer-master-label { font-size: 13px; color: #8b949e; }
+.mixer-master input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
+.mixer-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
+.mixer-empty { color: #6e7681; font-size: 13px; text-align: center; padding: 20px; }
+.mixer-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; }
+.mixer-row:hover { background: rgba(255,255,255,0.05); }
+.mixer-row.is-hidden { opacity: 0.55; }
+.mixer-row-label {
+  flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: #c9d1d9;
+  border: none; cursor: pointer; font-family: inherit; font-size: 13px; padding: 5px 6px; border-radius: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mixer-row-label:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.mixer-row-eye {
+  flex: 0 0 auto; background: transparent; border: none; cursor: pointer;
+  width: 34px; height: 34px; font-size: 17px; border-radius: 6px;
+}
+.mixer-row-eye:hover { background: rgba(255,255,255,0.12); }
+.mixer-row-vol { flex: 0 0 96px; width: 96px; accent-color: #58a6ff; cursor: pointer; }
+.mixer-resize {
+  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 50%, #58a6ff 50%, #58a6ff 60%, transparent 60%, transparent 70%, #58a6ff 70%, #58a6ff 80%, transparent 80%);
+  opacity: 0.6;
+}
+.mixer-resize:hover { opacity: 1; }
+
 /* ===== ステージ ===== */
 #stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
 #stage-empty {
@@ -129,7 +176,6 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6);
   min-width: 420px; min-height: 220px; /* JS の MIN_W / MIN_H と一致させること */
-  container-type: inline-size; /* 台形の中身を枠幅で出し分けるため(@container で参照) */
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 /* 選択の青枠は「ヘッダ一時表示中(クリック直後・数秒で消える)」の枠だけ。
@@ -178,9 +224,11 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   flex: 1 1 auto; min-width: 0; width: auto; height: 26px; margin: 0;
   accent-color: #58a6ff; cursor: pointer;
 }
-/* 枠が狭いと台形の中身が見切れるので、優先度の低い順に隠す(タイトル → 音量。ボタンは常に残す)。 */
-@container (max-width: 600px) { .win-title { display: none; } }
-@container (max-width: 500px) { .win-vol { display: none; } }
+/* 枠が狭いと台形の中身が見切れるので、優先度の低い順に隠す(タイトル → 音量。ボタンは常に残す)。
+   幅判定は JS(updateWinWidthClass)が .win に cq-hide-* クラスを付ける。container-query は
+   コンポジタのスクロールツリーに触れ、DCHECK 有効ビルドで input_handler のアサートを踏みうるため不使用。 */
+.win.cq-hide-title .win-title { display: none; }
+.win.cq-hide-vol .win-vol { display: none; }
 /* 操作ボタンは台形ハンドルの中に横並べ(大きめ)。表示/非表示は親 .win-bar に従う。
    スライド/移動はボタン上では発火しない(makeBarHandle が .win-controls を除外)。 */
 .win-controls {

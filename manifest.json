@@ -46,7 +46,7 @@
     },
     {
       "matches": ["*://*.twitch.tv/*"],
-      "js": ["vendor/vaft-twitch.js"],
+      "js": ["vaft-twitch.js"],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
