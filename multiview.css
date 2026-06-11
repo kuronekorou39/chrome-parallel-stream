@@ -17,11 +17,11 @@ body.idle, body.idle * { cursor: none !important; }
    変わらず、中の窓が動かない。背後が透けて見えるよう半透明にする(ボタン類は各自不透明)。 */
 #toolbar {
   position: absolute; top: 0; left: 0; right: 0;
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 9px 14px;
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px;
   background: rgba(13,17,23,0.5);
   border-bottom: 1px solid #21262d;
-  font-size: 14px;
+  font-size: 15px;
   z-index: 100000;
 }
 
@@ -66,7 +66,7 @@ body.toolbar-hidden #toolbar-show { opacity: 1; pointer-events: auto; }
 #toolbar-show:hover { background: #30363d; border-color: #58a6ff; }
 body.tb-pos-top #toolbar-show,
 body.tb-pos-right #toolbar-show { top: 8px; right: 10px; bottom: auto; left: auto; }
-body.tb-pos-bottom #toolbar-show { bottom: 8px; right: 10px; top: auto; left: auto; }
+body.tb-pos-bottom #toolbar-show { bottom: 8px; left: 10px; top: auto; right: auto; }
 body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: auto; }
 
 /* 主要サイトのワンクリック追加チップ */
@@ -80,24 +80,27 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .site-chip[data-site="youtube"] { border-left-color: #ff0033; }
 .site-chip[data-site="kick"] { border-left-color: #53fc18; }
 .site-chip[data-site="openrec"] { border-left-color: #ffd200; }
-.tb-item { display: inline-flex; align-items: center; gap: 7px; color: #8b949e; }
+.tb-item { display: inline-flex; align-items: center; gap: 8px; color: #8b949e; font-size: 15px; }
 #count {
-  font-weight: bold; color: #f0f6fc;
-  background: #21262d; border-radius: 11px; padding: 3px 11px; min-width: 26px; text-align: center;
+  font-weight: bold; color: #f0f6fc; font-size: 16px;
+  background: #21262d; border-radius: 12px; padding: 4px 13px; min-width: 30px; text-align: center;
 }
 .tb-sep { width: 1px; height: 24px; background: #30363d; }
 .tb-grow { flex: 1 1 auto; }
 .tb-hint { color: #6e7681; font-size: 12px; white-space: nowrap; }
 
-#master-vol { width: 130px; accent-color: #58a6ff; cursor: pointer; }
+#master-vol { width: 160px; height: 22px; accent-color: #58a6ff; cursor: pointer; }
 
 .tb-btn {
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-  border-radius: 5px; padding: 7px 13px; font-family: inherit; font-size: 13px; cursor: pointer;
+  border-radius: 7px; padding: 10px 18px; font-family: inherit; font-size: 15px; cursor: pointer;
 }
 .tb-btn:hover { background: #30363d; border-color: #58a6ff; }
+/* 「＋追加」を目立たせる主要アクション。 */
+.tb-btn-primary { background: #1f6feb; border-color: #388bfd; color: #fff; font-weight: bold; }
+.tb-btn-primary:hover { background: #388bfd; border-color: #58a6ff; }
 .tb-btn.on { background: #3c0d11; border-color: #f85149; color: #f85149; }
-/* 広告スキップ ON は「有効」を表す緑(整形モードの赤い .on と区別する) */
+/* 広告スキップ ON は「有効」を表す緑(汎用トグルの赤い .on と区別する) */
 .tb-btn.adskip-on { background: #0d2818; border-color: #3fb950; color: #3fb950; }
 
 .tb-input {
@@ -105,6 +108,13 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   padding: 7px 11px; font-family: inherit; font-size: 13px; width: 240px;
 }
 .tb-input:focus { outline: none; border-color: #58a6ff; }
+
+/* 追加ダイアログ(枠を追加): サイトボタン + URL入力。pos-dialog の見た目を流用。 */
+#add-dialog .pos-dialog { width: 380px; max-width: calc(100% - 32px); }
+.add-sites { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 14px; }
+.add-sites .site-chip { font-size: 15px; padding: 11px 18px; border-left-width: 5px; }
+.add-url-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.add-url-row .tb-input { flex: 1 1 auto; width: auto; font-size: 15px; padding: 10px 12px; }
 
 /* ===== ステージ ===== */
 #stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
@@ -118,67 +128,84 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   position: absolute; display: flex; flex-direction: column;
   background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-  min-width: 220px; min-height: 150px;
+  min-width: 420px; min-height: 220px; /* JS の MIN_W / MIN_H と一致させること */
+  container-type: inline-size; /* 台形の中身を枠幅で出し分けるため(@container で参照) */
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
-/* 選択の青枠は「ヘッダ一時表示中(クリック直後・数秒で消える)」と整形モードの選択枠だけ。
-   視聴モードでは自動で消えるので、枠の外をクリックして解除する手間が要らない。 */
-.win.show-bar,
-.layout-mode .win.active { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
+/* 選択の青枠は「ヘッダ一時表示中(クリック直後・数秒で消える)」の枠だけ。
+   視聴中は自動で消えるので、枠の外をクリックして解除する手間が要らない。 */
+.win.show-bar { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
 
-/* ヘッダは既定で非表示。マウスホバー(視聴モード)または選択中の枠でだけ表示する。
-   レイアウトを食わないよう絶対配置のオーバーレイにし、表示時は操作しやすいよう大きめに。 */
+/* ヘッダは「上部中央の台形ハンドル」。既定は非表示で、出てる間は大きく目立たせる(すぐ消えるので)。
+   つかむと左右スライド(枠の上辺沿い)、両端から先・縦方向では枠ごと移動する(RDPの接続バー風)。
+   --bar-x がスライド量(中央=0、JS が枠ごとにセット)。 */
 .win-bar {
-  position: absolute; top: 0; left: 0; right: 0; z-index: 6;
-  display: flex; align-items: center; gap: 8px;
-  height: 38px; padding: 0 48px 0 8px; /* 右は操作列(.win-controls)と重ならないよう空ける */
-  background: linear-gradient(180deg, rgba(13,17,23,0.96), rgba(13,17,23,0.5));
-  cursor: move; user-select: none; touch-action: none;
-  opacity: 0; transform: translateY(-8px); pointer-events: none;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  position: absolute; top: 0; left: 50%; z-index: 6;
+  display: flex; align-items: stretch; justify-content: space-between; gap: 4px;
+  height: 62px; padding: 0 30px; max-width: calc(100% - 16px);
+  background: linear-gradient(180deg, rgba(28,33,40,0.98), rgba(13,17,23,0.86));
+  /* 上辺が枠上端に密着し、下へすぼまる台形(上が長い)。padding(30px)で両端グリップを斜辺の内側に置く。 */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 26px 100%);
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+  user-select: none; touch-action: none;
+  opacity: 0; transform: translate(calc(-50% + var(--bar-x, 0px)), -100%); pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
-/* ホバー(マウス)または一時表示(クリック/タップ後・数秒で消える)でだけ出す。 */
+/* ドラッグ中は transform をアニメさせず、指/カーソルに即追従させる。 */
+.win-bar.sliding { transition: opacity 0.2s ease; }
+/* 両端グリップ=ヘッダを左右スライド(↔)。中央(barMain)=つかむと枠移動(✛)。つまむ位置で挙動が変わる。 */
+.win-grip {
+  flex: 0 0 auto; width: 26px; display: flex; align-items: center; justify-content: center;
+  cursor: ew-resize; color: rgba(201,209,217,0.5); font-size: 24px; line-height: 1; user-select: none;
+}
+.win-grip:hover { color: #f0f6fc; background: rgba(255,255,255,0.08); }
+.win-bar-main {
+  flex: 1 1 auto; min-width: 0; height: 100%; cursor: move;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+/* ホバー(マウス)または一時表示(クリック/タップ後・数秒で消える)でだけ、上端から降りる。 */
 .win:hover .win-bar,
-.win.show-bar .win-bar { opacity: 1; transform: none; pointer-events: auto; }
-.layout-mode .win-bar { display: none; } /* 整形モードでは枠全体が操作対象なのでヘッダは出さない */
+.win.show-bar .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
 
 .win-title {
-  flex: 1 1 auto; font-size: 12px; color: #c9d1d9;
+  flex: 0 1 auto; font-size: 14px; color: #c9d1d9; max-width: 180px; padding-left: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-/* 操作ボタンは右端中央に縦並べ(左=ライブ一覧/上=ヘッダ/下=シークバーを避ける)。
-   ホバー/一時表示/調整パネル展開のときだけ出す。整形モードでは出さない。 */
-.win-controls {
-  position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 6;
-  display: flex; flex-direction: column; gap: 5px;
-  background: rgba(13,17,23,0.8); border-radius: 9px; padding: 5px;
-  opacity: 0; pointer-events: none;
-  transition: opacity 0.25s ease;
+/* 枠ごとの音量バー(台形ハンドル内)。余白を埋めるように伸び、狭い枠ではコンテナクエリで隠す。 */
+.win-vol { flex: 1 1 auto; min-width: 60px; display: flex; align-items: center; gap: 6px; touch-action: auto; }
+.win-vol-icon { flex: 0 0 auto; font-size: 15px; line-height: 1; }
+.win-vol input[type="range"] {
+  flex: 1 1 auto; min-width: 0; width: auto; height: 26px; margin: 0;
+  accent-color: #58a6ff; cursor: pointer;
 }
-.win:hover .win-controls,
-.win.show-bar .win-controls,
-.win.adjust-open .win-controls { opacity: 1; pointer-events: auto; }
-.layout-mode .win-controls { display: none; }
+/* 枠が狭いと台形の中身が見切れるので、優先度の低い順に隠す(タイトル → 音量。ボタンは常に残す)。 */
+@container (max-width: 600px) { .win-title { display: none; } }
+@container (max-width: 500px) { .win-vol { display: none; } }
+/* 操作ボタンは台形ハンドルの中に横並べ(大きめ)。表示/非表示は親 .win-bar に従う。
+   スライド/移動はボタン上では発火しない(makeBarHandle が .win-controls を除外)。 */
+.win-controls {
+  display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;
+}
 .win-controls button {
-  background: rgba(48,54,61,0.6); color: #c9d1d9; border: none; border-radius: 6px;
-  width: 36px; height: 32px; font-size: 16px; cursor: pointer; line-height: 1;
+  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  width: 44px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.win-controls button:hover { background: #30363d; color: #f0f6fc; }
+.win-controls button:hover { background: rgba(255,255,255,0.12); color: #f0f6fc; }
 .win-controls button.active { color: #3fb950; }
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
-/* 🎨 で開く「この枠だけ」の調整パネル。右の操作列のすぐ左に出す。操作しやすいよう大きめ。 */
+/* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。 */
 .win-adjust {
-  position: absolute; right: 56px; top: 50%; transform: translateY(-50%); z-index: 7;
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%); z-index: 7;
   display: none; flex-direction: column; gap: 12px;
   background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 10px;
-  padding: 16px; width: 340px; max-width: calc(100% - 64px);
+  padding: 16px; width: 340px; max-width: calc(100% - 24px);
   box-shadow: 0 8px 22px rgba(0,0,0,0.6);
 }
 .win.adjust-open .win-adjust { display: flex; }
 /* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
-.win.adjust-open .win-bar { opacity: 1; transform: none; pointer-events: auto; }
+.win.adjust-open .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
 .adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c9d1d9; cursor: pointer; }
 .adj-row > span { flex: 0 0 116px; white-space: nowrap; }
 /* min-width:0 と width:auto で flex の既定 min-width:auto による『はみ出し』を防ぐ。 */
@@ -211,39 +238,31 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   background: #161b22;
 }
 
-/* ===== 整形モード(枠の配置調整専用) ===== */
-/* 中身を覆って枠ごとドラッグ移動するオーバーレイ。通常時は非表示。 */
-.win-overlay { position: absolute; inset: 0; z-index: 4; cursor: move; display: none; touch-action: none; }
-.layout-mode .win-overlay { display: block; }
-.layout-mode .win { outline: 2px dashed #58a6ff; outline-offset: -1px; }
-
-/* 全辺/角のリサイズハンドル。通常時は非表示、整形モードで有効。 */
-.win-edge { position: absolute; z-index: 5; display: none; touch-action: none; }
-.layout-mode .win-edge { display: block; }
-/* タッチでも掴めるよう大きめ。枠の overflow:hidden で切れないよう内側に置く。 */
-.win-edge-n { top: 0; left: 16px; right: 16px; height: 12px; cursor: ns-resize; }
-.win-edge-s { bottom: 0; left: 16px; right: 16px; height: 12px; cursor: ns-resize; }
-.win-edge-e { right: 0; top: 16px; bottom: 16px; width: 12px; cursor: ew-resize; }
-.win-edge-w { left: 0; top: 16px; bottom: 16px; width: 12px; cursor: ew-resize; }
-.win-edge-ne { top: 0; right: 0; width: 18px; height: 18px; cursor: nesw-resize; }
-.win-edge-nw { top: 0; left: 0; width: 18px; height: 18px; cursor: nwse-resize; }
-.win-edge-se { bottom: 0; right: 0; width: 18px; height: 18px; cursor: nwse-resize; }
-.win-edge-sw { bottom: 0; left: 0; width: 18px; height: 18px; cursor: nesw-resize; }
-/* 整形モードで角のつまみを見えるようにする(タッチで掴みやすく) */
-.layout-mode .win-edge-ne, .layout-mode .win-edge-nw,
-.layout-mode .win-edge-se, .layout-mode .win-edge-sw {
-  background: rgba(88,166,255,0.7); border-radius: 3px;
+/* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
+/* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
+   枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
+.win-edge { position: absolute; z-index: 5; touch-action: none; pointer-events: none; }
+.win:hover .win-edge, .win.show-bar .win-edge { pointer-events: auto; }
+/* 辺はタッチ用に少し太め。四隅は大きく(40px)取り、辺は角の内側から始めて重なりを避ける。 */
+.win-edge-n { top: 0; left: 44px; right: 44px; height: 14px; cursor: ns-resize; }
+.win-edge-s { bottom: 0; left: 44px; right: 44px; height: 14px; cursor: ns-resize; }
+.win-edge-e { right: 0; top: 44px; bottom: 44px; width: 14px; cursor: ew-resize; }
+.win-edge-w { left: 0; top: 44px; bottom: 44px; width: 14px; cursor: ew-resize; }
+.win-edge-ne { top: 0; right: 0; width: 40px; height: 40px; cursor: nesw-resize; }
+.win-edge-nw { top: 0; left: 0; width: 40px; height: 40px; cursor: nwse-resize; }
+.win-edge-se { bottom: 0; right: 0; width: 40px; height: 40px; cursor: nwse-resize; }
+.win-edge-sw { bottom: 0; left: 0; width: 40px; height: 40px; cursor: nwse-resize; }
+/* オンマウス/一時表示のときだけ、四隅に大きめの L字ブラケットを出す(スマホのタッチでも掴める)。
+   当たり判定は 40px の角全体、見た目は ::after の短いブラケット(太さ5px・腕22px)。 */
+.win-edge-nw::after, .win-edge-ne::after, .win-edge-se::after, .win-edge-sw::after {
+  content: ''; position: absolute; width: 22px; height: 22px; opacity: 0;
+  transition: opacity 0.15s ease; border: 0 solid rgba(88,166,255,0.95);
 }
-
-.win-resize {
-  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
-  cursor: nwse-resize; z-index: 3; touch-action: none;
-  background:
-    linear-gradient(135deg, transparent 50%, #58a6ff 50%, #58a6ff 60%, transparent 60%,
-    transparent 70%, #58a6ff 70%, #58a6ff 80%, transparent 80%);
-  opacity: 0.6;
-}
-.win-resize:hover { opacity: 1; }
+.win:hover .win-edge::after, .win.show-bar .win-edge::after { opacity: 1; }
+.win-edge-nw::after { top: 4px; left: 4px; border-top-width: 5px; border-left-width: 5px; border-top-left-radius: 8px; }
+.win-edge-ne::after { top: 4px; right: 4px; border-top-width: 5px; border-right-width: 5px; border-top-right-radius: 8px; }
+.win-edge-se::after { bottom: 4px; right: 4px; border-bottom-width: 5px; border-right-width: 5px; border-bottom-right-radius: 8px; }
+.win-edge-sw::after { bottom: 4px; left: 4px; border-bottom-width: 5px; border-left-width: 5px; border-bottom-left-radius: 8px; }
 
 /* ===== メニュー位置ダイアログ(中央モーダル) ===== */
 .pos-dialog-overlay {
@@ -293,3 +312,35 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   padding: 8px 20px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
 .pos-dialog-close:hover { background: #30363d; border-color: #58a6ff; }
+
+/* ===== 広告スキップ中インジケータ ===== */
+/* YouTube枠の content script が広告検知を通知している間だけ、枠の左上に出す(JS が .ad-skipping を付与)。 */
+.win.ad-skipping::after {
+  content: '⏭ 広告スキップ中';
+  position: absolute; top: 10px; left: 10px; z-index: 7; pointer-events: none;
+  background: rgba(63,185,80,0.95); color: #04140a;
+  font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.55);
+  animation: adskip-pulse 1.1s ease-in-out infinite;
+}
+@keyframes adskip-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* ===== パフォーマンスパネル(📊) ===== */
+/* perf ボタンの ON は青(整形モードの赤 .on・広告スキップの緑 .adskip-on と区別)。 */
+.tb-btn.on-blue { background: #0d2440; border-color: #58a6ff; color: #58a6ff; }
+#perf-panel {
+  position: fixed; left: 10px; bottom: 10px; z-index: 100002;
+  width: 232px; background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+#perf-panel[hidden] { display: none; }
+.perf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.perf-title { color: #c9d1d9; font-size: 12px; }
+#perf-close { background: transparent; color: #8b949e; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+#perf-close:hover { color: #f85149; }
+.perf-row { display: flex; align-items: center; gap: 8px; height: 28px; }
+.perf-label { flex: 0 0 28px; color: #8b949e; font-size: 12px; }
+.perf-val { flex: 0 0 56px; color: #f0f6fc; font-size: 12px; font-variant-numeric: tabular-nums; }
+.perf-val.warn { color: #f85149; font-weight: bold; }
+.perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
+.perf-note { margin-top: 6px; color: #6e7681; font-size: 10px; line-height: 1.4; }

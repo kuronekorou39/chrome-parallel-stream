@@ -7,9 +7,12 @@
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
 const AD_SKIP_KEY = 'adSkipEnabled'; // 広告スキップのオン/オフ。各枠の stream-control.js が storage で追従する。
 const MAX_WINDOWS = 20;
+const MIN_W = 420; // 枠の最小幅(これ未満には縮められない。台形のボタン列が収まる幅)
+const MIN_H = 220; // 枠の最小高さ(小さすぎると視聴の意味がないので下限を設ける)
 const IDLE_HIDE_MS = 3000; // この時間ポインタが動かないとカーソル+ツールバーを自動で隠す(復帰は ≡メニュー)
 const TOOLBAR_POS_KEY = 'toolbarPos'; // ツールバーの配置(top/bottom/left/right)を保存する storage キー
 const TOOLBAR_POSITIONS = ['top', 'bottom', 'left', 'right'];
+const PERF_HISTORY = 60; // パフォーマンスパネルのスパークラインに保持するサンプル数(≒直近60秒)
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
@@ -28,8 +31,8 @@ const countEl = document.getElementById('count');
 let zCounter = 10;
 let idSeq = 0;
 let activeWin = null;
-let layoutMode = false;
 let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をまとめて設定する。
+let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
 
 (async function init() {
@@ -37,6 +40,7 @@ const wins = [];
   setupIdleHide();
   window.addEventListener('resize', relayoutOnResize);
   window.addEventListener('message', onFrameUrl);
+  window.addEventListener('message', onFrameAdState);
 
   // 枠の外(ステージ背景)をクリック/タップしたらフォーカス(選択・ヘッダ)を解除する。
   // 枠内クリックは e.target が枠の子要素になるので解除されない。
@@ -57,14 +61,37 @@ const wins = [];
   });
 
   const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
+  const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
 
-  const urls = ((data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [])
-    .map((u) => (u || '').trim())
-    .filter((u) => u.length > 0)
-    .slice(0, MAX_WINDOWS);
+  // マスタ音量を復元(無ければ 0)。窓を作る前に入れておき、各枠が最初からこの音量で開くように。
+  masterVolume = clampVol(saved.masterVolume);
+  syncMasterUI();
 
-  urls.forEach((u) => createWindow(u, { silent: true }));
-  tileAll();
+  // 新フォーマット(wins: 位置・サイズ付き)を優先して位置ごと復元。旧フォーマット(urls のみ)は
+  // 初回だけ整列にフォールバック。以後は移動・リサイズのたびに保存されるので勝手に整列し直さない。
+  if (Array.isArray(saved.wins) && saved.wins.length) {
+    saved.wins.slice(0, MAX_WINDOWS).forEach((it) => {
+      const url = (it.url || '').trim();
+      if (!url) return;
+      const win = createWindow(url, { silent: true });
+      if (win) {
+        if (Number.isFinite(it.vol)) {
+          win.vol = it.vol;
+          if (win.volSlider) win.volSlider.value = String(Math.round(it.vol * 100));
+          applyVolume(win, masterVolume);
+        }
+        if (Number.isFinite(it.x)) {
+          setRect(win, it.x, it.y, it.w, it.h);
+          if (it.max) toggleMax(win);
+        }
+      }
+    });
+  } else {
+    const urls = (saved.urls || []).map((u) => (u || '').trim()).filter((u) => u.length > 0).slice(0, MAX_WINDOWS);
+    urls.forEach((u) => createWindow(u, { silent: true }));
+    if (urls.length) tileAll(); // 旧データの初回だけ整列(以後は位置を保存・復元)
+  }
+  restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   updateCount();
 })();
 
@@ -80,11 +107,31 @@ function onFrameUrl(e) {
   saveLineup();
 }
 
-// 現在の配信ラインナップを storage に保存(専用ページを開き直すと復元される)。
+// content script(stream-control.js)から広告検知の状態を受け取り、その枠に
+// 「広告スキップ中」表示(.ad-skipping)を出す/消す。広告スキップ ON のときだけ通知が来る。
+function onFrameAdState(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true || d.type !== 'ad-state') return;
+  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  if (win) win.el.classList.toggle('ad-skipping', !!d.adSkipping);
+}
+
+// 現在の配信ラインナップ(URL+位置・サイズ+最大化)とマスタ音量を storage に保存。
+// 専用ページを開き直すと、この内容で復元される(勝手に整列し直さない)。復元中は呼ばれても抑止。
 function saveLineup() {
-  const urls = wins.map((w) => w.url);
+  if (restoring) return;
+  const items = wins.map((w) => {
+    const r = w.maximized && w.prevRect ? w.prevRect : getRect(w);
+    return {
+      url: w.url,
+      x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
+      max: !!w.maximized, vol: w.vol != null ? w.vol : 1
+    };
+  });
   try {
-    chrome.storage.local.set({ [MULTIVIEW_ACTIVE_KEY]: { urls, timestamp: new Date().toISOString() } });
+    chrome.storage.local.set({
+      [MULTIVIEW_ACTIVE_KEY]: { wins: items, masterVolume, timestamp: new Date().toISOString() }
+    });
   } catch (e) {
     /* noop */
   }
@@ -102,9 +149,29 @@ function createWindow(url, opts = {}) {
 
   const bar = document.createElement('div');
   bar.className = 'win-bar';
+  // 左端のグリップ=ヘッダの左右スライド専用、中央(barMain)=つかむと枠移動。つまむ位置で挙動を分ける。
+  const gripL = document.createElement('div');
+  gripL.className = 'win-grip';
+  gripL.textContent = '⋮';
+  gripL.title = 'ドラッグでヘッダを左右にスライド';
+  const barMain = document.createElement('div');
+  barMain.className = 'win-bar-main';
   const title = document.createElement('div');
   title.className = 'win-title';
   title.textContent = labelFor(url);
+  // 枠ごとの音量バーを台形ハンドルに直接置く(実音量 = この値 × マスタ)。狭い枠では CSS で隠す。
+  const volWrap = document.createElement('div');
+  volWrap.className = 'win-vol';
+  const volIcon = document.createElement('span');
+  volIcon.className = 'win-vol-icon';
+  volIcon.textContent = '🔊';
+  const volSlider = document.createElement('input');
+  volSlider.type = 'range';
+  volSlider.min = '0';
+  volSlider.max = '100';
+  volSlider.value = '100';
+  volSlider.title = 'この枠の音量';
+  volWrap.append(volIcon, volSlider);
 
   const isKick = hostOf(url).includes('kick.com');
 
@@ -113,15 +180,17 @@ function createWindow(url, opts = {}) {
   // 音声は各プレイヤー自前のミュート/音量で操作する方針(起動時のみ全ミュート)。
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
+  const reloadBtn = mkBtn('🔄', '', 'この枠を再読込');
   const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', '', '最大化/復元');
   const closeBtn = mkBtn('✕', 'close', '閉じる');
-  controls.append(openBtn);
+  controls.append(openBtn, reloadBtn);
   if (chatBtn) controls.append(chatBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
-  // 操作ボタンは右端中央に縦並べ(タイトル/ドラッグの上部バーとは分離)。
-  bar.append(title);
+  // [グリップ左][ タイトル + 音量 + ボタン = 枠移動ゾーン ] の順で台形ハンドルを組む。
+  barMain.append(title, volWrap, controls);
+  bar.append(gripL, barMain);
 
   const body = document.createElement('div');
   body.className = 'win-body';
@@ -158,12 +227,8 @@ function createWindow(url, opts = {}) {
     // ※ iframe は生成後 DOM 上で move しないこと(再ペアレントすると埋め込みが壊れる)。
   }
 
-  const resize = document.createElement('div');
-  resize.className = 'win-resize';
-
-  // 整形モード用: 中身を覆って枠ごとドラッグ移動するオーバーレイ + 全辺/角のリサイズハンドル。
-  const overlay = document.createElement('div');
-  overlay.className = 'win-overlay';
+  // 全辺/角のリサイズハンドル(常時有効。当たり判定はオンマウス時だけ・グリップもその時だけ表示)。
+  // 枠の overflow:hidden で切れないよう内側に置く。
   const edges = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((dir) => {
     const h = document.createElement('div');
     h.className = 'win-edge win-edge-' + dir;
@@ -171,12 +236,12 @@ function createWindow(url, opts = {}) {
     return h;
   });
 
-  el.append(bar, controls, body, resize, overlay, ...edges);
+  el.append(bar, body, ...edges);
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatBtn, titleEl: title,
-    maximized: false, prevRect: null, opacity: 100,
+    id, url, el, body, frame, video, chatBtn, bar, barX: 0, titleEl: title, volSlider,
+    maximized: false, prevRect: null, opacity: 100, vol: 1,
     filter: { bright: 100, contrast: 100, sat: 100 }
   };
   wins.push(win);
@@ -187,11 +252,19 @@ function createWindow(url, opts = {}) {
   el.appendChild(buildAdjustPanel(win));
 
   el.addEventListener('pointerdown', () => { focusWindow(win); revealHeader(win); });
-  makeDraggable(win, bar);
-  makeResizable(win, resize);
-  overlay.addEventListener('pointerdown', (e) => beginDrag(win, e));
+  makeBarHandle(win, bar);
   edges.forEach((h) => h.addEventListener('pointerdown', (e) => beginResize(win, h.dataset.dir, e)));
+  // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
+  volSlider.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+  volSlider.addEventListener('input', () => {
+    win.vol = Number(volSlider.value) / 100;
+    volIcon.textContent = win.vol <= 0 ? '🔇' : '🔊';
+    applyVolume(win, masterVolume);
+    revealHeader(win); // 操作中はヘッダを消さない(特にタッチ)
+  });
+  volSlider.addEventListener('change', () => saveLineup());
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
+  reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); reloadWindow(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
   adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
@@ -294,8 +367,8 @@ function showVideoError(body, msg) {
 function setRect(win, x, y, w, h) {
   const sw = stage.clientWidth;
   const sh = stage.clientHeight;
-  w = Math.max(220, Math.min(w, sw));
-  h = Math.max(150, Math.min(h, sh));
+  w = Math.max(MIN_W, Math.min(w, sw));
+  h = Math.max(MIN_H, Math.min(h, sh));
   // x+w<=sw / y+h<=sh を保証し、窓(と右下リサイズハンドル)が必ずステージ内に収まるようにする。
   x = Math.max(0, Math.min(x, sw - w));
   y = Math.max(0, Math.min(y, sh - h));
@@ -303,6 +376,16 @@ function setRect(win, x, y, w, h) {
   win.el.style.top = y + 'px';
   win.el.style.width = w + 'px';
   win.el.style.height = h + 'px';
+  clampBarX(win);
+}
+
+// 台形ハンドルのスライド量を現在の枠幅で再クランプ(リサイズ/最大化で枠からはみ出さないように)。
+function clampBarX(win) {
+  if (!win || !win.bar) return;
+  const maxOff = Math.max(0, (win.el.clientWidth - win.bar.offsetWidth) / 2);
+  const x = Math.max(-maxOff, Math.min(maxOff, win.barX || 0));
+  win.barX = x;
+  win.el.style.setProperty('--bar-x', x + 'px');
 }
 
 function getRect(win) {
@@ -411,7 +494,6 @@ function toggleAdjust(win) {
 
 // 視聴モードでヘッダを一時的に表示し、数秒後にフェードで消す(クリック/タップ起点)。
 function revealHeader(win) {
-  if (layoutMode) return; // 整形モードではヘッダは出さない
   win.el.classList.add('show-bar');
   clearTimeout(win.barTimer);
   win.barTimer = setTimeout(() => win.el.classList.remove('show-bar'), 3000);
@@ -424,38 +506,45 @@ function clearSelection() {
   wins.forEach((w) => { w.el.classList.remove('show-bar', 'adjust-open'); clearTimeout(w.barTimer); });
 }
 
-function makeDraggable(win, handle) {
-  handle.addEventListener('pointerdown', (e) => {
-    // コントロールボタン上ではドラッグを開始しない(クリック/タップを奪わないため)。
-    if (e.target.closest('.win-controls')) return;
-    beginDrag(win, e);
+// 台形ハンドル: つまむ位置で挙動を分ける(RDP風)。
+//  - 両端のグリップ(.win-grip): ヘッダを枠の上辺に沿って左右にスライド(両端で止まる)。
+//  - 中央の本体(.win-bar-main): つかむと枠を移動。
+// ポインタをキャプチャするので iframe/動画の上をドラッグしても追従する。ボタン上では発火しない。
+function makeBarHandle(win, bar) {
+  bar.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary || win.maximized) return;
+    if (e.target.closest('.win-controls, .win-vol')) return; // ボタン/音量バー上は掴まない
+    const slideMode = !!e.target.closest('.win-grip'); // 左グリップ=スライド / それ以外=枠移動
+    e.preventDefault();
+    focusWindow(win);
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const startBarX = win.barX || 0;
+    const r = getRect(win);
+    const maxOff = Math.max(0, (win.el.clientWidth - bar.offsetWidth) / 2);
+    bar.classList.add('sliding');
+    try { bar.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    const onMove = (ev) => {
+      if (slideMode) {
+        const x = Math.max(-maxOff, Math.min(maxOff, startBarX + (ev.clientX - sx)));
+        win.barX = x;
+        win.el.style.setProperty('--bar-x', x + 'px');
+      } else {
+        setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
+      }
+    };
+    const end = () => {
+      bar.classList.remove('sliding');
+      try { bar.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      bar.removeEventListener('pointermove', onMove);
+      bar.removeEventListener('pointerup', end);
+      bar.removeEventListener('pointercancel', end);
+      if (!slideMode) saveLineup(); // 枠を動かしたら位置を保存(スライドのみのときは保存しない)
+    };
+    bar.addEventListener('pointermove', onMove);
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
   });
-}
-
-function makeResizable(win, handle) {
-  handle.addEventListener('pointerdown', (e) => beginResize(win, 'se', e));
-}
-
-// マウス/タッチ/ペン共通の Pointer Events で枠を移動する。bar / 整形モードのオーバーレイ
-// の両方から呼ばれる。ポインタをキャプチャするので iframe/動画の上をドラッグしても追従する。
-function beginDrag(win, e) {
-  if (e.button !== 0 || !e.isPrimary || win.maximized) return;
-  e.preventDefault();
-  focusWindow(win);
-  const cap = e.currentTarget;
-  const r = getRect(win);
-  const sx = e.clientX;
-  const sy = e.clientY;
-  try { cap.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-  const onMove = (ev) => setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
-  const onUp = () => {
-    cap.removeEventListener('pointermove', onMove);
-    cap.removeEventListener('pointerup', onUp);
-    cap.removeEventListener('pointercancel', onUp);
-  };
-  cap.addEventListener('pointermove', onMove);
-  cap.addEventListener('pointerup', onUp);
-  cap.addEventListener('pointercancel', onUp);
 }
 
 // dir は 'n','s','e','w' とその組合せ('se' 等)。指定した辺/角からリサイズする。
@@ -464,6 +553,7 @@ function beginResize(win, dir, e) {
   e.preventDefault();
   e.stopPropagation();
   focusWindow(win);
+  revealHeader(win); // リサイズ中もヘッダ/隅マークを出し続ける(特にタッチで掴みやすく)
   const cap = e.currentTarget;
   const r = getRect(win);
   const sx = e.clientX;
@@ -476,16 +566,17 @@ function beginResize(win, dir, e) {
     let y = r.y;
     let w = r.w;
     let h = r.h;
-    if (dir.includes('e')) w = Math.max(220, r.w + dx);
-    if (dir.includes('s')) h = Math.max(150, r.h + dy);
-    if (dir.includes('w')) { w = Math.max(220, r.w - dx); x = r.x + r.w - w; } // 右辺を固定
-    if (dir.includes('n')) { h = Math.max(150, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
+    if (dir.includes('e')) w = Math.max(MIN_W, r.w + dx);
+    if (dir.includes('s')) h = Math.max(MIN_H, r.h + dy);
+    if (dir.includes('w')) { w = Math.max(MIN_W, r.w - dx); x = r.x + r.w - w; } // 右辺を固定
+    if (dir.includes('n')) { h = Math.max(MIN_H, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
     setRect(win, x, y, w, h);
   };
   const onUp = () => {
     cap.removeEventListener('pointermove', onMove);
     cap.removeEventListener('pointerup', onUp);
     cap.removeEventListener('pointercancel', onUp);
+    saveLineup(); // リサイズ後のサイズ・位置を保存
   };
   cap.addEventListener('pointermove', onMove);
   cap.addEventListener('pointerup', onUp);
@@ -509,6 +600,7 @@ function toggleMax(win) {
     win.maximized = true;
     focusWindow(win);
   }
+  saveLineup(); // 最大化/復元の状態を保存(復元中は抑止)
 }
 
 // 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。
@@ -546,6 +638,7 @@ function tileAll() {
     const r = Math.floor(i / cols);
     setRect(win, gap + c * (cw + gap), gap + r * (ch + gap), cw, ch);
   });
+  saveLineup(); // 整列後の配置を保存(復元中の初回フォールバックでは restoring で抑止)
 }
 
 // ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
@@ -590,6 +683,19 @@ function mountSiteFrame(win) {
   applyVolume(win, masterVolume);
 }
 
+// 枠をその場で再読込する(🔄)。iframe は作り直し、Kick は HLS を貼り直す。
+function reloadWindow(win) {
+  if (win.frame) {
+    win.frame.remove();
+    mountSiteFrame(win); // 現在の win.url で iframe を作り直す
+  } else if (win.video) {
+    const media = win.video.parentElement;
+    if (win.video._hls) { try { win.video._hls.destroy(); } catch (e) { /* noop */ } win.video._hls = null; }
+    if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
+    setupKickVideo(win.video, win.url, media);
+  }
+}
+
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
 function openOriginal(win) {
   try {
@@ -631,16 +737,31 @@ function setMasterVolume(v) {
   for (const win of wins) applyVolume(win, v);
 }
 
+function clampVol(v) {
+  v = Number(v);
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+}
+
+// マスタ音量つまみ/アイコンを masterVolume に同期させる(復元時に呼ぶ)。
+function syncMasterUI() {
+  const slider = document.getElementById('master-vol');
+  if (slider) slider.value = Math.round(masterVolume * 100);
+  const icon = document.getElementById('master-vol-icon');
+  if (icon) icon.textContent = masterVolume <= 0 ? '🔇' : '🔊';
+}
+
 // 音量のみ設定する(ミュートは触らない=各プレイヤー自前のミュートで「1つだけ聞く」が可能)。
 // マスタ0 のときは volume=0 で実質無音。
+// 音量を枠へ反映。実音量 = 枠ごと音量(win.vol) × マスタ(v)。枠ごと音量は 🎨 パネルで設定する。
+// マスタを動かすと全枠が同倍率で増減 → 枠ごとの大小関係(win.vol の比)は保たれる。
+// 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
 function applyVolume(win, v) {
+  const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
   if (win.video) {
-    try { win.video.volume = v; } catch (e) { /* noop */ }
+    try { win.video.volume = eff; } catch (e) { /* noop */ }
   } else if (win.frame) {
-    // iframe 内は content script(stream-control.js)に依頼。プレイヤーが音量を上書き
-    // した瞬間(volumechange)だけ stream-control がマスタ値へ戻す(ポーリングなし)。
     try {
-      win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: v }, '*');
+      win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: eff }, '*');
     } catch (e) { /* noop */ }
   }
 }
@@ -648,14 +769,15 @@ function applyVolume(win, v) {
 // ====== ツールバー ======
 
 function wireToolbar() {
-  document.getElementById('master-vol').addEventListener('input', (e) => {
-    const v = Number(e.target.value) / 100;
-    setMasterVolume(v);
+  const masterSlider = document.getElementById('master-vol');
+  masterSlider.addEventListener('input', (e) => {
+    setMasterVolume(Number(e.target.value) / 100);
     const icon = document.getElementById('master-vol-icon');
-    if (icon) icon.textContent = v <= 0 ? '🔇' : '🔊';
+    if (icon) icon.textContent = masterVolume <= 0 ? '🔇' : '🔊';
   });
+  // つまみを離した時に保存(input 連発で storage を叩かないよう change で一度だけ)。
+  masterSlider.addEventListener('change', () => saveLineup());
   document.getElementById('tile-btn').addEventListener('click', tileAll);
-  document.getElementById('layout-btn').addEventListener('click', toggleLayoutMode);
 
   // 広告スキップのオン/オフ(YouTube枠が対象)。ここは状態を storage に保存するだけで、実際の
   // 検知・スキップは各枠の content script(stream-control.js)が storage を見て行う。既定はオフ。
@@ -671,28 +793,38 @@ function wireToolbar() {
   document.getElementById('toolbar-toggle').addEventListener('click', () => document.body.classList.add('toolbar-hidden'));
   document.getElementById('toolbar-show').addEventListener('click', () => document.body.classList.remove('toolbar-hidden'));
 
+  // 「＋追加」→ 追加ダイアログ(サイトボタン / URL入力)。ツールバーをすっきりさせるため別モーダルに。
+  const addDialog = document.getElementById('add-dialog');
+  const closeAdd = () => addDialog.classList.remove('open');
+  document.getElementById('add-open-btn').addEventListener('click', (e) => { e.stopPropagation(); addDialog.classList.add('open'); });
+  document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
+  addDialog.addEventListener('click', (e) => { if (e.target === addDialog) closeAdd(); }); // 外側クリックで閉じる
+
   const addUrl = document.getElementById('add-url');
   const doAdd = () => {
     const u = addUrl.value.trim();
     if (!u || wins.length >= MAX_WINDOWS) return;
     createWindow(u);
     addUrl.value = '';
+    closeAdd();
   };
   document.getElementById('add-btn').addEventListener('click', doAdd);
   addUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
 
-  // 主要サイトのワンクリック追加。
+  // ダイアログ内: 主要サイトのワンクリック追加(追加したらダイアログを閉じる)。
   document.querySelectorAll('.site-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
       const site = SITES[btn.dataset.site];
       if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
+      closeAdd();
     });
   });
 
   // メニュー位置: ダイアログ配線 + 保存値の復元(初回はアニメさせないため tb-ready を遅延付与)。
   setupPosDialog();
+  setupPerfPanel();
   chrome.storage.local.get(TOOLBAR_POS_KEY, (d) => {
-    applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'top', false);
+    applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));
   });
 }
@@ -747,13 +879,119 @@ function setupPosDialog() {
   );
 }
 
-// 整形モード: ON の間は各枠の中身をオーバーレイで覆い、枠ごとの移動・全辺リサイズに
-// 専念できる(中身=動画/チャットには触れない)。OFF で通常操作に戻る。
-function toggleLayoutMode() {
-  layoutMode = !layoutMode;
-  stage.classList.toggle('layout-mode', layoutMode);
-  document.getElementById('layout-btn').classList.toggle('on', layoutMode);
-  if (!layoutMode) clearSelection(); // 視聴モードに戻ったら選択(ヘッダ/青枠)を解除
+// パフォーマンス計測パネル(📊)。FPS(このページの描画)・システムCPU%・システムメモリ%・
+// JSヒープ・枠数を 1秒ごとに更新し、各値のスパークライン(直近 PERF_HISTORY 秒)を描く。
+// パネルが開いている間だけ計測する(閉じれば rAF も interval も止めて負荷ゼロ)。
+function setupPerfPanel() {
+  const panel = document.getElementById('perf-panel');
+  const rowsEl = panel.querySelector('.perf-rows');
+  const btn = document.getElementById('perf-btn');
+
+  const hist = { fps: [], cpu: [], mem: [], heap: [] };
+  const ui = {};
+  [['fps', 'FPS'], ['cpu', 'CPU'], ['mem', 'MEM'], ['heap', 'JS']].forEach(([key, label]) => {
+    const row = document.createElement('div'); row.className = 'perf-row';
+    const lab = document.createElement('span'); lab.className = 'perf-label'; lab.textContent = label;
+    const val = document.createElement('span'); val.className = 'perf-val'; val.textContent = '–';
+    const cv = document.createElement('canvas'); cv.className = 'perf-spark'; cv.width = 100; cv.height = 24;
+    row.append(lab, val, cv);
+    rowsEl.appendChild(row);
+    ui[key] = { row, val, canvas: cv };
+  });
+  // 枠数(スパークラインなし)
+  const cRow = document.createElement('div'); cRow.className = 'perf-row';
+  const cLab = document.createElement('span'); cLab.className = 'perf-label'; cLab.textContent = '枠';
+  const cVal = document.createElement('span'); cVal.className = 'perf-val'; cVal.textContent = '0';
+  cRow.append(cLab, cVal); rowsEl.appendChild(cRow);
+
+  const push = (k, v) => { const a = hist[k]; a.push(v); if (a.length > PERF_HISTORY) a.shift(); };
+  const drawSpark = (cv, data, max, color, warn) => {
+    const ctx = cv.getContext('2d'); const w = cv.width, h = cv.height;
+    ctx.clearRect(0, 0, w, h);
+    if (data.length < 2 || !max) return;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = (i / (PERF_HISTORY - 1)) * w;
+      const y = h - 1 - Math.max(0, Math.min(v, max)) / max * (h - 2);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.strokeStyle = warn ? '#f85149' : color; ctx.lineWidth = 1.5; ctx.stroke();
+  };
+
+  let frames = 0, rafId = null, tickId = null, prevCpu = null;
+  const onFrame = () => { frames++; rafId = requestAnimationFrame(onFrame); };
+
+  const sample = async () => {
+    const fps = frames; frames = 0; push('fps', fps);
+
+    let cpu = 0;
+    try {
+      const info = await chrome.system.cpu.getInfo();
+      let user = 0, kernel = 0, total = 0;
+      for (const p of info.processors) { user += p.usage.user; kernel += p.usage.kernel; total += p.usage.total; }
+      if (prevCpu) {
+        const dB = (user - prevCpu.user) + (kernel - prevCpu.kernel);
+        const dT = total - prevCpu.total;
+        cpu = dT > 0 ? Math.round((dB / dT) * 100) : 0;
+      }
+      prevCpu = { user, kernel, total };
+    } catch (e) { /* noop */ }
+    push('cpu', cpu);
+
+    let mem = 0, memTitle = '';
+    try {
+      const m = await chrome.system.memory.getInfo();
+      mem = Math.round((1 - m.availableCapacity / m.capacity) * 100);
+      const usedGB = (m.capacity - m.availableCapacity) / 1073741824;
+      const totGB = m.capacity / 1073741824;
+      memTitle = '使用 ' + usedGB.toFixed(1) + ' / ' + totGB.toFixed(1) + ' GB';
+    } catch (e) { /* noop */ }
+    push('mem', mem);
+
+    let heap = 0, heapMax = 0;
+    if (performance.memory) {
+      heap = Math.round(performance.memory.usedJSHeapSize / 1048576);
+      heapMax = performance.memory.jsHeapSizeLimit / 1048576;
+    }
+    push('heap', heap);
+
+    ui.fps.val.textContent = fps;
+    ui.cpu.val.textContent = cpu + '%';
+    ui.mem.val.textContent = mem + '%';
+    ui.mem.row.title = memTitle;
+    ui.heap.val.textContent = performance.memory ? heap + 'MB' : 'N/A';
+    cVal.textContent = String(wins.length);
+
+    ui.fps.val.classList.toggle('warn', fps < 30);
+    ui.cpu.val.classList.toggle('warn', cpu > 85);
+    ui.mem.val.classList.toggle('warn', mem > 90);
+
+    drawSpark(ui.fps.canvas, hist.fps, 60, '#3fb950', fps < 30);
+    drawSpark(ui.cpu.canvas, hist.cpu, 100, '#58a6ff', cpu > 85);
+    drawSpark(ui.mem.canvas, hist.mem, 100, '#d29922', mem > 90);
+    drawSpark(ui.heap.canvas, hist.heap, heapMax || Math.max(1, ...hist.heap), '#a371f7', false);
+  };
+
+  const start = () => {
+    if (tickId) return;
+    frames = 0; prevCpu = null;
+    onFrame();
+    tickId = setInterval(sample, 1000);
+    sample();
+  };
+  const stop = () => {
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (tickId) { clearInterval(tickId); tickId = null; }
+  };
+  const toggle = () => {
+    if (panel.hasAttribute('hidden')) {
+      panel.removeAttribute('hidden'); btn.classList.add('on-blue'); start();
+    } else {
+      panel.setAttribute('hidden', ''); btn.classList.remove('on-blue'); stop();
+    }
+  };
+  btn.addEventListener('click', toggle);
+  document.getElementById('perf-close').addEventListener('click', toggle);
 }
 
 // ====== URL ヘルパ ======

@@ -12,7 +12,9 @@
     "cookies",
     "sidePanel",
     "declarativeNetRequest",
-    "webNavigation"
+    "webNavigation",
+    "system.cpu",
+    "system.memory"
   ],
   "host_permissions": [
     "<all_urls>"

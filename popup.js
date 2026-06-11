@@ -65,7 +65,11 @@ async function openMultiview() {
 
 async function renderSavedList() {
   const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
-  const urls = (data[MULTIVIEW_ACTIVE_KEY] || {}).urls || [];
+  const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
+  // 新フォーマット(wins: 位置付き)からも、旧フォーマット(urls)からも URL を取り出す。
+  const urls = Array.isArray(saved.wins)
+    ? saved.wins.map((w) => w && w.url).filter(Boolean)
+    : (saved.urls || []);
   if (!urls.length) {
     $('saved-list').innerHTML = '<span class="empty">なし</span>';
     return;

@@ -24,25 +24,18 @@
   muteAll();
   [300, 1200, 2500].forEach((ms) => setTimeout(muteAll, ms));
 
-  // 親(multiview.html)からの「音量設定」指示(マスタ音量つまみ)。value(0〜1)を全 video に適用。
-  // muted は触らない(各プレイヤー自前のミュートで「1つだけ聞く」ができるように)。
-  let desiredVol = null; // null = まだマスタ未操作(プレイヤー任せ)
-
-  // プレイヤーが volumechange でマスタ値からズラしたときだけ戻す(ポーリングしない)。
-  // 自分で戻した直後は値が一致するので再発火せず、イベントループにもならない。
-  function enforce(v) {
-    if (desiredVol !== null && Math.abs(v.volume - desiredVol) > 0.005) {
-      try { v.volume = desiredVol; } catch (err) { /* noop */ }
-    }
-  }
-
-  function applyToAll() {
+  // 親(multiview.html)からの「この枠の実音量」指示(value: 0〜1 = 枠ごと音量 × マスタ)。
+  // 枠ごと音量とマスタの掛け算は親側で済ませて effective を送ってくるので、ここはそれを全 video に
+  // 当てて維持するだけ。Twitch等は内蔵スライダーが video.volume を動かさない(Web Audio 経由)ため、
+  // 確実に効く video.volume をこちらで当て続ける(= 親の指定値を強制)。
+  // muted は触らない(各プレイヤー自前のミュートで「1つだけ聞く」が可能)。
+  let mvVolume = null; // null = まだ未受信
+  function applyVol() {
+    if (mvVolume === null) return;
     document.querySelectorAll('video').forEach((v) => {
-      if (!v.__mvVol) {
-        v.__mvVol = true;
-        v.addEventListener('volumechange', () => enforce(v));
+      if (Math.abs(v.volume - mvVolume) > 0.005) {
+        try { v.volume = mvVolume; } catch (err) { /* noop */ }
       }
-      if (desiredVol !== null) { try { v.volume = desiredVol; } catch (err) { /* noop */ } }
     });
   }
 
@@ -50,9 +43,13 @@
     if (e.source !== window.parent) return; // 親以外からの偽装を弾く
     const d = e.data;
     if (!d || d[MAGIC] !== true || d.type !== 'set-volume') return;
-    desiredVol = Math.max(0, Math.min(1, Number(d.value)));
-    applyToAll();
+    mvVolume = Math.max(0, Math.min(1, Number(d.value)));
+    applyVol();
   });
+
+  // プレイヤーの上書きや、遅延ロード/SPA遷移で現れた新しい video にも、親の指定値を当て続ける。
+  // (枠ごと音量は 🎨 パネルで操作する設計なので、これで取り違え・戻し問題は起きない)
+  setInterval(applyVol, 1000);
 
   // ---- 枠が今開いている URL を親(multiview)へ知らせる ----
   // 直下フレーム(枠本体)からのものだけ親=multiview に届く。枠内で別ページへ移動したら
@@ -109,6 +106,13 @@
     let adPlaying = false;
     let lastSkipAttempt = 0;
 
+    // 広告検知の状態を親(multiview)へ通知 → その枠に「広告スキップ中」表示を出す/消す。
+    const notifyAdState = (on) => {
+      try {
+        window.parent.postMessage({ [MAGIC]: true, type: 'ad-state', adSkipping: on }, '*');
+      } catch (e) { /* noop */ }
+    };
+
     // オン/オフは multiview ツールバーのトグルが storage に書き込む。起動時に現在値を読み、
     // 以後は storage.onChanged で追従する(枠を開いたままトグルしても即反映される)。
     try {
@@ -116,7 +120,7 @@
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes[AD_SKIP_KEY]) {
           adSkipEnabled = changes[AD_SKIP_KEY].newValue === true;
-          if (!adSkipEnabled) adPlaying = false; // OFF にしたら検知状態もリセット
+          if (!adSkipEnabled) { adPlaying = false; notifyAdState(false); } // OFF にしたら検知状態もリセット
         }
       });
     } catch (e) { /* noop */ }
@@ -133,7 +137,7 @@
       const player = document.querySelector(PLAYER_SELECTOR);
       if (!player) return;
       if (player.classList.contains('ad-showing')) {
-        if (!adPlaying) { adPlaying = true; lastSkipAttempt = 0; }
+        if (!adPlaying) { adPlaying = true; lastSkipAttempt = 0; notifyAdState(true); }
         const now = Date.now();
         if (now - lastSkipAttempt > SKIP_RETRY_INTERVAL) {
           lastSkipAttempt = now;
@@ -142,6 +146,7 @@
         }
       } else if (adPlaying) {
         adPlaying = false;
+        notifyAdState(false);
         setTimeout(() => window.postMessage({ source: AD_SKIP_SOURCE, type: 'resume-playback' }, '*'), 300);
       }
     };

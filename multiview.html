@@ -8,26 +8,15 @@
 <body>
   <div id="toolbar">
     <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/20</span>
-    <span class="tb-sep"></span>
-    <span class="tb-item">開く</span>
-    <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
-    <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
-    <button class="site-chip" data-site="kick" type="button" title="Kick を開く">Kick</button>
-    <button class="site-chip" data-site="openrec" type="button" title="OPENREC を開く">OPENREC</button>
-    <span class="tb-sep"></span>
-    <input type="text" id="add-url" class="tb-input" placeholder="URL を貼って Enter / 追加" />
-    <button id="add-btn" class="tb-btn">追加</button>
+    <button id="add-open-btn" class="tb-btn tb-btn-primary" title="枠を追加">＋ 追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
-    <button id="layout-btn" class="tb-btn" title="整形モード: 枠の移動・リサイズ専用(中身に触れない)">整形モード</button>
-    <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定はオフ。押すとオン)。Twitchの広告はvaftで常時ブロックされるためこのボタンの対象外。">広告スキップ</button>
-    <span class="tb-sep"></span>
-    <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート。以後は各プレイヤーでも個別調整可)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
-    <span class="tb-grow"></span>
-    <span class="tb-hint">枠をクリックでヘッダ表示 / 🎨=透明・画質 / ⛶=最大化 / 音は各プレイヤーで</span>
-    <button id="layout-pos-btn" class="tb-btn" title="メニューの位置を変える">位置</button>
-    <button id="toolbar-toggle" class="tb-btn" title="ツールバーを隠す">▲ 隠す</button>
+    <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定オフ)。Twitchは vaft で常時ブロック。">広告スキップ</button>
+    <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
+    <button id="perf-btn" class="tb-btn" title="パフォーマンス(FPS・CPU・メモリ)を表示">📊</button>
+    <button id="layout-pos-btn" class="tb-btn" title="メニューの表示位置を変える">位置</button>
+    <button id="toolbar-toggle" class="tb-btn" title="メニューを隠す">隠す</button>
   </div>
-  <button id="toolbar-show" title="ツールバーを表示">≡ メニュー</button>
+  <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
 
   <div id="pos-dialog" class="pos-dialog-overlay">
     <div class="pos-dialog" role="dialog" aria-label="メニューの位置">
@@ -43,8 +32,34 @@
     </div>
   </div>
 
+  <div id="add-dialog" class="pos-dialog-overlay">
+    <div class="pos-dialog" role="dialog" aria-label="枠を追加">
+      <div class="pos-dialog-title">枠を追加</div>
+      <div class="add-sites">
+        <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
+        <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
+        <button class="site-chip" data-site="kick" type="button" title="Kick を開く">Kick</button>
+        <button class="site-chip" data-site="openrec" type="button" title="OPENREC を開く">OPENREC</button>
+      </div>
+      <div class="add-url-row">
+        <input type="text" id="add-url" class="tb-input" placeholder="配信ページの URL を貼り付け" />
+        <button id="add-btn" class="tb-btn">追加</button>
+      </div>
+      <button id="add-dialog-close" class="pos-dialog-close" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <div id="perf-panel" hidden>
+    <div class="perf-head">
+      <span class="perf-title">📊 パフォーマンス</span>
+      <button id="perf-close" type="button" title="閉じる">✕</button>
+    </div>
+    <div class="perf-rows"></div>
+    <div class="perf-note">CPU/メモリは PC 全体の値。枠ごと・GPU は Chrome の Shift+Esc で。</div>
+  </div>
+
   <div id="stage">
-    <div id="stage-empty">配信がありません。上のツールバーの入力欄に URL を貼って「追加」を押すと、1つずつ枠が増えていきます。</div>
+    <div id="stage-empty">配信がありません。メニューの「＋ 追加」から、サイトを選ぶか URL を貼って枠を追加できます。</div>
   </div>
   <script src="vendor/hls.min.js"></script>
   <script src="multiview.js"></script>
