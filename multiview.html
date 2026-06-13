@@ -2,6 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <!-- スマホで実寸表示するため必須(無いと約980px仮想幅に縮小描画され、文字・ボタンが極小になる)。
+       枠ドラッグ中のピンチ誤爆でページごとズームしないよう拡大は禁止(OSのアクセシビリティ設定で上書き可)。 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Multiview</title>
   <link rel="stylesheet" href="multiview.css" />
 </head>
@@ -12,12 +15,27 @@
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)">🎚 一覧</button>
     <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定オフ)。Twitchは vaft で常時ブロック。">広告スキップ</button>
+    <button id="light-btn" class="tb-btn" title="全部の枠を軽量プレイヤーへ切替/通常へ戻す(配信・動画ページを開いている枠が対象。スマホで複数枠を並べる時用)">⚡ 軽量</button>
     <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
     <button id="perf-btn" class="tb-btn" title="パフォーマンス(FPS・CPU・メモリ)を表示">📊</button>
     <button id="layout-pos-btn" class="tb-btn" title="メニューの表示位置を変える">位置</button>
     <button id="toolbar-toggle" class="tb-btn" title="メニューを隠す">隠す</button>
   </div>
   <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
+  <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る">⛶ 全画面を終了</button>
+
+  <!-- スマホ(縦積み)用メインメニュー: バーの代わりに ≡ から出す縦リスト(右クリックメニュー風)。
+       項目は 追加・整列・一覧・広告・パフォーマンス の5つだけ(音量・並びはミキサー、軽量は各枠の
+       バッジで行うため載せない)。各項目は既存ツールバーボタンの機能をそのまま呼ぶ。
+       backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
+  <div id="main-menu-backdrop" hidden></div>
+  <div id="main-menu" hidden>
+    <button id="mm-add" type="button">＋ 枠を追加</button>
+    <button id="mm-tile" type="button">⊞ 整列(積み直し)</button>
+    <button id="mm-mixer" type="button">🎚 枠一覧 / ミキサー</button>
+    <button id="mm-adskip" type="button">⏭ 広告スキップ: OFF</button>
+    <button id="mm-perf" type="button">📊 パフォーマンス</button>
+  </div>
 
   <div id="pos-dialog" class="pos-dialog-overlay">
     <div class="pos-dialog" role="dialog" aria-label="メニューの位置">
@@ -60,7 +78,14 @@
   </div>
 
   <div id="stage">
-    <div id="stage-empty">配信がありません。メニューの「＋ 追加」から、サイトを選ぶか URL を貼って枠を追加できます。</div>
+    <div id="stage-empty">
+      <div class="empty-card">
+        <div class="empty-icon" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div class="empty-title">配信がありません</div>
+        <div class="empty-hint">サイトを選ぶか URL を貼り付けて、視聴したい配信の枠を追加しましょう。</div>
+        <button id="empty-add-btn" type="button">＋ 枠を追加</button>
+      </div>
+    </div>
 
     <div id="mixer-panel" class="mixer-panel" hidden>
       <div class="mixer-head">
@@ -73,7 +98,6 @@
         <input type="range" id="mixer-master" min="0" max="100" value="0" />
       </div>
       <div class="mixer-list"></div>
-      <div class="mixer-resize"></div>
     </div>
   </div>
   <script src="hls.min.js"></script>

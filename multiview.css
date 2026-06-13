@@ -117,33 +117,40 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .add-url-row .tb-input { flex: 1 1 auto; width: auto; font-size: 15px; padding: 10px 12px; }
 
 /* ===== 枠一覧 / ミキサーパネル(移動・リサイズ自由の浮動パネル) ===== */
+/* 地・影・ヘッダの見た目はパフォーマンスパネル(#perf-panel / .perf-head)に合わせている。 */
 .mixer-panel {
   position: absolute; top: 64px; left: 64px; width: 340px; height: 400px;
   display: flex; flex-direction: column; z-index: 90000;
-  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.7); overflow: hidden; color: #c9d1d9;
+  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
 }
 .mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
+/* perf-head と同じくフラット(濃い帯・下線なし)。 */
 .mixer-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  background: #161b22; border-bottom: 1px solid #21262d; cursor: move; user-select: none; touch-action: none;
+  cursor: move; user-select: none; touch-action: none;
 }
-.mixer-title { flex: 1 1 auto; font-size: 14px; font-weight: bold; color: #f0f6fc; }
+.mixer-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; } /* perf-title と同じ */
+/* perf-close と同じく枠なしの小さな✕。 */
 .mixer-x {
-  flex: 0 0 auto; background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
-  width: 30px; height: 30px; font-size: 16px; cursor: pointer;
+  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
 }
-.mixer-x:hover { background: #3c0d11; color: #f85149; }
+.mixer-x:hover { color: #f85149; }
 .mixer-master {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #21262d;
 }
-.mixer-master-label { font-size: 13px; color: #8b949e; }
+.mixer-master-label { font-size: 12px; color: #8b949e; } /* perf-label と同じ */
 .mixer-master input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
 .mixer-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
 .mixer-empty { color: #6e7681; font-size: 13px; text-align: center; padding: 20px; }
-.mixer-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; }
+/* 1行で詰めず、上=枠名(URL)+👁、下=音量つまみ(全幅)の 2段にする。URLが見切れにくい。 */
+.mixer-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-radius: 6px; }
 .mixer-row:hover { background: rgba(255,255,255,0.05); }
 .mixer-row.is-hidden { opacity: 0.55; }
+.mixer-row + .mixer-row { border-top: 1px solid rgba(255,255,255,0.05); } /* 行どうしの薄い区切り */
+.mixer-row-top { display: flex; align-items: center; gap: 8px; }
+.mixer-row-bot { display: flex; align-items: center; gap: 8px; }
 .mixer-row-label {
   flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: #c9d1d9;
   border: none; cursor: pointer; font-family: inherit; font-size: 13px; padding: 5px 6px; border-radius: 5px;
@@ -155,20 +162,39 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   width: 34px; height: 34px; font-size: 17px; border-radius: 6px;
 }
 .mixer-row-eye:hover { background: rgba(255,255,255,0.12); }
-.mixer-row-vol { flex: 0 0 96px; width: 96px; accent-color: #58a6ff; cursor: pointer; }
-.mixer-resize {
-  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none;
-  background: linear-gradient(135deg, transparent 50%, #58a6ff 50%, #58a6ff 60%, transparent 60%, transparent 70%, #58a6ff 70%, #58a6ff 80%, transparent 80%);
-  opacity: 0.6;
-}
-.mixer-resize:hover { opacity: 1; }
+.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; padding-left: 4px; }
+.mixer-row-vol { flex: 1 1 auto; width: auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
 
 /* ===== ステージ ===== */
 #stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
 #stage-empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  color: #6e7681; font-size: 13px; text-align: center; padding: 20px;
+  text-align: center; padding: 20px;
 }
+/* 空ステージの案内カード。導線(＋枠を追加)をここにも置き、スマホでも迷わず・押しやすくする。 */
+.empty-card {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  max-width: 460px; padding: 36px 40px;
+  background: rgba(13,17,23,0.85); border: 1px dashed #30363d; border-radius: 16px;
+}
+.empty-icon {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  width: 68px; height: 68px; padding: 8px;
+  background: rgba(88,166,255,0.08); border: 1px solid #30363d; border-radius: 14px;
+}
+.empty-icon span { background: rgba(88,166,255,0.45); border-radius: 4px; animation: cell-pulse 2.8s ease-in-out infinite; }
+.empty-icon span:nth-child(2) { animation-delay: 0.7s; }
+.empty-icon span:nth-child(3) { animation-delay: 1.4s; }
+.empty-icon span:nth-child(4) { animation-delay: 2.1s; }
+@keyframes cell-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.empty-title { color: #f0f6fc; font-size: 18px; font-weight: bold; }
+.empty-hint { color: #8b949e; font-size: 14px; line-height: 1.7; }
+#empty-add-btn {
+  margin-top: 4px;
+  background: #1f6feb; color: #fff; border: 1px solid #388bfd; border-radius: 10px;
+  padding: 13px 28px; font-family: inherit; font-size: 16px; font-weight: bold; cursor: pointer;
+}
+#empty-add-btn:hover { background: #388bfd; border-color: #58a6ff; }
 
 /* ===== フローティング窓 ===== */
 .win {
@@ -239,8 +265,9 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   width: 44px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.win-controls button:hover { background: rgba(255,255,255,0.12); color: #f0f6fc; }
+.win-controls button:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #f0f6fc; }
 .win-controls button.active { color: #3fb950; }
+.win-controls button:disabled { opacity: 0.35; cursor: default; } /* ⚡: 変換できないURLの間は無効 */
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
 /* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。 */
@@ -267,6 +294,24 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* パネル(📊/🎚)をドラッグ/リサイズしている間は、全 iframe を無反応にする。クロスオリジン
+   iframe の上をポインタが通ると掴みが奪われる(「下に枠があると持てない」)のを物理的に防ぐ。 */
+body.panel-dragging iframe { pointer-events: none; }
+
+/* 読み込み中スピナー(順次読み込みの待機〜ロード完了まで映像の上に重ねる)。 */
+.win-loading {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: #0b0e14; color: #8b949e; pointer-events: none;
+}
+.win-spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(88,166,255,0.25); border-top-color: #58a6ff;
+  animation: win-spin 0.8s linear infinite;
+}
+@keyframes win-spin { to { transform: rotate(360deg); } }
+.win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
 
 /* Kick: 映像(左)+ チャット(右)の2分割 */
 .win-body.kick-split { display: flex; }
@@ -362,10 +407,11 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .pos-dialog-close:hover { background: #30363d; border-color: #58a6ff; }
 
 /* ===== 広告スキップ中インジケータ ===== */
-/* YouTube枠の content script が広告検知を通知している間だけ、枠の左上に出す(JS が .ad-skipping を付与)。 */
+/* YouTube枠の content script が広告検知を通知している間だけ出す(JS が .ad-skipping を付与)。
+   左上はモードバッジ(.win-badge)が常駐するため、その右隣に並べる。 */
 .win.ad-skipping::after {
   content: '⏭ 広告スキップ中';
-  position: absolute; top: 10px; left: 10px; z-index: 7; pointer-events: none;
+  position: absolute; top: 8px; left: 76px; z-index: 7; pointer-events: none;
   background: rgba(63,185,80,0.95); color: #04140a;
   font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 6px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.55);
@@ -382,7 +428,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
 }
 #perf-panel[hidden] { display: none; }
-.perf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.perf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: move; user-select: none; touch-action: none; }
 .perf-title { color: #c9d1d9; font-size: 12px; }
 #perf-close { background: transparent; color: #8b949e; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
 #perf-close:hover { color: #f85149; }
@@ -392,3 +438,172 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .perf-val.warn { color: #f85149; font-weight: bold; }
 .perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
 .perf-note { margin-top: 6px; color: #6e7681; font-size: 10px; line-height: 1.4; }
+
+/* ===== スマホ縦積みモード(body.stack-mode。multiview.js の updateStackMode が付与) ===== */
+/* 自由配置をやめ「全幅×16:9 の縦並びタイル」にする(高さ計算は JS の relayoutStack)。
+   移動・リサイズ・最大化のUIは封印し、タップとスクロールだけで操作できる形にする。 */
+body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
+/* バー型ツールバーは PC 含め使わない。≡ を常時(左下に)出し、押すと縦リストのメインメニューが開く。 */
+#toolbar { display: none; }
+#toolbar-show {
+  opacity: 1; pointer-events: auto;
+  top: auto; right: auto; bottom: 8px; left: 10px;
+}
+
+/* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
+   backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */
+#main-menu-backdrop { position: fixed; inset: 0; z-index: 100003; background: transparent; }
+#main-menu-backdrop[hidden] { display: none; }
+#main-menu {
+  position: fixed; left: 10px; bottom: 64px; z-index: 100004;
+  display: flex; flex-direction: column; gap: 2px; min-width: 250px;
+  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 12px;
+  padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+}
+#main-menu[hidden] { display: none; }
+#main-menu button {
+  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  padding: 13px 14px; font-family: inherit; font-size: 16px; text-align: left;
+  cursor: pointer; white-space: nowrap;
+}
+#main-menu button:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+#main-menu button.on { color: #3fb950; }
+body.stack-mode .win { min-width: 0; min-height: 0; } /* 全幅タイルは MIN_W(420px)より狭くなる */
+body.stack-mode .win-edge,
+body.stack-mode .win-grip { display: none; }
+body.stack-mode .win-controls button.max { display: none; }
+/* 台形ヘッダは PC 含め出さない。移動は長押しドラッグ、操作は簡易UI(.win-quick + ⋮メニュー)。 */
+.win .win-bar { display: none; }
+.win-adjust { top: 56px; } /* 台形が無いぶん 🎨 パネルは上へ */
+/* Kick: 縦積みでは映像の下にチャットを置く(高さは JS の STACK_CHAT_H と一致させること) */
+body.stack-mode .win-body.kick-split { flex-direction: column; }
+body.stack-mode .win-body .win-chat { flex: 0 0 280px; width: 100%; height: 280px; }
+body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */
+
+/* 枠右上の簡易UI(PC含む): [⋮メニュー][✕閉じる]。
+   普段は完全に消し(映像に何も重ねない)、ホバー/タップ(show-bar)/メニュー展開中だけ出す。
+   消えている間は pointer-events: none で映像操作を邪魔しない。表示時間は JS の BAR_HIDE_MS。 */
+.win-quick {
+  position: absolute; top: 6px; right: 6px; z-index: 7;
+  display: flex; gap: 6px;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+.win:hover .win-quick,
+.win.show-bar .win-quick,
+.win.menu-open .win-quick { opacity: 1; pointer-events: auto; }
+.win-quick > button {
+  width: 44px; height: 44px; border-radius: 10px; border: 1px solid #30363d;
+  background: rgba(13,17,23,0.85); color: #c9d1d9; font-size: 20px; cursor: pointer;
+  font-family: inherit; line-height: 1;
+}
+.win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
+.win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
+/* 50%幅などの狭いタイル: ボタンを詰めて収める([⋮][✕]の2つなので左上バッジとは重ならない)。 */
+.win.cq-narrow .win-quick { top: 4px; right: 4px; gap: 4px; }
+.win.cq-narrow .win-quick > button { width: 38px; height: 38px; font-size: 16px; border-radius: 8px; }
+
+/* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
+   席をスルッと空ける(自由配置=free では他枠は動かないので reordering は付かない)。 */
+body.stack-mode.reordering { user-select: none; }
+body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
+.win.dragging {
+  transition: none; opacity: 0.92; transform: scale(1.02);
+  border-color: #58a6ff; box-shadow: 0 12px 32px rgba(0,0,0,0.8);
+  user-select: none; /* 移動中はテキスト選択させない(マウス) */
+}
+
+/* ⋮ のドロップダウンメニュー。開く時に JS(positionWinMenu)が position:fixed で画面内へ配置するので、
+   タイルの overflow:hidden で切れず、画面端・下端でもはみ出さない(高さ超過時はメニュー内スクロール)。 */
+.win-menu {
+  position: absolute; top: 50px; right: 0; display: none; z-index: 100001;
+  flex-direction: column; gap: 2px; min-width: 230px;
+  overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
+  padding: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+}
+.win.menu-open .win-menu { display: flex; }
+.win-menu button {
+  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  padding: 11px 12px; font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;
+  white-space: nowrap;
+}
+.win-menu button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu button:disabled { opacity: 0.35; cursor: default; }
+/* トグル項目: 左=項目名、右=現在値。区切り線でグループを分ける。 */
+.win-menu-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.win-menu-toggle .wm-val { flex: 0 0 auto; color: #8b949e; font-variant-numeric: tabular-nums; }
+.win-menu-sep { flex: 0 0 auto; height: 1px; background: #30363d; margin: 5px 8px; }
+
+/* 左上バッジ: ⚡軽量(緑)/ 通常(グレー)。状態表示 兼 タップで軽量⇄通常トグル。
+   ヘッダ等と同様、ホバー/タップ(show-bar)中だけ出して、操作が無ければ時間で消える。 */
+.win-badge {
+  position: absolute; top: 8px; left: 8px; z-index: 8;
+  font-size: 12px; padding: 5px 10px; border-radius: 7px;
+  background: rgba(13,17,23,0.85); color: #8b949e; border: 1px solid rgba(48,54,61,0.9);
+  font-family: inherit; cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+}
+.win-badge.light { color: #3fb950; border-color: rgba(63,185,80,0.5); }
+.win-badge:disabled { cursor: default; }
+.win:hover .win-badge,
+.win.show-bar .win-badge,
+.win.menu-open .win-badge { opacity: 1; pointer-events: auto; }
+
+/* 「全画面」(PC含む): 枠を一時的に画面いっぱいへ(枠内のサイト操作・配信選び・ログイン用)。
+   inline の left/top/width/height に勝つため !important。解除は #stack-restore か同メニュー。 */
+.win.stack-max {
+  position: fixed !important; left: 0 !important; top: 0 !important;
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+  z-index: 99999 !important; border: none; border-radius: 0;
+}
+#stack-restore {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 100005;
+  display: none; align-items: center; gap: 6px;
+  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 15px; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+body.has-stack-max #stack-restore { display: inline-flex; }
+#stack-restore:hover { background: #30363d; border-color: #58a6ff; }
+
+/* ===== スマホ/タッチ環境 ===== */
+/* 主ポインタが指(pointer: coarse)か画面が狭いときは、文字とタップ目標をひと回り大きくする。 */
+@media (pointer: coarse), (max-width: 700px) {
+  #toolbar { gap: 8px; padding: 12px; }
+  .tb-btn { font-size: 17px; padding: 13px 18px; }
+  .tb-item { font-size: 16px; }
+  #count { font-size: 18px; }
+  #master-vol { width: 130px; height: 30px; }
+  #toolbar-show { font-size: 17px; padding: 14px 20px; }
+  body.tb-vertical #toolbar { width: 280px; }
+
+  .empty-title { font-size: 20px; }
+  .empty-hint { font-size: 15px; }
+  #empty-add-btn { font-size: 18px; padding: 15px 30px; }
+
+  .pos-dialog { padding: 24px; }
+  .pos-dialog-title { font-size: 17px; }
+  .pos-dialog-close { font-size: 16px; padding: 12px 26px; }
+  .pos-grid { grid-template-columns: repeat(3, 78px); grid-template-rows: repeat(3, 66px); }
+  .pos-pick { font-size: 22px; }
+  .pos-pick span { font-size: 13px; }
+  .add-sites .site-chip { font-size: 17px; padding: 14px 20px; }
+  .add-url-row .tb-input { font-size: 16px; padding: 12px 14px; }
+
+  /* ヘッダ(タイトル・✕・マスタ見出し)はパフォーマンスに合わせ、スマホでも拡大しない。
+     行のコントロール(枠名/👁/音量)は実際に操作するのでタッチ向けに拡大したまま残す。 */
+  .mixer-row-label { font-size: 15px; padding: 9px 8px; }
+  .mixer-row-eye { width: 44px; height: 44px; font-size: 20px; }
+  .mixer-master input[type="range"], .mixer-row-vol { height: 30px; }
+
+  .win-title { font-size: 15px; }
+  .win-grip { width: 30px; font-size: 26px; }
+  /* 44px × 6個(Kick)でも 390px 幅の枠に収まるよう、ボタン径と台形の余白を詰める */
+  .win-controls button { width: 44px; height: 44px; font-size: 22px; }
+  .win-vol input[type="range"] { height: 30px; }
+  .win-bar { padding: 0 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%); }
+
+  /* 描画負荷の軽減: ぼかし影とホバー遷移はスマホGPUに重いので省く(見た目より軽さ優先) */
+  .win, .win.show-bar { box-shadow: none; transition: none; }
+  .win-bar { filter: none; }
+}

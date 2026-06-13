@@ -50,6 +50,13 @@
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
+    },
+    {
+      "matches": ["*://player.twitch.tv/*"],
+      "js": ["twitch-keepalive.js"],
+      "world": "MAIN",
+      "all_frames": true,
+      "run_at": "document_start"
     }
   ],
   "declarative_net_request": {

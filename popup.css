@@ -16,9 +16,10 @@ body {
     'Menlo', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
-  min-width: 640px;
-  max-width: 720px;
-  padding: 12px 14px 20px;
+  /* 固定幅。min/max + メディアクエリにすると、ポップアップ幅が縮む→メディアが効く→さらに縮む、の
+     ループで縦長に潰れていた。380px に固定して横に広げる(この幅はスマホのタブ表示にも収まる)。 */
+  width: 380px;
+  padding: 12px 14px 16px;
 }
 
 header {
@@ -139,15 +140,102 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button.primary {
-  background: #1f6feb;
-  border-color: #1f6feb;
-  color: #fff;
+/* ===== マルチビュー入口のヒーローボタン ===== */
+/* 「ただのボタン」ではなく入口パネルとして見せる: グラデーション地 + 2×2 グリッドの
+   アイコン(各セルが配信のように順に明滅) + タイトル/説明の2段組。 */
+.hero-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #14305c 0%, #102347 55%, #2a1a55 100%);
+  border: 1px solid rgba(88, 166, 255, 0.5);
+  border-radius: 12px;
+  color: #f0f6fc;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(9, 30, 66, 0.5);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+/* 角の柔らかい光彩(押せる面の広さを演出。クリックは透過) */
+.hero-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(420px 130px at 15% -40%, rgba(88, 166, 255, 0.3), transparent 65%),
+    radial-gradient(380px 150px at 100% 140%, rgba(137, 87, 229, 0.28), transparent 65%);
+}
+.hero-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #17396e 0%, #132a56 55%, #321f66 100%);
+  border-color: #58a6ff;
+  box-shadow: 0 6px 26px rgba(31, 111, 235, 0.45);
+  transform: translateY(-1px);
+}
+.hero-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(31, 111, 235, 0.35);
+}
+.hero-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
 }
 
-button.primary:hover:not(:disabled) {
-  background: #388bfd;
-  border-color: #388bfd;
+.hero-icon {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  width: 48px;
+  height: 48px;
+  padding: 6px;
+  background: rgba(13, 17, 23, 0.6);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  border-radius: 10px;
+}
+.hero-icon span {
+  background: rgba(121, 192, 255, 0.85);
+  border-radius: 3px;
+  animation: hero-live 2.8s ease-in-out infinite;
+}
+.hero-icon span:nth-child(2) { animation-delay: 0.7s; }
+.hero-icon span:nth-child(3) { animation-delay: 1.4s; }
+.hero-icon span:nth-child(4) { animation-delay: 2.1s; }
+@keyframes hero-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero-title {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+}
+.hero-sub {
+  font-size: 11.5px;
+  color: #9db3d8;
+}
+.hero-arrow {
+  flex: 0 0 auto;
+  font-size: 20px;
+  color: #79c0ff;
+  transition: transform 0.15s ease;
+}
+.hero-btn:hover:not(:disabled) .hero-arrow {
+  transform: translateX(4px);
 }
 
 section {
@@ -167,6 +255,22 @@ section {
 .empty {
   color: #6e7681;
   font-style: italic;
+}
+
+/* 「保存中の配信」の見出し行: 見出し + クリアを横並びにして縦を詰める。 */
+.saved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+.saved-head h2 {
+  margin: 0;
+}
+#clear-saved {
+  font-size: 11px;
+  padding: 4px 10px;
 }
 
 /* ===== Probe 表示 ===== */
@@ -264,3 +368,4 @@ pre.json {
   background: #0c2d6b;
   color: #58a6ff;
 }
+

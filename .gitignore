@@ -9,3 +9,7 @@ _metadata/
 
 # 配布用にまとめた拡張機能パッケージ(都度生成できるビルド成果物なので追跡しない)。
 chrome-parallel-stream.zip
+
+# 動作確認のために置いた一時スクリーンショット(実機キャプチャ等)。ソースではないので追跡しない。
+image.png
+Screenshot_*.png
