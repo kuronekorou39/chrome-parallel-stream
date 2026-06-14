@@ -214,6 +214,11 @@
   };
   window.addEventListener('pointerdown', (e) => {
     if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (e.shiftKey) { // Shift+クリック = 親へ「この枠を複数選択にトグル」(サイトには通さない)
+      try { e.preventDefault(); } catch (_) { /* noop */ }
+      post('tile-shift-click');
+      return; // 長押し検知は始めない
+    }
     lpDown = { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY };
     lpDragging = false;
     clearTimeout(lpTimer);
@@ -249,9 +254,11 @@
   window.addEventListener('touchmove', (e) => {
     if (lpDragging && e.cancelable) e.preventDefault();
   }, { capture: true, passive: false });
-  window.addEventListener('contextmenu', (e) => { if (lpDragging) e.preventDefault(); }, true);
-  window.addEventListener('selectstart', (e) => { if (lpDragging) e.preventDefault(); }, true);
-  window.addEventListener('dragstart', (e) => { if (lpDragging) e.preventDefault(); }, true); // リンク/画像のD&D抑止
+  // 長押し待ち中(lpDown)から抑止する。成立(lpDragging)を待つと、待つ間のわずかな移動で先に
+  // 選択や選択メニューが始まってしまい、ドラッグ移動後も選択が残る。押している間は選択/メニュー/D&Dを止める。
+  window.addEventListener('contextmenu', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true);
+  window.addEventListener('selectstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true);
+  window.addEventListener('dragstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true); // リンク/画像のD&D抑止
   window.addEventListener('click', (e) => {
     if (Date.now() - lpEndedAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);

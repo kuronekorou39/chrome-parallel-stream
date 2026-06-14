@@ -24,17 +24,18 @@
   <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
   <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る">⛶ 全画面を終了</button>
 
-  <!-- スマホ(縦積み)用メインメニュー: バーの代わりに ≡ から出す縦リスト(右クリックメニュー風)。
-       項目は 追加・整列・一覧・広告・パフォーマンス の5つだけ(音量・並びはミキサー、軽量は各枠の
-       バッジで行うため載せない)。各項目は既存ツールバーボタンの機能をそのまま呼ぶ。
+  <!-- ≡ から出す縦リストメニュー(右クリックメニュー風。PC/スマホ共通)。
+       上の4つ(追加・配置・一覧・パフォーマンス)はパネル/ダイアログを開くもの、最下段の広告スキップだけは
+       その場で ON/OFF するトグルなので区切り線で分ける。各項目は既存ツールバーボタンの機能をそのまま呼ぶ。
+       アイコンは固定幅の .mm-icon 列に入れ、絵文字/＋の幅差でラベル開始位置がずれないように揃える。
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
-    <button id="mm-add" type="button">＋ 枠を追加</button>
-    <button id="mm-tile" type="button">⊞ 整列(積み直し)</button>
-    <button id="mm-mixer" type="button">🎚 枠一覧 / ミキサー</button>
-    <button id="mm-adskip" type="button">⏭ 広告スキップ: OFF</button>
-    <button id="mm-perf" type="button">📊 パフォーマンス</button>
+    <button id="mm-add" type="button"><span class="mm-icon">＋</span><span class="mm-label">追加</span></button>
+    <button id="mm-layout" type="button"><span class="mm-icon">📐</span><span class="mm-label">配置</span></button>
+    <button id="mm-mixer" type="button"><span class="mm-icon">🎚</span><span class="mm-label">一覧</span></button>
+    <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
+    <button id="mm-adskip" type="button"><span class="mm-icon">⏭</span><span class="mm-label">広告スキップ: OFF</span></button>
   </div>
 
   <div id="pos-dialog" class="pos-dialog-overlay">
@@ -52,19 +53,51 @@
   </div>
 
   <div id="add-dialog" class="pos-dialog-overlay">
-    <div class="pos-dialog" role="dialog" aria-label="枠を追加">
-      <div class="pos-dialog-title">枠を追加</div>
-      <div class="add-sites">
-        <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
-        <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
-        <button class="site-chip" data-site="kick" type="button" title="Kick を開く">Kick</button>
-        <button class="site-chip" data-site="openrec" type="button" title="OPENREC を開く">OPENREC</button>
+    <div class="pos-dialog pos-dialog-movable" role="dialog" aria-label="枠を追加">
+      <div class="pos-dialog-head">
+        <span class="pos-dialog-title">枠を追加</span>
+        <button id="add-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
       </div>
-      <div class="add-url-row">
-        <input type="text" id="add-url" class="tb-input" placeholder="配信ページの URL を貼り付け" />
-        <button id="add-btn" class="tb-btn">追加</button>
+      <div class="pos-dialog-body">
+        <div class="add-sites">
+          <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
+          <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
+        </div>
+        <div class="add-url-row">
+          <input type="text" id="add-url" class="tb-input" placeholder="配信ページの URL を貼り付け" />
+          <button id="add-btn" class="tb-btn">追加</button>
+        </div>
       </div>
-      <button id="add-dialog-close" class="pos-dialog-close" type="button">閉じる</button>
+    </div>
+  </div>
+
+  <!-- 📐 配置ダイアログ: 整列/整形の即実行と、現在の配置(URL・サイズ・位置・音量)を
+       名前付きで保存し、後から選んで戻すレイアウト履歴。≡メニューの「配置」から開く。 -->
+  <div id="layout-dialog" class="pos-dialog-overlay">
+    <div class="pos-dialog pos-dialog-movable" role="dialog" aria-label="配置">
+      <div class="pos-dialog-head">
+        <span class="pos-dialog-title">📐 配置</span>
+        <button id="layout-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
+      </div>
+      <div class="pos-dialog-body">
+        <div class="layout-actions">
+          <button id="layout-tile" class="layout-action" type="button" title="全部を均等に並べ直す">
+            <span class="layout-action-title">⊞ 整列</span>
+            <span class="layout-action-desc">均等に並べ直す</span>
+          </button>
+          <button id="layout-snap" class="layout-action" type="button" title="今の配置を保ったまま隙間をそろえる">
+            <span class="layout-action-title">✨ 整形</span>
+            <span class="layout-action-desc">今の配置のまま整える</span>
+          </button>
+        </div>
+        <div class="layout-sec">現在のレイアウトを保存</div>
+        <div class="layout-save-row">
+          <input type="text" id="layout-name" class="tb-input" placeholder="保存名(省略で日時)" />
+          <button id="layout-save" class="tb-btn tb-btn-primary" type="button">＋ 保存</button>
+        </div>
+        <div class="layout-sec">保存済み(タップでその配置に戻す)</div>
+        <div id="layout-list" class="layout-list"></div>
+      </div>
     </div>
   </div>
 

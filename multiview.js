@@ -5,10 +5,13 @@
 // postMessage で muted/volume を指示する。起動時は全ミュート、各窓の S(ソロ)で1つだけ鳴らす。
 
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
+const MULTIVIEW_LAYOUTS_KEY = 'multiviewLayouts';
+const MAX_LAYOUTS = 30;
 const AD_SKIP_KEY = 'adSkipEnabled'; // 広告スキップのオン/オフ。各枠の stream-control.js が storage で追従する。
 const MAX_WINDOWS = 20;
-const MIN_W = 420; // 枠の最小幅(これ未満には縮められない。台形のボタン列が収まる幅)
-const MIN_H = 220; // 枠の最小高さ(小さすぎると視聴の意味がないので下限を設ける)
+const MIN_W = 240; // 枠の最小幅(台形廃止で小さくできる。小さめの枠を並べられるように)
+const MIN_H = 135; // 枠の最小高さ(16:9 で 240×135。CSS の .win min-height と一致させること)
+const SNAP_GAP = 6; // 整形(グリッドスナップ)時の枠どうしの隙間
 const EDGE_KEEP = 100; // 枠/パネルがステージ外へはみ出しても、掴んで戻せるよう画面内に必ず残す可視量
 const TOP_OVERHANG = 30; // 上方向へのはみ出し上限。台形ヘッダ(高さ62px)の半分は掴めるよう残す
 const IDLE_CURSOR_MS = 3000; // この時間ポインタが動かないとカーソルを自動で消す(視聴の没入用)
@@ -41,6 +44,10 @@ const stageEmpty = document.getElementById('stage-empty');
 const countEl = document.getElementById('count');
 
 let zCounter = 10;
+// 浮動パネル(枠一覧/枠を追加/配置/パフォーマンス)の前面化カウンタ。掴む/フォーカスのたびに ++ して
+// その要素へ与え、パネルどうしの重なり順を「最後に触ったものが最前面」にする。90000台はコンテンツ(枠)より
+// 上・ツールバー/メニュー(100000台)より下の専用バンド(CSS の各パネル base z と一致させること)。
+let panelZ = 90000;
 let idSeq = 0;
 let activeWin = null;
 let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をまとめて設定する。
@@ -69,10 +76,24 @@ let stackMode = false;
     if (e.target === stage || e.target === stageEmpty) clearSelection();
   });
 
+  // 枠の⋮メニューを開いている時、メニュー外を pointerdown したら閉じる(外クリックで閉じる)。
+  // 同時に開くメニューは1つなので、開いている枠を探して閉じるだけ。⋮ボタン/メニュー項目は stopPropagation
+  // するのでここには伝わらない(=自分で開いた直後に閉じることはない)。
+  // ※ 枠内 iframe(動画)上のクリックは親 document へ届かないため、そちらは window blur 側で閉じる。
+  document.addEventListener('pointerdown', (e) => {
+    const openWin = wins.find((w) => w.el.classList.contains('menu-open'));
+    if (!openWin) return;
+    if (e.target.closest('.win-menu')) return; // メニュー内のクリックは閉じない
+    openWin.el.classList.remove('menu-open');
+  });
+
   // iframe(Twitch/YouTube/OpenRec の枠やKickチャット)内のクリックは親に伝わらないので、
   // 「iframe にフォーカスが移った=その枠がクリックされた」を window blur で検知して、
   // その枠を選択しヘッダを一時表示する(タッチでもヘッダを出せるように)。
   window.addEventListener('blur', () => {
+    // 枠内 iframe(動画)のクリック等でフォーカスが外れたら、開いている⋮メニューを閉じる(外クリック扱い)。
+    // メニューや項目はこの document 内の要素なので、メニュー操作で blur は起きない=誤って閉じない。
+    wins.forEach((w) => w.el.classList.remove('menu-open'));
     setTimeout(() => {
       const ae = document.activeElement;
       if (!ae || ae.tagName !== 'IFRAME') return;
@@ -90,34 +111,9 @@ let stackMode = false;
 
   // 新フォーマット(wins: 位置・サイズ付き)を優先して位置ごと復元。旧フォーマット(urls のみ)は
   // 初回だけ整列にフォールバック。以後は移動・リサイズのたびに保存されるので勝手に整列し直さない。
-  const deferred = []; // 表示するが中身は順次読み込む枠(更新時の同時読込を避ける)
+  let deferred = []; // 表示するが中身は順次読み込む枠(更新時の同時読込を避ける)
   if (Array.isArray(saved.wins) && saved.wins.length) {
-    saved.wins.slice(0, MAX_WINDOWS).forEach((it) => {
-      const url = (it.url || '').trim();
-      if (!url) return;
-      // 枠とレイアウトは即作るが、表示枠の中身(iframe/動画)は後で順次読み込む(deferLoad)。
-      // 隠していた枠は休止状態(未読込)のまま復元し、表示した時に初めて読み込む。
-      const win = createWindow(url, { silent: true, startHidden: !!it.hidden, light: !!it.light, deferLoad: !it.hidden });
-      if (win) {
-        if (Number.isFinite(it.vol)) setWinVol(win, it.vol); // 台形/⋮メニュー/ミキサーの全スライダーへ反映
-        if (it.tall === true || it.tall === false) win.tall = it.tall; // タイル高の手動指定を復元
-        if (it.span === 'half') win.span = 'half'; // タイル幅(50%)を復元
-        // 縮小率の手動指定だけ復元する。100 は「等倍を手動指定」だが、過去の既定100%データに
-        // 引きずられて全部100%になるのを避けるため無視し、幅に応じた既定(75%/50%)へ戻す。
-        if (Number.isFinite(it.zoom) && it.zoom >= 25 && it.zoom < 100) win.zoom = it.zoom; // 反映は読込時の mountSiteFrame
-        syncMenuLabels(win);
-        if (Number.isFinite(it.x)) {
-          if (stackMode) {
-            win.freeRect = { x: it.x, y: it.y, w: it.w, h: it.h }; // 自由配置へ戻った時のために保持
-          } else {
-            setRect(win, it.x, it.y, it.w, it.h);
-            if (it.max) toggleMax(win);
-          }
-        }
-        if (!it.hidden) deferred.push(win);
-      }
-    });
-    if (stackMode) relayoutStack();
+    deferred = restoreLineup(saved); // マスタ音量・各枠を復元し、表示すべき枠の配列を受け取る
   } else {
     const urls = (saved.urls || []).map((u) => (u || '').trim()).filter((u) => u.length > 0).slice(0, MAX_WINDOWS);
     urls.forEach((u) => createWindow(u, { silent: true }));
@@ -126,12 +122,8 @@ let stackMode = false;
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   updateCount();
 
-  // 表示枠を 1 枠ずつ間隔をあけて読み込む(同時読込による Twitch の 429 や、IVS/デコードの
-  // 初期化ピークでスマホが飽和して読込失敗するのを避ける)。各枠は読み込み中スピナーを出して待つ。
-  for (let i = 0; i < deferred.length; i++) {
-    if (i > 0) await sleep(RESTORE_STAGGER_MS);
-    loadWindowMedia(deferred[i]);
-  }
+  // 表示枠を 1 枠ずつ間隔をあけて読み込む(同時読込の 429/初期化ピーク回避)。各枠はスピナーを出して待つ。
+  await loadDeferred(deferred);
 })();
 
 // content script(stream-control.js)から「この枠が今開いている URL」を受け取り、
@@ -169,9 +161,10 @@ function onFrameAdState(e) {
 
 // 現在の配信ラインナップ(URL+位置・サイズ+最大化)とマスタ音量を storage に保存。
 // 専用ページを開き直すと、この内容で復元される(勝手に整列し直さない)。復元中は呼ばれても抑止。
-function saveLineup() {
-  if (restoring) return;
-  const items = wins.map((w) => {
+// 現在の全枠の状態(URL・位置・サイズ・音量・各種フラグ)を配列で取り出す。
+// 自動保存(saveLineup)と名前付きレイアウト保存(saveLayout)で共用する。
+function currentLineupItems() {
+  return wins.map((w) => {
     // 縦積みモード中はタイル座標ではなく、退避してある自由配置の座標を保存する。
     const r = stackMode && w.freeRect ? w.freeRect : (w.maximized && w.prevRect ? w.prevRect : getRect(w));
     return {
@@ -183,13 +176,183 @@ function saveLineup() {
       zoom: w.zoom // 枠内サイトの縮小率の手動指定(🔍。null=幅に応じた既定)
     };
   });
+}
+
+function saveLineup() {
+  if (restoring) return;
   try {
     chrome.storage.local.set({
-      [MULTIVIEW_ACTIVE_KEY]: { wins: items, masterVolume, timestamp: new Date().toISOString() }
+      [MULTIVIEW_ACTIVE_KEY]: { wins: currentLineupItems(), masterVolume, timestamp: new Date().toISOString() }
     });
   } catch (e) {
     /* noop */
   }
+}
+
+// 保存データ(saved = {wins, masterVolume})から枠を復元する。起動時の初回復元と、
+// レイアウト呼び出し(applyLayout)で共用。中身(iframe/動画)はまだ読まず、表示すべき
+// 枠の配列(deferred)を返すので、呼び出し側が loadDeferred で順次読み込む。
+function restoreLineup(saved) {
+  masterVolume = clampVol(saved.masterVolume);
+  syncMasterUI();
+  const deferred = [];
+  (saved.wins || []).slice(0, MAX_WINDOWS).forEach((it) => {
+    const url = (it.url || '').trim();
+    if (!url) return;
+    // 枠とレイアウトは即作るが、表示枠の中身は後で順次読む(deferLoad)。隠し枠は休止のまま。
+    const win = createWindow(url, { silent: true, startHidden: !!it.hidden, light: !!it.light, deferLoad: !it.hidden });
+    if (!win) return;
+    if (Number.isFinite(it.vol)) setWinVol(win, it.vol);
+    if (it.tall === true || it.tall === false) win.tall = it.tall;
+    if (it.span === 'half') win.span = 'half';
+    // 縮小率は手動指定(25〜99)のみ復元。100(等倍)は既定へ戻し、過去データに引きずられない。
+    if (Number.isFinite(it.zoom) && it.zoom >= 25 && it.zoom < 100) win.zoom = it.zoom;
+    syncMenuLabels(win);
+    if (Number.isFinite(it.x)) {
+      if (stackMode) {
+        win.freeRect = { x: it.x, y: it.y, w: it.w, h: it.h }; // 自由配置へ戻った時のために保持
+      } else {
+        setRect(win, it.x, it.y, it.w, it.h);
+        if (it.max) toggleMax(win);
+      }
+    }
+    if (!it.hidden) deferred.push(win);
+  });
+  if (stackMode) relayoutStack();
+  return deferred;
+}
+
+// deferLoad で待たせていた表示枠を、間隔をあけて 1 枠ずつ読み込む(同時読込の 429/初期化ピーク回避)。
+async function loadDeferred(deferred) {
+  for (let i = 0; i < deferred.length; i++) {
+    if (i > 0) await sleep(RESTORE_STAGGER_MS);
+    loadWindowMedia(deferred[i]);
+  }
+}
+
+// ====== レイアウト(配置プリセット)の保存・呼び出し ======
+// 現在の配置を名前付きで storage に複数保存し、後から選んでその配置へ戻せるようにする。
+// 自動保存(MULTIVIEW_ACTIVE_KEY)とは別キー(MULTIVIEW_LAYOUTS_KEY)で履歴を持つ。
+
+async function listLayouts() {
+  try {
+    const data = await chrome.storage.local.get(MULTIVIEW_LAYOUTS_KEY);
+    const arr = data[MULTIVIEW_LAYOUTS_KEY];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// ISO 文字列を「6/13 14:30」形式へ。一覧の日時表示と、無名保存時の既定名に使う。
+function fmtLayoutTime(iso) {
+  try {
+    const d = new Date(iso);
+    const p = (n) => String(n).padStart(2, '0');
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  } catch (e) {
+    return '';
+  }
+}
+
+// 現在の配置を名前付きで保存する。名前未指定なら日時を既定名にする。枠が無い時は保存しない。
+async function saveLayout(name) {
+  const items = currentLineupItems();
+  if (!items.length) return null;
+  const now = new Date();
+  const iso = now.toISOString();
+  const layout = { id: 'L' + now.getTime(), name: (name || '').trim() || fmtLayoutTime(iso), time: iso, wins: items, masterVolume };
+  const layouts = await listLayouts();
+  layouts.unshift(layout); // 新しいものを先頭に
+  try {
+    await chrome.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: layouts.slice(0, MAX_LAYOUTS) });
+  } catch (e) {
+    /* noop */
+  }
+  return layout;
+}
+
+async function deleteLayout(id) {
+  const layouts = await listLayouts();
+  const next = layouts.filter((l) => l.id !== id);
+  try {
+    await chrome.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: next });
+  } catch (e) {
+    /* noop */
+  }
+  return next;
+}
+
+// 保存済みレイアウトに戻す。今の枠を全部閉じてから、保存時の枠を作り直す。
+async function applyLayout(layout) {
+  if (!layout || !Array.isArray(layout.wins)) return;
+  restoring = true; // 復元中は自動保存を抑止(途中経過で上書きしないため)
+  [...wins].forEach((w) => closeWindow(w));
+  const deferred = restoreLineup(layout);
+  restoring = false;
+  updateCount();
+  saveLineup(); // 呼び出した配置を現在のラインナップとして確定保存
+  renderMixer();
+  await loadDeferred(deferred);
+}
+
+// 配置ダイアログ(#layout-dialog)の開閉と、保存済み一覧の描画。
+function openLayoutDialog() {
+  const dlg = document.getElementById('layout-dialog');
+  if (!dlg) return;
+  const name = document.getElementById('layout-name');
+  if (name) name.value = '';
+  const panel = dlg.querySelector('.pos-dialog');
+  centerPanel(panel);  // 開くたび中央へ(まず現在の内容で概算中央。ドラッグ後も中央から始める)
+  raisePanel(dlg);     // 開いたら最前面(z は overlay 側)
+  dlg.classList.add('open');
+  renderLayoutList().then(() => centerPanel(panel)); // 一覧の高さが確定してから中央を微調整
+}
+
+function closeLayoutDialog() {
+  const dlg = document.getElementById('layout-dialog');
+  if (dlg) dlg.classList.remove('open');
+}
+
+async function renderLayoutList() {
+  const list = document.getElementById('layout-list');
+  if (!list) return;
+  const layouts = await listLayouts();
+  list.textContent = '';
+  if (!layouts.length) {
+    const empty = document.createElement('div');
+    empty.className = 'layout-empty';
+    empty.textContent = '保存したレイアウトはまだありません。';
+    list.appendChild(empty);
+    return;
+  }
+  layouts.forEach((lo) => {
+    const item = document.createElement('div');
+    item.className = 'layout-item';
+    const main = document.createElement('button'); // 行クリックでこの配置に戻す
+    main.className = 'layout-item-main';
+    main.type = 'button';
+    main.title = 'この配置に戻す';
+    const nm = document.createElement('div');
+    nm.className = 'layout-item-name';
+    nm.textContent = lo.name || '(無名)';
+    const meta = document.createElement('div');
+    meta.className = 'layout-item-meta';
+    const n = Array.isArray(lo.wins) ? lo.wins.length : 0;
+    meta.textContent = n + '枠 · ' + fmtLayoutTime(lo.time);
+    main.appendChild(nm);
+    main.appendChild(meta);
+    main.addEventListener('click', async () => { await applyLayout(lo); }); // 復元してもダイアログは閉じない(× だけで閉じる)
+    const del = document.createElement('button');
+    del.className = 'layout-del';
+    del.type = 'button';
+    del.title = 'このレイアウトを削除';
+    del.textContent = '🗑';
+    del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteLayout(lo.id); renderLayoutList(); });
+    item.appendChild(main);
+    item.appendChild(del);
+    list.appendChild(item);
+  });
 }
 
 // ====== ウィンドウ生成 ======
@@ -329,8 +492,17 @@ function createWindow(url, opts = {}) {
   updateWinTitle(win);
   syncLightBtn(win);
 
-  const i = wins.length - 1;
-  const cas = { x: 40 + (i % 6) * 30, y: 40 + (i % 6) * 30, w: 520, h: 320 }; // 新規枠の初期配置(カスケード)
+  // 新規枠は中央付近からカスケード(少しずつ右下へずらして)出す。全部中央に重ねると見づらいため。
+  // (枠一覧/パフォーマンス等の機能パネルは中央に出す=別扱い。centerPanel)
+  const NEW_W = 520, NEW_H = 320;     // 新規枠の初期サイズ
+  const CAS_STEP = 34, CAS_SPAN = 6;  // 1枠ごとのずらし量 / 一巡する枠数(画面外へ伸び続けないように)
+  const ci = (wins.length - 1) % CAS_SPAN;                  // この枠のカスケード位置(0〜)
+  const cOff = Math.round((ci - (CAS_SPAN - 1) / 2) * CAS_STEP); // 中央を基準に左上↘右下へ均等にずらす
+  const cas = {
+    x: Math.max(0, Math.round((stage.clientWidth - NEW_W) / 2) + cOff),
+    y: Math.max(0, Math.round((stage.clientHeight - NEW_H) / 2) + cOff),
+    w: NEW_W, h: NEW_H
+  };
   if (stackMode) {
     win.freeRect = cas; // 自由配置に戻った時の初期位置として保持
     relayoutStack();
@@ -340,9 +512,18 @@ function createWindow(url, opts = {}) {
 
   el.appendChild(buildAdjustPanel(win));
 
-  el.addEventListener('pointerdown', () => { focusWindow(win); revealHeader(win); });
-  // 縦積み: タイル長押しで浮かせてドラッグ並び替え(通常枠=シールド上 / Kick=映像上で効く)。
-  el.addEventListener('pointerdown', (e) => maybeStartLongPress(win, e));
+  el.addEventListener('pointerdown', (e) => {
+    if (e.shiftKey && e.button === 0) { // Shift+クリック=この枠を複数選択にトグル(移動/フォーカスしない)
+      e.preventDefault();
+      toggleMultiSelect(win);
+      revealHeader(win);
+      return;
+    }
+    focusWindow(win);
+    revealHeader(win);
+  });
+  // 長押しで浮かせてドラッグ(縦積み=並び替え / 自由配置=移動)。Shift+クリックは選択なので除外。
+  el.addEventListener('pointerdown', (e) => { if (!(e.shiftKey && e.button === 0)) maybeStartLongPress(win, e); });
   // 長押しで Android のコンテキストメニュー(画像保存等)が誤爆しないように(縦積み中のみ)。
   el.addEventListener('contextmenu', (e) => { if (stackMode) e.preventDefault(); });
   makeBarHandle(win, bar);
@@ -659,9 +840,21 @@ const LONG_PRESS_SLOP = 10; // これ以上動いたら長押しではなくス�
 const DRAG_SCROLL_ZONE = 60; // 画面上下端の自動スクロール開始ゾーン
 const DRAG_SCROLL_MAX = 16; // 自動スクロールの最大速度(px/フレーム)
 let stackDrag = null; // 進行中のドラッグ状態(同時に1つ)
+const STUCK_DRAG_MS = 8000; // これより古い stackDrag は終了処理の取りこぼし(残骸)とみなして畳む
+
+// 終了処理を取りこぼして残った stackDrag を畳む保険。残ると以後どの枠も掴めなくなるため、
+// 新たに掴むたびに呼び、一定時間より古い残骸なら強制終了する。掴み直してよければ true を返す。
+// (全画面化や iframe 再読込で pointerup / tile-drag-end を受け損ねると残骸になる)
+function reapStuckDrag() {
+  if (!stackDrag) return true;
+  if (Date.now() - (stackDrag.t0 || 0) < STUCK_DRAG_MS) return false; // まだ進行中らしい
+  if (stackDrag.pid != null) endStackDrag(); else finishStackDrag(); // ローカル/リモートで畳み方を分ける
+  return !stackDrag;
+}
 
 function maybeStartLongPress(win, e) {
-  if (stackDrag || !e.isPrimary || e.button !== 0) return;
+  if (!e.isPrimary || e.button !== 0) return;
+  if (!reapStuckDrag()) return; // 進行中ドラッグがあれば新規は掴ませない(古い残骸なら畳んで継続)
   if (win.el.classList.contains('stack-max')) return;
   if (e.target.closest('.win-quick, .win-menu, .win-badge, .win-adjust, .win-bar, .win-edge, button, input')) return;
   const pid = e.pointerId;
@@ -691,12 +884,21 @@ function maybeStartLongPress(win, e) {
 // ドラッグ状態の生成と「浮かせる」見た目の適用(ローカル=親ポインタ / リモート=frame内中継 共通)。
 // mode: 'stack'=縦積みの並び替え / 'free'=自由配置の任意位置移動。レイアウト(stackMode)で決まる。
 function startStackDragState(win, clientX, clientY) {
-  if (stackDrag || win.el.classList.contains('stack-max')) return false;
+  if (win.el.classList.contains('stack-max')) return false;
+  if (!reapStuckDrag()) return false; // 残骸なら畳んでから掴む(frame 中継ドラッグ経路の保険)
   focusWindow(win); // 浮いてる間は最前面に
   revealHeader(win);
   win.el.classList.remove('menu-open');
   win.el.classList.add('dragging');
   const mode = stackMode ? 'stack' : 'free';
+  // 自由配置: 掴んだ枠が複数選択に含まれていれば、選択枠をまとめて移動。含まなければ選択解除して単独移動。
+  const groupMove = mode === 'free' && selectedWins.has(win) && selectedWins.size > 1;
+  if (mode === 'free' && !groupMove) clearMultiSelect();
+  const group = (groupMove ? [...selectedWins] : [win]).map((w) => {
+    const rr = getRect(w);
+    w.el.classList.add('dragging');
+    return { w, sl: w.el.offsetLeft, st: w.el.offsetTop, gw: rr.w, gh: rr.h };
+  });
   if (mode === 'stack') document.body.classList.add('reordering'); // 他タイルが席を空けるアニメ(縦積みのみ)
   // マウスのネイティブな選択・ドラッグ&ドロップ(リンク/画像/テキスト)を抑止する。これをしないと
   // 移動中に dragstart が起きてポインタ捕捉が外れ、「リンクを掴んだ」状態で離れてしまう。
@@ -708,13 +910,13 @@ function startStackDragState(win, clientX, clientY) {
   }
   const r = getRect(win);
   stackDrag = {
-    win, mode,
+    win, mode, group,
+    t0: Date.now(), // 開始時刻。終了処理を取りこぼした古い残骸の検出(reapStuckDrag)に使う
     pid: null, // ローカルドラッグのときだけ設定
     remoteSrc: null, remoteSX: 0, remoteSY: 0, // リモートドラッグ(frame内中継)のときだけ設定
     startX: clientX, startY: clientY,
     lastX: clientX, lastY: clientY,
     startLeft: win.el.offsetLeft, startTop: win.el.offsetTop,
-    startW: r.w, startH: r.h, // free: 移動中はサイズ維持
     startScroll: stage.scrollTop,
     lastReorder: 0,
     raf: null, autoV: 0
@@ -722,11 +924,12 @@ function startStackDragState(win, clientX, clientY) {
   return true;
 }
 
-// ドラッグの移動処理。free=指の位置へ枠ごと移動(任意位置) / stack=浮かせて並び替え。
+// ドラッグの移動処理。free=指の位置へ枠(選択していれば全部)を移動 / stack=浮かせて並び替え。
 function applyDragMove() {
   const d = stackDrag;
   if (d.mode === 'free') {
-    setRect(d.win, d.startLeft + (d.lastX - d.startX), d.startTop + (d.lastY - d.startY), d.startW, d.startH);
+    const dx = d.lastX - d.startX, dy = d.lastY - d.startY;
+    d.group.forEach((g) => setRect(g.w, g.sl + dx, g.st + dy, g.gw, g.gh));
   } else {
     updateDragPos();
     updateAutoScroll();
@@ -775,6 +978,12 @@ function onTileDragMsg(e) {
     const s = stackDrag;
     if (!s || !s.remoteSrc || s.remoteSrc !== e.source) return;
     finishStackDrag();
+  } else if (d.type === 'tile-shift-click') {
+    // frame 上での Shift+クリック → その枠を複数選択にトグル。
+    const win = wins.find((w) =>
+      (w.frame && w.frame.contentWindow === e.source) ||
+      (w.chatFrame && w.chatFrame.contentWindow === e.source));
+    if (win) { toggleMultiSelect(win); revealHeader(win); }
   }
 }
 
@@ -879,7 +1088,7 @@ function finishStackDrag() {
   document.removeEventListener('dragstart', blockNativeDrag, true);
   document.removeEventListener('selectstart', blockNativeDrag, true);
   if (d.raf) cancelAnimationFrame(d.raf);
-  d.win.el.classList.remove('dragging');
+  (d.group || [{ w: d.win }]).forEach((g) => g.w.el.classList.remove('dragging')); // まとめ移動の全枠
   if (d.mode === 'stack') {
     relayoutStack(); // reordering のアニメが残っている間に席へ滑り込む
     setTimeout(() => document.body.classList.remove('reordering'), 200);
@@ -982,10 +1191,11 @@ function toggleAdjust(win) {
 function buildQuickControls(win) {
   const quick = document.createElement('div');
   quick.className = 'win-quick';
-  // 並び替えはタイルの長押しドラッグで行うので、つまむ用ボタンは置かない([⋮][✕]の2つだけ)。
+  // 並び替えはタイルの長押しドラッグで行うので、つまむ用ボタンは置かない([✕][⋮]の2つだけ)。
   const menuBtn = mkBtn('⋮', '', 'この枠のメニュー');
   const closeBtn = mkBtn('✕', 'q-close', '閉じる');
-  quick.append(menuBtn, closeBtn);
+  // ✕ を上・⋮ を下に並べる。縦並び時、⋮メニューは下へ開くので、✕が下だとメニューに隠れて押せなくなるため。
+  quick.append(closeBtn, menuBtn);
 
   const menu = document.createElement('div');
   menu.className = 'win-menu';
@@ -1052,9 +1262,17 @@ function buildQuickControls(win) {
     e.preventDefault();
     e.stopPropagation();
     const willOpen = !win.el.classList.contains('menu-open');
-    win.el.classList.toggle('menu-open');
+    // ⋮メニューは同時に1つだけ。開く前に全枠(自分含む)の menu-open を外す。
+    // (🎨パネルの toggleAdjust と同じ方針。別の枠で開きっぱなしの2枚目ができるのを防ぐ)
+    wins.forEach((w) => w.el.classList.remove('menu-open'));
     revealHeader(win); // メニュー操作中は隠さない
-    if (willOpen) positionWinMenu(menuBtn, menu); // 画面外へはみ出さないよう配置
+    if (willOpen) {
+      // この枠を最前面へ。⋮メニューは枠のスタッキング文脈内にあるため、枠が最前面でないと
+      // メニュー(z:100001)も枠ごと他の動画枠の下に沈む。前面化で常に他枠より上に出す。
+      focusWindow(win);
+      win.el.classList.add('menu-open');
+      positionWinMenu(menuBtn, menu); // 画面外へはみ出さないよう配置
+    }
   });
   // ✕ は誤爆で枠が消えると困るので click のまま(押した本人の click が確実に閉じる)。
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
@@ -1225,11 +1443,23 @@ function revealHeader(win) {
   win.barTimer = setTimeout(() => win.el.classList.remove('show-bar'), BAR_HIDE_MS);
 }
 
-// 選択(アクティブ枠・ヘッダ表示・⋮メニュー)をすべて解除する。
+// 選択(アクティブ枠・ヘッダ表示・⋮メニュー・複数選択)をすべて解除する。
 function clearSelection() {
   if (activeWin) activeWin.el.classList.remove('active');
   activeWin = null;
   wins.forEach((w) => { w.el.classList.remove('show-bar', 'adjust-open', 'menu-open'); clearTimeout(w.barTimer); });
+  clearMultiSelect();
+}
+
+// ====== 複数選択(Shift+クリックでまとめて移動・整形) ======
+const selectedWins = new Set();
+function toggleMultiSelect(win) {
+  if (selectedWins.has(win)) { selectedWins.delete(win); win.el.classList.remove('selected'); }
+  else { selectedWins.add(win); win.el.classList.add('selected'); }
+}
+function clearMultiSelect() {
+  selectedWins.forEach((w) => w.el.classList.remove('selected'));
+  selectedWins.clear();
 }
 
 // 台形ハンドル: つまむ位置で挙動を分ける(RDP風)。
@@ -1326,6 +1556,29 @@ function toggleMax(win) {
     focusWindow(win);
   }
   saveLineup(); // 最大化/復元の状態を保存(復元中は抑止)
+}
+
+// 整形: 今の配置・大きさを「だいたい保ったまま」、共通グリッドに四辺をスナップして隙間を均一に揃える。
+// グリッドのセルは枠の最小サイズ(MIN_W/MIN_H)以上にとるので、小さい枠もきっちり並ぶ。
+// 対象は選択枠があればそれだけ、無ければ全表示枠。自由配置モード専用(縦積みは自動レイアウト)。
+function snapLayout() {
+  if (stackMode) return;
+  let list = [...selectedWins].filter((w) => !w.hidden);
+  if (list.length < 2) list = wins.filter((w) => !w.hidden && !w.el.classList.contains('stack-max'));
+  if (!list.length) return;
+  const W = stage.clientWidth, H = stage.clientHeight, gap = SNAP_GAP;
+  const cols = Math.max(1, Math.round(W / (MIN_W + gap)));
+  const rows = Math.max(1, Math.round(H / (MIN_H + gap)));
+  const cellW = W / cols, cellH = H / rows;
+  list.forEach((win) => {
+    const r = getRect(win);
+    const gw = Math.max(1, Math.min(cols, Math.round((r.w + gap) / cellW)));
+    const gh = Math.max(1, Math.min(rows, Math.round((r.h + gap) / cellH)));
+    const gx = Math.max(0, Math.min(cols - gw, Math.round(r.x / cellW)));
+    const gy = Math.max(0, Math.min(rows - gh, Math.round(r.y / cellH)));
+    setRect(win, gx * cellW + gap / 2, gy * cellH + gap / 2, gw * cellW - gap, gh * cellH - gap);
+  });
+  saveLineup();
 }
 
 // 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。
@@ -1508,6 +1761,7 @@ function openOriginal(win) {
 function closeWindow(win) {
   clearStackMax(win); // 全画面のまま閉じても body の状態を残さない
   hideWinLoading(win); // 読み込み待ち中に閉じてもスピナー/保険タイマーを残さない
+  selectedWins.delete(win); // 複数選択に残さない
   const i = wins.indexOf(win);
   if (i >= 0) wins.splice(i, 1);
   if (win.video && win.video._hls) {
@@ -1519,6 +1773,7 @@ function closeWindow(win) {
     // アクティブ窓を閉じたら、残っている最前面寄りの窓へフォーカスを引き継ぐ。
     if (wins.length) focusWindow(wins[wins.length - 1]);
   }
+  if (stackMode) relayoutStack(); // 縦積みでは閉じた直後に残りのタイルを詰め直す(hideWindow と同じ。隙間を残さない)
   updateCount();
   saveLineup();
   renderMixer();
@@ -1562,7 +1817,8 @@ function syncMasterUI() {
 // マスタを動かすと全枠が同倍率で増減 → 枠ごとの大小関係(win.vol の比)は保たれる。
 // 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
 function applyVolume(win, v) {
-  const eff = win.hidden ? 0 : Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
+  // 非表示でも音は止めない(👁は見た目を消すだけ)。実音量 = 枠ごと音量 × マスタ。
+  const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
   if (win.video) {
     try {
       win.video.volume = eff;
@@ -1590,13 +1846,12 @@ function syncVolUI(win) {
   if (row) row.value = v;
 }
 
-// 枠を「隠す=休止 / 表示=再開」。隠しても位置・サイズ・URLは保持するが、メディアは完全に
-// 読み込みを止める(display:none でも再生・通信は続いてしまい、特にスマホで重いため)。
+// 枠を「隠す/表示する」。見た目を消すだけで、再生も音も止めない(再マウントもしない)。
+// 位置・サイズ・URLは保持。起動時に未読込で復元された枠だけ、初回表示時に resumeMedia で読み込む。
 function hideWindow(win) {
   clearStackMax(win);
   win.hidden = true;
-  win.el.style.display = 'none';
-  suspendMedia(win);
+  win.el.style.display = 'none'; // メディアはそのまま(再生・音・通信を継続)
   if (stackMode) relayoutStack(); // 空いた分を詰める
   renderMixer();
   saveLineup();
@@ -1604,7 +1859,7 @@ function hideWindow(win) {
 function showWindow(win) {
   win.hidden = false;
   win.el.style.display = '';
-  resumeMedia(win);
+  resumeMedia(win); // 未読込(起動時の休止枠)なら読み込む。読込済みなら何もしない=再読み込みされない
   applyVolume(win, masterVolume);
   focusWindow(win); // 出したら最前面へ
   if (stackMode) {
@@ -1711,11 +1966,27 @@ function renderMixer() {
     const top = document.createElement('div');
     top.className = 'mixer-row-top';
 
+    // サイトの色付きアイコン(T/Y/K/O)。どのサイトの枠か一目で分かるように。
+    const site = siteOf(win.url);
+    const siteIcon = document.createElement('span');
+    siteIcon.className = 'mixer-row-site';
+    siteIcon.textContent = site.letter;
+    siteIcon.style.background = site.color;
+    siteIcon.title = site.name;
+
     const label = document.createElement('button');
     label.type = 'button';
     label.className = 'mixer-row-label';
-    label.textContent = winLabel(win); // 軽量プレイヤー中は ⚡ 付き
-    label.title = 'クリックで最前面に表示';
+    // サイト部分は薄く、チャンネル名/動画IDを白太字で強調(どの配信か分かりやすく)。
+    const parts = channelParts(win.url);
+    const siteSpan = document.createElement('span');
+    siteSpan.className = 'mx-site';
+    siteSpan.textContent = (win.light ? '⚡ ' : '') + parts.site;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'mx-name';
+    nameSpan.textContent = parts.name || parts.site;
+    label.append(siteSpan, nameSpan);
+    label.title = winLabel(win) + ' — クリックで最前面+その枠を光らせる';
     label.addEventListener('click', () => {
       if (win.hidden) {
         showWindow(win);
@@ -1723,15 +1994,16 @@ function renderMixer() {
         focusWindow(win);
         if (stackMode) win.el.scrollIntoView({ block: 'nearest' }); // タイルの位置まで送る
       }
+      pulseWindow(win); // どの枠かパルスで知らせる
     });
 
     const eye = document.createElement('button');
     eye.type = 'button';
     eye.className = 'mixer-row-eye';
     eye.textContent = win.hidden ? '🙈' : '👁';
-    eye.title = win.hidden ? '再開する(読み込み直す)' : '休止する(読み込みを止める。位置・サイズ・URLは保持)';
+    eye.title = win.hidden ? '表示する' : '表示を消す(音・再生は続いたまま。位置・サイズは保持)';
     eye.addEventListener('click', () => toggleHidden(win));
-    top.append(label, eye);
+    top.append(siteIcon, label, eye);
 
     const bot = document.createElement('div');
     bot.className = 'mixer-row-bot';
@@ -1756,10 +2028,11 @@ function renderMixer() {
 function setupMixer() {
   const panel = document.getElementById('mixer-panel');
   makePanelDraggable(panel, panel.querySelector('.mixer-head'));
+  wirePanelRaise(panel); // 掴む/フォーカスで最前面へ
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('mixer-btn').addEventListener('click', () => {
     panel.hidden = !panel.hidden;
-    if (!panel.hidden) { syncMasterUI(); renderMixer(); }
+    if (!panel.hidden) { raisePanel(panel); centerPanel(panel); syncMasterUI(); renderMixer(); } // 開いたら最前面+中央
   });
   const mm = document.getElementById('mixer-master');
   mm.addEventListener('input', () => { setMasterVolume(Number(mm.value) / 100); syncMasterUI(); });
@@ -1767,6 +2040,36 @@ function setupMixer() {
 }
 
 // 汎用: ハンドルをつかんで要素を移動(ステージ内にクランプ)。ミキサーパネル用。
+// 浮動パネルを最前面へ持ち上げる(パネルどうしの重なり順だけを変える。コンテンツ枠やメニューの帯は別バンド)。
+// zEl = z-index を持つ最上位要素(ミキサー/perf はパネル本体、ダイアログは overlay)。
+function raisePanel(zEl) {
+  if (zEl) zEl.style.zIndex = ++panelZ;
+}
+
+// パネルを「掴む/フォーカス(=どこかを pointerdown)したら最前面」にする配線。
+// hitEl = 当たり判定を取る要素(操作する見える本体)、zEl = 実際に z を上げる要素(省略時は hitEl)。
+// capture:true で、ドラッグ開始やボタン押下より先に確実に前面化する。
+function wirePanelRaise(hitEl, zEl) {
+  if (!hitEl) return;
+  hitEl.addEventListener('pointerdown', () => raisePanel(zEl || hitEl), true);
+}
+
+// 浮動パネル/ダイアログ(枠を追加・配置・枠一覧・パフォーマンス)を、開く直前に画面中央へ置き直す。
+// 基準は offsetParent の内寸: position:absolute は最も近い配置済み祖先(ダイアログはオーバーレイ=全面、
+// ミキサーはステージ等)、position:fixed は offsetParent が null になるのでビューポートを使う。
+// 要素が表示状態(display!=none)でないと offsetWidth が測れないので、表示にしてから呼ぶこと。
+// 毎回中央へ戻すので前回ドラッグ位置は引き継がない(機能パネルは常に中央から出すのが分かりやすい)。
+function centerPanel(el) {
+  if (!el) return;
+  el.style.right = 'auto';   // bottom/right が残っていると left/top と競合するので解除してから中央寄せ
+  el.style.bottom = 'auto';
+  const p = el.offsetParent; // fixed 要素は null → ビューポート基準
+  const cw = p ? p.clientWidth : window.innerWidth;
+  const ch = p ? p.clientHeight : window.innerHeight;
+  el.style.left = Math.max(0, Math.round((cw - el.offsetWidth) / 2)) + 'px';
+  el.style.top = Math.max(0, Math.round((ch - el.offsetHeight) / 2)) + 'px';
+}
+
 function makePanelDraggable(el, handle) {
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !e.isPrimary) return;
@@ -1843,30 +2146,38 @@ function wireToolbar() {
 
   // 「＋追加」→ 追加ダイアログ(サイトボタン / URL入力)。ツールバーをすっきりさせるため別モーダルに。
   const addDialog = document.getElementById('add-dialog');
+  const addPanel = addDialog.querySelector('.pos-dialog');
   const closeAdd = () => addDialog.classList.remove('open');
-  const openAdd = (e) => { e.stopPropagation(); addDialog.classList.add('open'); };
+  // 開くたび中央へ置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば中央から始まる)。
+  const openAdd = (e) => { e.stopPropagation(); centerPanel(addPanel); raisePanel(addDialog); addDialog.classList.add('open'); };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
   document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
-  addDialog.addEventListener('click', (e) => { if (e.target === addDialog) closeAdd(); }); // 外側クリックで閉じる
+  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので
+  // 出しっぱなしで連続追加でき、下のステージ操作もできる(オーバーレイは CSS で pointer-events:none)。
+  // ヘッダ帯を掴んでドラッグ移動(配置ダイアログ/枠一覧と同じ仕組み)。掴む/フォーカスで最前面へ。
+  if (addPanel) {
+    makePanelDraggable(addPanel, addPanel.querySelector('.pos-dialog-head'));
+    wirePanelRaise(addPanel, addDialog); // z は overlay(#add-dialog)側で上げる
+  }
 
   const addUrl = document.getElementById('add-url');
   const doAdd = () => {
     const u = addUrl.value.trim();
     if (!u || wins.length >= MAX_WINDOWS) return;
     createWindow(u);
-    addUrl.value = '';
-    closeAdd();
+    addUrl.value = ''; // URL欄だけクリア。ダイアログは開いたまま=続けて貼り付けて追加できる。
   };
   document.getElementById('add-btn').addEventListener('click', doAdd);
   addUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
 
-  // ダイアログ内: 主要サイトのワンクリック追加(追加したらダイアログを閉じる)。
+  setupLayoutDialog(); // 配置ダイアログ(📐): 整列・整形・保存・呼び出しの配線
+
+  // ダイアログ内: 主要サイトのワンクリック追加(閉じないので、続けて何枠でも追加できる)。
   document.querySelectorAll('.site-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
       const site = SITES[btn.dataset.site];
       if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
-      closeAdd();
     });
   });
 
@@ -1898,7 +2209,8 @@ function toggleMainMenu(force) {
 function syncMainMenu() {
   const adOn = document.getElementById('adskip-btn').classList.contains('adskip-on');
   const ad = document.getElementById('mm-adskip');
-  ad.textContent = adOn ? '⏭ 広告スキップ: ON' : '⏭ 広告スキップ: OFF';
+  const label = ad.querySelector('.mm-label'); // アイコン(.mm-icon)は残し、ラベルだけ ON/OFF 更新
+  if (label) label.textContent = adOn ? '広告スキップ: ON' : '広告スキップ: OFF';
   ad.classList.toggle('on', adOn);
 }
 
@@ -1907,16 +2219,20 @@ function setupMainMenu() {
   // ブラウザが click を「いま指の下の要素=下のタイルの iframe」へ振り直してしまうため
   // (preventDefault で後続の click 合成自体も止める)。
   const mkAct = (id, fn) => {
-    document.getElementById(id).addEventListener('pointerdown', (e) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
       fn();
     });
   };
-  const act = (id, fn) => mkAct(id, () => { toggleMainMenu(false); fn(); });
+  // 項目をクリックしてもメニューは閉じず出しっぱなしにする(連続で複数のパネルを開ける)。
+  // 閉じるのは「メニュー外(backdrop)のクリック」だけ(下の main-menu-backdrop 配線)。
+  const act = (id, fn) => mkAct(id, fn);
   act('mm-add', () => document.getElementById('add-open-btn').click());
-  act('mm-tile', tileAll);
+  act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   act('mm-perf', () => document.getElementById('perf-btn').click());
   // 広告スキップはトグルなので閉じずに、その場で ON/OFF 表示を更新する。
@@ -1932,10 +2248,40 @@ function setupMainMenu() {
   });
 }
 
-// ポインタが一定時間動かなかったら、まずカーソルを消し(IDLE_CURSOR_MS)、さらに操作が無ければ
-// ツールバーも隠す(TOOLBAR_HIDE_MS。すぐ消えると使いづらいのでメニューは長めに残す)。
-// 復帰は ≡メニュー(#toolbar-show)から。マウスを動かした時はカーソルだけ戻し、ツールバーは出さない
-// (= 明示的にボタンを押した時だけ出す)。タッチ(pointer)でも同様に働く。
+// 配置ダイアログ(📐 配置)の配線。整列・整形は即実行して閉じ、保存は一覧へ反映する。
+function setupLayoutDialog() {
+  const dlg = document.getElementById('layout-dialog');
+  if (!dlg) return;
+  // 整列/整形を実行してもダイアログは閉じない(× だけで閉じる)。実行後すぐ別の操作・微調整ができる。
+  const tile = document.getElementById('layout-tile');
+  if (tile) tile.addEventListener('click', () => tileAll());
+  const snap = document.getElementById('layout-snap');
+  if (snap) snap.addEventListener('click', () => snapLayout());
+  const nameInput = document.getElementById('layout-name');
+  const save = document.getElementById('layout-save');
+  const doSave = async () => {
+    await saveLayout(nameInput ? nameInput.value : '');
+    if (nameInput) nameInput.value = '';
+    renderLayoutList();
+  };
+  if (save) save.addEventListener('click', doSave);
+  if (nameInput) nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
+  const close = document.getElementById('layout-dialog-close');
+  if (close) close.addEventListener('click', closeLayoutDialog);
+  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動。枠外クリックでは閉じない)。
+  // ヘッダ帯を掴んでドラッグ移動(枠一覧/パフォーマンスと同じ makePanelDraggable)。掴む/フォーカスで最前面へ。
+  const panel = dlg.querySelector('.pos-dialog');
+  if (panel) {
+    makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+    wirePanelRaise(panel, dlg); // z は overlay(#layout-dialog)側で上げる
+  }
+}
+
+// ポインタが一定時間動かなかったら、まずカーソル+常駐UI(≡メニュー/⛶全画面を終了)を消し(IDLE_CURSOR_MS)、
+// さらに操作が無ければツールバー本体も畳む(TOOLBAR_HIDE_MS。すぐ消えると使いづらいので長めに残す)。
+// 「カーソルと一緒に ≡ も消す」は body.idle に相乗りした CSS が担当(multiview.css の body.idle ルール)。
+// マウス/指を動かすと arm() が即 body.idle を外し、カーソルと ≡/全画面終了ボタンが戻る(= 動かしている間は表示)。
+// 一方ツールバー本体(toolbar-hidden)は時間で畳んだら、戻すのは ≡ を押した時だけ(勝手に出さない)。
 function setupIdleHide() {
   const toolbar = document.getElementById('toolbar');
   let cursorTimer = null;
@@ -2004,6 +2350,7 @@ function setupPerfPanel() {
   const btn = document.getElementById('perf-btn');
   // ヘッダをつかんで移動できるようにする(ミキサーと同じ仕組み。閉じる✕の上では動かない)。
   makePanelDraggable(panel, panel.querySelector('.perf-head'));
+  wirePanelRaise(panel); // 掴む/フォーカスで最前面へ
 
   const hist = { fps: [], cpu: [], mem: [], heap: [] };
   const ui = {};
@@ -2103,7 +2450,7 @@ function setupPerfPanel() {
   };
   const toggle = () => {
     if (panel.hasAttribute('hidden')) {
-      panel.removeAttribute('hidden'); btn.classList.add('on-blue'); start();
+      panel.removeAttribute('hidden'); btn.classList.add('on-blue'); raisePanel(panel); centerPanel(panel); start(); // 開いたら最前面+中央
     } else {
       panel.setAttribute('hidden', ''); btn.classList.remove('on-blue'); stop();
     }
@@ -2181,6 +2528,52 @@ function labelFor(url) {
 // 枠の表示名(軽量プレイヤー中は ⚡ を付けて区別)。台形ヘッダとミキサーの両方で使う。
 function winLabel(win) {
   return (win.light ? '⚡ ' : '') + labelFor(win.url);
+}
+
+// URL を「サイト部分」と「チャンネル名/識別子」に分ける。一覧でその部分を強調するため。
+//  例: twitch.tv/jun_channel → { site:'twitch.tv/', name:'jun_channel' }
+//      youtube.com/watch?v=ABcd → { site:'youtube.com/', name:'ABcd' }(watch だけにせず動画IDを出す)
+function channelParts(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, '');
+    const segs = u.pathname.split('/').filter(Boolean);
+    let name = '';
+    if (host.includes('youtube') || host === 'youtu.be') {
+      if (host === 'youtu.be') name = segs[0] || '';
+      else if (segs[0] === 'watch') name = u.searchParams.get('v') || 'watch';
+      else if (['live', 'shorts', 'embed'].includes(segs[0])) name = segs[1] || segs[0];
+      else name = segs[0] || '';
+    } else if (host.includes('openrec')) {
+      name = segs[segs.length - 1] || '';
+    } else if (host.startsWith('player.twitch')) {
+      name = u.searchParams.get('channel') || u.searchParams.get('video') || '';
+    } else {
+      name = segs[0] || ''; // twitch / kick: 最初のセグメント = チャンネル名
+    }
+    return { site: host + (name ? '/' : ''), name };
+  } catch (e) {
+    return { site: '', name: url };
+  }
+}
+
+// URL からサイトを判定し、一覧用の色・頭文字・名前を返す。
+function siteOf(url) {
+  const h = hostOf(url);
+  if (h.includes('twitch')) return { letter: 'T', color: '#9147ff', name: 'Twitch' };
+  if (h.includes('youtube') || h === 'youtu.be') return { letter: 'Y', color: '#ff0033', name: 'YouTube' };
+  if (h.includes('kick')) return { letter: 'K', color: '#53fc18', name: 'Kick' };
+  if (h.includes('openrec')) return { letter: 'O', color: '#ffd200', name: 'OPENREC' };
+  return { letter: '•', color: '#6e7681', name: h || 'その他' };
+}
+
+// 枠を一時的にパルス(光る枠)で強調する。ミキサーで項目をクリックした時に「これがその枠」を示す。
+function pulseWindow(win) {
+  win.el.classList.remove('pulse');
+  void win.el.offsetWidth; // 連続クリックでアニメを頭から再生させるため reflow
+  win.el.classList.add('pulse');
+  clearTimeout(win.pulseTimer);
+  win.pulseTimer = setTimeout(() => win.el.classList.remove('pulse'), 1300);
 }
 
 function updateWinTitle(win) {
