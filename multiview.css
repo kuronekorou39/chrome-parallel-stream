@@ -368,6 +368,17 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
+/* コメント弾幕の層: 映像の上(z:2)・スピナー(z:3)や操作UI(z:6-8)の下。ポインタは透過。
+   filter は iframe にだけ当たるので、別要素のこの層は色変換を受けない。 */
+.win-danmaku { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.win-danmaku .dmk {
+  position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform;
+  color: #fff; font-weight: bold; /* font-size / line-height / color は spawnDanmaku が設定値から個別に付与 */
+  text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000;
+}
+/* チャットの絵文字/スタンプ画像(Twitch emote / YouTube カスタム絵文字)。高さは spawnDanmaku が行に合わせて付与。 */
+.win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
+
 /* パネル(📊/🎚)をドラッグ/リサイズしている間は、全 iframe を無反応にする。クロスオリジン
    iframe の上をポインタが通ると掴みが奪われる(「下に枠があると持てない」)のを物理的に防ぐ。 */
 body.panel-dragging iframe { pointer-events: none; }
@@ -547,6 +558,37 @@ body.panel-dragging iframe { pointer-events: none; }
 .perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
 .perf-note { margin-top: 6px; color: #6e7681; font-size: 10px; line-height: 1.4; }
 
+/* ===== 弾幕設定パネル(💬。地・影・ヘッダは枠一覧/パフォーマンスに合わせる) ===== */
+.dmk-panel {
+  position: absolute; top: 64px; left: 64px; width: 300px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; z-index: 90000;
+  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+}
+.dmk-panel[hidden] { display: none; }
+body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロールに連れられない */
+.dmk-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: move; user-select: none; touch-action: none; }
+.dmk-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmk-target-name { color: #8b949e; }
+.dmk-x { flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px; font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer; }
+.dmk-x:hover { color: #f85149; }
+/* 対象スイッチ [全体][この枠] = 連結セグメント。 */
+.dmk-target { display: flex; padding: 0 12px 8px; }
+.dmk-tgt { flex: 1 1 0; padding: 7px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; }
+.dmk-tgt:first-child { border-radius: 6px 0 0 6px; }
+.dmk-tgt:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.dmk-tgt.active { background: rgba(31,111,235,0.25); color: #f0f6fc; border-color: #388bfd; }
+.dmk-rows { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 10px; }
+.dmk-row { display: flex; align-items: center; gap: 10px; }
+.dmk-label { flex: 0 0 80px; font-size: 12px; color: #8b949e; }
+.dmk-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
+.dmk-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.dmk-toggle { flex: 1 1 auto; padding: 6px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; }
+.dmk-toggle.on { background: #0d2818; border-color: #3fb950; color: #3fb950; } /* ON は緑 */
+.dmk-reset { margin: 0 12px 12px; padding: 8px 0; font-family: inherit; font-size: 12px; cursor: pointer; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
+.dmk-reset:hover { background: #30363d; border-color: #58a6ff; }
+.dmk-reset[hidden] { display: none; }
+
 /* ===== スマホ縦積みモード(body.stack-mode。multiview.js の updateStackMode が付与) ===== */
 /* 自由配置をやめ「全幅×16:9 の縦並びタイル」にする(高さ計算は JS の relayoutStack)。
    移動・リサイズ・最大化のUIは封印し、タップとスクロールだけで操作できる形にする。 */
@@ -652,6 +694,7 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 /* トグル項目: 左=項目名、右=現在値。区切り線でグループを分ける。 */
 .win-menu-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .win-menu-toggle .wm-val { flex: 0 0 auto; color: #8b949e; font-variant-numeric: tabular-nums; }
+.win-menu-toggle.on .wm-val { color: #3fb950; font-weight: bold; } /* ON は緑(弾幕など) */
 .win-menu-sep { flex: 0 0 auto; height: 1px; background: #30363d; margin: 5px 8px; }
 
 /* 左上バッジ: ⚡軽量(緑)/ 通常(グレー)。状態表示 兼 タップで軽量⇄通常トグル。
@@ -726,6 +769,8 @@ body.idle #stack-restore { opacity: 0; }
   .mixer-row-label { font-size: 15px; padding: 9px 8px; }
   .mixer-row-eye { width: 44px; height: 44px; font-size: 20px; }
   .mixer-master input[type="range"], .mixer-row-vol { height: 30px; }
+  .dmk-row input[type="range"] { height: 28px; } /* タッチで掴みやすく */
+  .dmk-tgt, .dmk-toggle { padding-top: 9px; padding-bottom: 9px; }
 
   .win-title { font-size: 15px; }
   .win-grip { width: 30px; font-size: 26px; }

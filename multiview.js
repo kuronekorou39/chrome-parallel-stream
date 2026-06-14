@@ -31,6 +31,36 @@ const PERF_HISTORY = 60; // パフォーマンスパネルのスパークライ�
 const MAGIC = '__multiviewControl';
 const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
 
+// コメント弾幕(チャットを右→左へ流す)。
+const DMK_GAP = 44;          // 同じレーンで前の弾幕の後ろに空ける最小間隔(px)
+const DMK_MAX_NODES = 120;   // 1枠の同時表示上限(高密度チャットでの暴発保険)
+const DMK_MIN_SCALE = 0.4;        // 「長文を縮小」の下限倍率(これより小さくはしない)
+const DMK_SPEED_REF_LEN = 18;     // 「長さで速度」: この文字数で等倍、超えるほど速い
+const DMK_SPEED_MAX_FACTOR = 2.6; // 同上の速度上限倍率
+// 弾幕の共通(既定)設定。枠ごとに win.danmaku.overrides で部分上書きできる(上書きの無い枠は全体に追従)。
+const DMK_DEFAULTS = {
+  fontSize: 22,            // 文字サイズ(px)
+  speed: 130,              // 流れる速さ(px/秒)
+  opacity: 100,            // 弾幕の不透明度(%)
+  useColor: true,          // チャットのユーザー色を使う
+  colorStrength: 70,       // 色の強さ(0=白 〜 100=原色。白とのブレンド率)
+  longShrink: true,        // 長文を縮小(しきい値超で長いほど小さく)
+  longShrinkThreshold: 30, // 縮小を始める文字数
+  speedByLength: false     // 長さで速度変化(長いほど速く流す)
+};
+let dmkGlobal = Object.assign({}, DMK_DEFAULTS);
+// 設定パネルのコントロール定義(全体/この枠 共通)。
+const DMK_CONTROLS = [
+  { key: 'fontSize', label: 'サイズ', type: 'range', min: 12, max: 48, unit: 'px' },
+  { key: 'speed', label: '速度', type: 'range', min: 40, max: 400, unit: '' },
+  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%' },
+  { key: 'useColor', label: '色を使う', type: 'toggle' },
+  { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%' },
+  { key: 'longShrink', label: '長文を縮小', type: 'toggle' },
+  { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字' },
+  { key: 'speedByLength', label: '長さで速度', type: 'toggle' }
+];
+
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -53,6 +83,9 @@ let activeWin = null;
 let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をまとめて設定する。
 let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
+// 弾幕設定パネルの状態(init→wireToolbar→setupDanmakuPanel が同期実行されるため、ここ=init より前で初期化する)。
+let dmkPanelTarget = 'global'; // 編集対象: 'global'(全体既定) | 'win'(この枠=activeWin の overrides)
+const dmkPanelControls = {};   // key -> { input, valEl }
 
 // スマホ縦積みモード: 指が主ポインタ かつ 狭い画面(940px はスマホ横持ちまで拾う閾値)。
 // デスクトップでは URL に #stack を付けると強制オン(動作確認用)。
@@ -69,6 +102,7 @@ let stackMode = false;
   window.addEventListener('message', onFrameUrl);
   window.addEventListener('message', onFrameAdState);
   window.addEventListener('message', onTileDragMsg); // frame内長押し → タイルドラッグの中継
+  window.addEventListener('message', onChatMessage); // frame からのチャット → 弾幕として流す
 
   // 枠の外(ステージ背景)をクリック/タップしたらフォーカス(選択・ヘッダ)を解除する。
   // 枠内クリックは e.target が枠の子要素になるので解除されない。
@@ -104,6 +138,9 @@ let stackMode = false;
 
   const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
   const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
+
+  // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
+  if (saved.danmakuGlobal) dmkGlobal = Object.assign({}, DMK_DEFAULTS, dmkSanitize(saved.danmakuGlobal));
 
   // マスタ音量を復元(無ければ 0)。窓を作る前に入れておき、各枠が最初からこの音量で開くように。
   masterVolume = clampVol(saved.masterVolume);
@@ -155,7 +192,8 @@ function onFrameAdState(e) {
     win.theaterState = d.state; // 'on' | 'searching' | 'off'
     updateWinTitle(win); // バッジの 🎭/🔎 表示を更新
   } else if (d.type === 'frame-hello') {
-    syncFrameTheater(win); // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
+    syncFrameTheater(win);  // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
+    syncFrameDanmaku(win);  // 同じく現在の弾幕 ON/OFF も返す
   }
 }
 
@@ -173,7 +211,8 @@ function currentLineupItems() {
       max: !!w.maximized, vol: w.vol != null ? w.vol : 1, hidden: !!w.hidden, light: !!w.light,
       tall: w.tall == null ? null : !!w.tall, // 縦積みタイル高の手動指定(null=既定の16:9)
       span: w.span === 'half' ? 'half' : 'full', // 縦積みタイル幅(100%/50%)
-      zoom: w.zoom // 枠内サイトの縮小率の手動指定(🔍。null=幅に応じた既定)
+      zoom: w.zoom, // 枠内サイトの縮小率の手動指定(🔍。null=幅に応じた既定)
+      dmk: { on: !!w.danmaku.on, overrides: w.danmaku.overrides || {} } // 弾幕のON/OFFと枠ごと上書き設定
     };
   });
 }
@@ -182,7 +221,7 @@ function saveLineup() {
   if (restoring) return;
   try {
     chrome.storage.local.set({
-      [MULTIVIEW_ACTIVE_KEY]: { wins: currentLineupItems(), masterVolume, timestamp: new Date().toISOString() }
+      [MULTIVIEW_ACTIVE_KEY]: { wins: currentLineupItems(), masterVolume, danmakuGlobal: dmkGlobal, timestamp: new Date().toISOString() }
     });
   } catch (e) {
     /* noop */
@@ -207,6 +246,10 @@ function restoreLineup(saved) {
     if (it.span === 'half') win.span = 'half';
     // 縮小率は手動指定(25〜99)のみ復元。100(等倍)は既定へ戻し、過去データに引きずられない。
     if (Number.isFinite(it.zoom) && it.zoom >= 25 && it.zoom < 100) win.zoom = it.zoom;
+    if (it.dmk) {
+      win.danmaku.overrides = dmkSanitize(it.dmk.overrides); // 枠ごとの上書き設定を復元(検証つき)
+      win.danmaku.on = !!it.dmk.on; // ON だった枠は frame.load / frame-hello で syncFrameDanmaku が監視を再開
+    }
     syncMenuLabels(win);
     if (Number.isFinite(it.x)) {
       if (stackMode) {
@@ -471,7 +514,8 @@ function createWindow(url, opts = {}) {
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
     prevRect: null, freeRect: null,
     opacity: 100, vol: 1,
-    filter: { bright: 100, contrast: 100, sat: 100 }
+    filter: { bright: 100, contrast: 100, sat: 100 },
+    danmaku: { on: false, layer: null, lanes: [], overrides: {} } // コメント弾幕(層/レーンは非保存。overrides=この枠だけの上書き)
   };
   wins.push(win);
 
@@ -1105,6 +1149,9 @@ function focusWindow(win) {
   activeWin = win;
   win.el.classList.add('active');
   win.el.style.zIndex = ++zCounter;
+  // 弾幕設定パネルが「この枠」対象で開いていれば、フォーカス先に追従して描き直す。
+  const dp = document.getElementById('danmaku-panel');
+  if (dp && !dp.hidden && dmkPanelTarget === 'win') renderDanmakuPanel();
 }
 
 // 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
@@ -1247,6 +1294,8 @@ function buildQuickControls(win) {
   if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
   win.menuSpan = mkToggle(() => toggleSpan(win));
   win.menuTall = mkToggle(() => toggleTall(win));
+  if (!win.video) win.menuDanmaku = mkToggle(() => toggleDanmaku(win)); // 💬 弾幕(チャットを流す。Kickは対象外)
+  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   mkSep();
   // 操作系。
   mkItem('⛶ 全画面で操作', () => toggleStackMax(win));
@@ -1329,6 +1378,12 @@ function syncMenuLabels(win) {
       win.menuZoom.btn.title = 'タップで ' + nextZoom(z) + '% に切替';
     }
   }
+  if (win.menuDanmaku) {
+    win.menuDanmaku.name.textContent = '💬 弾幕';
+    win.menuDanmaku.val.textContent = win.danmaku.on ? 'ON' : 'OFF';
+    win.menuDanmaku.btn.classList.toggle('on', win.danmaku.on);
+    win.menuDanmaku.btn.title = 'チャットのコメントを画面に流す(タップで ' + (win.danmaku.on ? 'OFF' : 'ON') + ')';
+  }
 }
 
 // 枠内シアター(視聴ページで video を枠いっぱいに固定)はスタックモード=スマホ縦積みのとき有効。
@@ -1354,6 +1409,306 @@ function sendTheaterSuspend(win, suspended) {
 function syncFrameTheater(win) {
   sendTheaterEnabled(win, stackMode && !win.light);
   if (win.el.classList.contains('stack-max')) sendTheaterSuspend(win, true);
+}
+
+// ====== コメント弾幕 ======
+// 各枠の content script(stream-control.js)がチャットDOMから拾ったコメントを postMessage で送ってくる。
+// ここでは枠ごとにオーバーレイ層(.win-danmaku)を重ね、DOM要素+WAAPI で右→左へ流す。レーン(行)を
+// 割り当て、前の弾幕が十分先へ進んだ行にだけ次を出して重なりを避ける。OFF の枠・隠し枠には流さない。
+
+function onChatMessage(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true || d.type !== 'chat-message') return;
+  // 入れ子フレーム(YouTube live_chat)のコメントは枠フレームが中継するので、e.source は枠フレーム本体。
+  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  if (!win || !win.danmaku.on || win.hidden) return;
+  // parts(テキスト/絵文字画像のセグメント配列)。旧 text 形式が来ても一応扱える。
+  const parts = Array.isArray(d.parts) ? d.parts : (d.text ? [{ text: String(d.text) }] : []);
+  spawnDanmaku(win, parts, d.color || '');
+}
+
+// 枠に弾幕オーバーレイ層を用意(無ければ作る)。映像と同座標で、CSS filter の影響を受けない位置に置く。
+function ensureDanmakuLayer(win) {
+  if (win.danmaku.layer && win.danmaku.layer.isConnected) return win.danmaku.layer;
+  const parentEl = win.video ? (win.body.querySelector('.win-media') || win.body) : win.body;
+  const layer = document.createElement('div');
+  layer.className = 'win-danmaku';
+  parentEl.appendChild(layer);
+  win.danmaku.layer = layer;
+  win.danmaku.lanes = [];
+  return layer;
+}
+function clearDanmakuLayer(win) {
+  if (win.danmaku.layer) { try { win.danmaku.layer.remove(); } catch (e) { /* noop */ } }
+  win.danmaku.layer = null;
+  win.danmaku.lanes = [];
+}
+
+// 枠の実効設定 = 全体の既定(dmkGlobal)に、その枠の上書き(overrides)を重ねたもの。
+function dmkSettings(win) {
+  return Object.assign({}, dmkGlobal, (win && win.danmaku && win.danmaku.overrides) || {});
+}
+// 色文字列(#rgb / #rrggbb / rgb()) を [r,g,b] に。失敗は null。
+function dmkParseColor(c) {
+  if (!c) return null;
+  c = String(c).trim();
+  let m = c.match(/^#([0-9a-f]{6})$/i);
+  if (m) { const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  m = c.match(/^#([0-9a-f]{3})$/i);
+  if (m) { return m[1].split('').map((h) => parseInt(h + h, 16)); }
+  m = c.match(/rgba?\(([^)]+)\)/i);
+  if (m) { const p = m[1].split(',').map((x) => parseInt(x, 10)); if (p.length >= 3 && p.every((v) => !isNaN(v))) return [p[0], p[1], p[2]]; }
+  return null;
+}
+// ユーザー色を白とブレンド(strength 0=白 / 100=原色)。取れなければ白。
+function dmkBlendColor(color, strength) {
+  const rgb = dmkParseColor(color);
+  if (!rgb) return '#fff';
+  const t = Math.max(0, Math.min(100, strength)) / 100;
+  const mix = (v) => Math.round(255 * (1 - t) + v * t);
+  return 'rgb(' + mix(rgb[0]) + ',' + mix(rgb[1]) + ',' + mix(rgb[2]) + ')';
+}
+
+// 空いているレーン番号を返す(前の弾幕の末尾が GAP 以上左へ進んだ行)。laneH は枠の実効サイズで決まる。
+function pickDanmakuLane(win, layerH, laneH) {
+  const laneCount = Math.max(1, Math.floor(layerH / laneH));
+  const lanes = win.danmaku.lanes;
+  const now = performance.now();
+  for (let i = 0; i < laneCount; i++) {
+    const ln = lanes[i];
+    if (!ln) return i; // 未使用の行
+    const traveled = ((now - ln.start) / 1000) * ln.speed; // 前の弾幕が左へ進んだ距離
+    if (traveled >= ln.width + DMK_GAP) return i;           // 末尾が十分先=この行は空き
+  }
+  return -1;
+}
+
+// parts(テキスト/絵文字画像)からノードの中身を組み立てる。絵文字は <img> で描画(https のみ・枚数上限)。
+function dmkBuildNode(node, parts, fontSize) {
+  let textLen = 0, imgs = 0;
+  for (const p of parts) {
+    if (p && p.text != null) {
+      let t = String(p.text);
+      if (textLen + t.length > 200) t = t.slice(0, 200 - textLen);
+      if (t) { node.appendChild(document.createTextNode(t)); textLen += t.length; }
+    } else if (p && p.img && imgs < 24) {
+      const src = String(p.img);
+      if (!/^https:\/\//i.test(src)) continue; // https の画像のみ(安全)
+      const img = document.createElement('img');
+      img.className = 'dmk-emote';
+      img.src = src;
+      img.alt = p.alt || '';
+      img.referrerPolicy = 'no-referrer';
+      img.style.height = Math.round(fontSize * 1.25) + 'px'; // 行内に収まる絵文字サイズ
+      node.appendChild(img);
+      imgs++;
+    }
+    if (textLen >= 200) break;
+  }
+}
+
+function spawnDanmaku(win, parts, color) {
+  if (!win.danmaku.on || win.hidden || !parts || !parts.length) return;
+  const layer = ensureDanmakuLayer(win);
+  const layerW = layer.clientWidth, layerH = layer.clientHeight;
+  if (!layerW || !layerH) return;
+  if (layer.childElementCount >= DMK_MAX_NODES) return; // 暴発保険
+  const s = dmkSettings(win);
+  // 長さ(テキスト+絵文字alt)で 長文縮小・速度 を決める
+  let plain = '';
+  for (const p of parts) plain += (p && p.text != null ? p.text : (p && p.alt) || '');
+  const len = plain.length || 1;
+  // 長文を縮小: しきい値を超えると長いほど小さく(荒らし長文を見づらく)
+  let scale = 1;
+  if (s.longShrink && len > s.longShrinkThreshold) scale = Math.max(DMK_MIN_SCALE, s.longShrinkThreshold / len);
+  const fontSize = Math.max(8, Math.round(s.fontSize * scale));
+  const laneH = Math.round(s.fontSize * 1.4); // 行高は基準サイズで固定(縮小ノードも同じ行に収まる)
+  // 長さで速度: 長いほど速く流す
+  let speed = s.speed;
+  if (s.speedByLength) speed = Math.round(s.speed * Math.min(DMK_SPEED_MAX_FACTOR, Math.max(1, len / DMK_SPEED_REF_LEN)));
+  // 色: 使う設定 かつ 色が取れたらブレンド、それ以外は白
+  const col = (s.useColor && color) ? dmkBlendColor(color, s.colorStrength) : '#fff';
+
+  const node = document.createElement('div');
+  node.className = 'dmk';
+  node.style.color = col;
+  node.style.fontSize = fontSize + 'px';
+  node.style.lineHeight = laneH + 'px';
+  dmkBuildNode(node, parts, fontSize); // テキスト+絵文字画像を組み立て
+  if (!node.childNodes.length) return; // 中身が無ければ出さない
+  node.style.visibility = 'hidden'; // 幅計測のため一旦不可視で配置(レイアウトは効く)
+  layer.appendChild(node);
+  layer.style.opacity = s.opacity / 100; // 設定変更も都度反映
+  // 絵文字画像は非同期ロードのため、幅を正しく測るには decode を待つ必要がある。
+  // 画像があれば decode 完了(or 800ms 打ち切り)後に流す。テキストのみなら即流す。
+  const imgs = node.getElementsByTagName('img');
+  if (imgs.length) {
+    Promise.race([
+      Promise.all(Array.prototype.map.call(imgs, (im) => im.decode().catch(() => {}))),
+      new Promise((r) => setTimeout(r, 800))
+    ]).then(() => dmkLaunchNode(win, node, layer, layerW, laneH, speed));
+  } else {
+    dmkLaunchNode(win, node, layer, layerW, laneH, speed);
+  }
+}
+
+// 計測→レーン割当→右→左アニメ。絵文字画像の decode 待ちの後に呼ばれることがあるので、
+// 既に枠が消えている/中身が無いケースに備えて防御する。
+function dmkLaunchNode(win, node, layer, layerW, laneH, speed) {
+  if (!node.isConnected || !win.danmaku.on) { try { node.remove(); } catch (e) { /* noop */ } return; }
+  const layerH = layer.clientHeight;
+  const nodeW = node.offsetWidth;
+  const lane = pickDanmakuLane(win, layerH, laneH);
+  if (lane < 0) { node.remove(); return; } // 空き行が無ければ捨てる(重なり防止)
+  node.style.top = (lane * laneH) + 'px';
+  node.style.visibility = '';
+  win.danmaku.lanes[lane] = { start: performance.now(), width: nodeW, speed };
+  const dur = ((layerW + nodeW) / speed) * 1000;
+  const anim = node.animate(
+    [{ transform: 'translateX(' + layerW + 'px)' }, { transform: 'translateX(' + (-nodeW) + 'px)' }],
+    { duration: dur, easing: 'linear' }
+  );
+  const done = () => { try { node.remove(); } catch (e) { /* noop */ } };
+  anim.onfinish = done;
+  anim.oncancel = done;
+}
+
+// 枠ごとの弾幕 ON/OFF(⋮メニューから)。ON で層を用意し、子(content script)へ監視開始/停止を伝える。
+function toggleDanmaku(win) {
+  win.danmaku.on = !win.danmaku.on;
+  if (win.danmaku.on) ensureDanmakuLayer(win);
+  else clearDanmakuLayer(win);
+  sendDanmakuEnabled(win, win.danmaku.on);
+  syncMenuLabels(win);
+}
+function sendDanmakuEnabled(win, on) {
+  if (!win.frame) return; // Kick(<video>)はチャット取得対象外
+  try {
+    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: !!on }, '*');
+  } catch (e) { /* noop */ }
+}
+// frame の読込/挨拶のすれ違い対策。現在の弾幕状態を frame へ送り直す(theater と同型)。
+function syncFrameDanmaku(win) {
+  sendDanmakuEnabled(win, win.danmaku.on);
+}
+
+// 保存値の検証: 既知キーだけを範囲内に収めて取り込む(壊れた storage 値で暴れない)。
+function dmkSanitize(o) {
+  const out = {};
+  if (!o || typeof o !== 'object') return out;
+  DMK_CONTROLS.forEach((c) => {
+    if (!(c.key in o)) return;
+    if (c.type === 'toggle') out[c.key] = !!o[c.key];
+    else { const v = Number(o[c.key]); if (Number.isFinite(v)) out[c.key] = Math.max(c.min, Math.min(c.max, Math.round(v))); }
+  });
+  return out;
+}
+
+// ====== 弾幕設定パネル(全体の既定 / この枠の上書き) ======
+// 状態(dmkPanelTarget / dmkPanelControls)は init より前で初期化済み(ファイル先頭)。
+
+// 編集を反映先へ書き込む。global なら dmkGlobal、win なら activeWin.danmaku.overrides。
+function dmkEditValue(key, value) {
+  if (dmkPanelTarget === 'win') {
+    if (!activeWin) return;
+    activeWin.danmaku.overrides = activeWin.danmaku.overrides || {};
+    activeWin.danmaku.overrides[key] = value;
+  } else {
+    dmkGlobal[key] = value;
+  }
+  applyDanmakuSettings();
+}
+// 不透明度など即時に見た目へ反映すべき設定を各層へ当てる(速度・色・サイズ等は次の弾幕から効く)。
+function applyDanmakuSettings() {
+  wins.forEach((w) => { if (w.danmaku.layer) w.danmaku.layer.style.opacity = dmkSettings(w).opacity / 100; });
+}
+// パネルの各コントロールを現在の対象(全体 or この枠の実効値)に合わせて描き直す。
+function renderDanmakuPanel() {
+  const src = dmkPanelTarget === 'win' ? dmkSettings(activeWin) : dmkGlobal;
+  DMK_CONTROLS.forEach((c) => {
+    const ui = dmkPanelControls[c.key];
+    if (!ui) return;
+    if (c.type === 'toggle') {
+      const on = !!src[c.key];
+      ui.input.classList.toggle('on', on);
+      ui.input.textContent = on ? 'ON' : 'OFF';
+    } else {
+      ui.input.value = src[c.key];
+      ui.valEl.textContent = src[c.key] + (c.unit || '');
+    }
+  });
+  document.getElementById('dmk-tgt-global').classList.toggle('active', dmkPanelTarget === 'global');
+  document.getElementById('dmk-tgt-win').classList.toggle('active', dmkPanelTarget === 'win');
+  const nameEl = document.getElementById('dmk-target-name');
+  const resetBtn = document.getElementById('dmk-reset');
+  if (dmkPanelTarget === 'win') {
+    nameEl.textContent = activeWin ? ' — ' + winLabel(activeWin) : ' — (枠を選択)';
+    const hasOverride = activeWin && activeWin.danmaku.overrides && Object.keys(activeWin.danmaku.overrides).length > 0;
+    resetBtn.hidden = !hasOverride;
+  } else {
+    nameEl.textContent = '';
+    resetBtn.hidden = true;
+  }
+}
+// パネルを開く。win 指定ありなら「この枠」対象(その枠をフォーカス)、なしなら「全体」対象。
+function openDanmakuPanel(win) {
+  const panel = document.getElementById('danmaku-panel');
+  if (!panel) return;
+  if (win) { dmkPanelTarget = 'win'; focusWindow(win); } else { dmkPanelTarget = 'global'; }
+  panel.hidden = false;
+  raisePanel(panel);
+  centerPanel(panel);
+  renderDanmakuPanel();
+}
+function setupDanmakuPanel() {
+  const panel = document.getElementById('danmaku-panel');
+  if (!panel) return;
+  const rows = panel.querySelector('.dmk-rows');
+  DMK_CONTROLS.forEach((c) => {
+    const row = document.createElement('div');
+    row.className = 'dmk-row';
+    const label = document.createElement('span');
+    label.className = 'dmk-label';
+    label.textContent = c.label;
+    row.appendChild(label);
+    if (c.type === 'toggle') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'dmk-toggle';
+      btn.addEventListener('click', () => {
+        const src = dmkPanelTarget === 'win' ? dmkSettings(activeWin) : dmkGlobal;
+        dmkEditValue(c.key, !src[c.key]);
+        renderDanmakuPanel();
+        saveLineup();
+      });
+      row.appendChild(btn);
+      dmkPanelControls[c.key] = { input: btn };
+    } else {
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = String(c.min); input.max = String(c.max);
+      const val = document.createElement('span');
+      val.className = 'dmk-val';
+      input.addEventListener('input', () => {
+        dmkEditValue(c.key, Number(input.value));
+        val.textContent = input.value + (c.unit || '');
+      });
+      input.addEventListener('change', () => saveLineup()); // つまみを離したら保存
+      row.append(input, val);
+      dmkPanelControls[c.key] = { input, valEl: val };
+    }
+    rows.appendChild(row);
+  });
+  document.getElementById('dmk-tgt-global').addEventListener('click', () => { dmkPanelTarget = 'global'; renderDanmakuPanel(); });
+  document.getElementById('dmk-tgt-win').addEventListener('click', () => { dmkPanelTarget = 'win'; renderDanmakuPanel(); });
+  document.getElementById('dmk-reset').addEventListener('click', () => {
+    if (activeWin) { activeWin.danmaku.overrides = {}; applyDanmakuSettings(); renderDanmakuPanel(); saveLineup(); }
+  });
+  document.getElementById('danmaku-close').addEventListener('click', () => { panel.hidden = true; });
+  makePanelDraggable(panel, panel.querySelector('.dmk-head'));
+  wirePanelRaise(panel); // 掴む/フォーカスで最前面
+  const openBtn = document.getElementById('danmaku-settings-btn');
+  if (openBtn) openBtn.addEventListener('click', () => openDanmakuPanel(null));
 }
 
 // 枠内サイトの縮小率(100→75→50→100 で巡回)。仮想ビューポートを広げて scale で縮めるので、
@@ -1658,7 +2013,8 @@ function mountSiteFrame(win) {
   applyFrameZoom(win); // 縮小表示(🔍)の倍率を反映
   frame.addEventListener('load', () => {
     applyVolume(win, masterVolume);
-    syncFrameTheater(win); // シアター有効化(+全画面中なら一時停止)を伝える
+    syncFrameTheater(win);  // シアター有効化(+全画面中なら一時停止)を伝える
+    syncFrameDanmaku(win);  // 弾幕 ON 中なら再読込後も監視を再開させる
     hideWinLoading(win); // 読み込み中スピナーを消す(出ていれば)
   });
   const src = (win.light && toLightUrl(win.url)) || toEmbedUrl(win.url);
@@ -2185,6 +2541,7 @@ function wireToolbar() {
   setupPosDialog();
   setupPerfPanel();
   setupMixer();
+  setupDanmakuPanel();
   chrome.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));
@@ -2235,6 +2592,7 @@ function setupMainMenu() {
   act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   act('mm-perf', () => document.getElementById('perf-btn').click());
+  act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   // 広告スキップはトグルなので閉じずに、その場で ON/OFF 表示を更新する。
   mkAct('mm-adskip', () => {
     document.getElementById('adskip-btn').click();

@@ -14,6 +14,7 @@
     <button id="add-open-btn" class="tb-btn tb-btn-primary" title="枠を追加">＋ 追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)">🎚 一覧</button>
+    <button id="danmaku-settings-btn" class="tb-btn" title="弾幕(コメントを流す)の設定">💬 弾幕</button>
     <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定オフ)。Twitchは vaft で常時ブロック。">広告スキップ</button>
     <button id="light-btn" class="tb-btn" title="全部の枠を軽量プレイヤーへ切替/通常へ戻す(配信・動画ページを開いている枠が対象。スマホで複数枠を並べる時用)">⚡ 軽量</button>
     <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
@@ -35,6 +36,7 @@
     <button id="mm-layout" type="button"><span class="mm-icon">📐</span><span class="mm-label">配置</span></button>
     <button id="mm-mixer" type="button"><span class="mm-icon">🎚</span><span class="mm-label">一覧</span></button>
     <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
+    <button id="mm-danmaku" type="button"><span class="mm-icon">💬</span><span class="mm-label">弾幕設定</span></button>
     <button id="mm-adskip" type="button"><span class="mm-icon">⏭</span><span class="mm-label">広告スキップ: OFF</span></button>
   </div>
 
@@ -108,6 +110,20 @@
     </div>
     <div class="perf-rows"></div>
     <div class="perf-note">CPU/メモリは PC 全体の値。枠ごと・GPU は Chrome の Shift+Esc で。</div>
+  </div>
+
+  <!-- 弾幕設定パネル: 全体の既定 / この枠の上書き を [全体][この枠] で切替。行は JS(setupDanmakuPanel)が生成。 -->
+  <div id="danmaku-panel" class="dmk-panel" hidden>
+    <div class="dmk-head">
+      <span class="dmk-title">💬 弾幕設定<span id="dmk-target-name" class="dmk-target-name"></span></span>
+      <button id="danmaku-close" class="dmk-x" type="button" title="閉じる">✕</button>
+    </div>
+    <div class="dmk-target">
+      <button id="dmk-tgt-global" class="dmk-tgt active" type="button">全体</button>
+      <button id="dmk-tgt-win" class="dmk-tgt" type="button">この枠</button>
+    </div>
+    <div class="dmk-rows"></div>
+    <button id="dmk-reset" class="dmk-reset" type="button" hidden>全体に合わせる(上書き解除)</button>
   </div>
 
   <div id="stage">

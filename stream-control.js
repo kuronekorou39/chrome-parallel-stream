@@ -184,6 +184,9 @@
       theaterSuspended = d.value === true;
       if (theaterSuspended) clearTheaterAll();
       else applyTheater();
+    } else if (d.type === 'set-danmaku-enabled') {
+      // 親(multiview)からの弾幕 ON/OFF。ON の間だけチャットDOMを監視して新着コメントを親へ送る。
+      danmakuSetEnabled(d.value === true);
     }
   });
 
@@ -372,4 +375,177 @@
     })();
     setInterval(checkAd, POLL_INTERVAL);
   }
+
+  // ---- コメント弾幕: チャットDOMを監視して新着コメントを親(multiview)へ送る ----
+  // 親からの set-danmaku-enabled で ON/OFF。ON の間だけ MutationObserver でチャットの新着行を拾い、
+  // { type:'chat-message', text, author, color } を window.parent へ送る(描画は親=multiview)。
+  // YouTube はチャットが入れ子 iframe(live_chat)にあるため、ON は子へ伝播し、コメントは子→親へ中継する。
+  // セレクタはサイト更新で変わりうるので複数候補+防御的に(見つからなければ静かに何もしない)。
+  const dmkSite =
+    host.includes('twitch.tv') ? {
+      sel: '.chat-line__message, [data-a-target="chat-line-message"]',
+      containers: ['.chat-scrollable-area__message-container', '[data-test-selector="chat-scrollable-area__message-container"]', '.chat-list--default'],
+      author: (n) => n.querySelector('.chat-author__display-name, [data-a-target="chat-message-username"]'),
+      // 本文 = テキスト断片 + 絵文字/スタンプ(emote img)を出現順に parts 化。スタンプは画像として親へ渡す。
+      // テキスト断片 + 行内の非バッジ img(絵文字/スタンプ/ビッツ)を出現順に。emote のクラス名変更にも強い。
+      extractParts: (n) => {
+        const parts = [];
+        n.querySelectorAll('[data-a-target="chat-message-text"], img:not(.chat-badge)').forEach((p) => {
+          if (p.tagName === 'IMG') parts.push({ img: p.currentSrc || p.src || '', alt: p.getAttribute('alt') || '' });
+          else { const t = (p.textContent || '').replace(/\s+/g, ' '); if (t.trim()) parts.push({ text: t }); }
+        });
+        return parts;
+      },
+      color: (n) => { const a = n.querySelector('.chat-author__display-name'); return a ? a.style.color : ''; }
+    } :
+    host.includes('youtube.com') ? {
+      sel: 'yt-live-chat-text-message-renderer, yt-live-chat-paid-message-renderer',
+      containers: ['yt-live-chat-item-list-renderer #items', '#items.yt-live-chat-item-list-renderer'],
+      author: (n) => n.querySelector('#author-name'),
+      text: (n) => n.querySelector('#message'),
+      color: () => ''
+    } :
+    host.includes('openrec.tv') ? {
+      sel: '.chat-content, [class*="chat-content"]',
+      containers: ['.chat-list-content', '[class*="ChatList__Content"]', '.chat-list'],
+      author: (n) => n.querySelector('[class*="user-name"], [class*="userName"]'),
+      text: (n) => n.querySelector('[class*="message"], [class*="Message"], [class*="comment"]'),
+      color: () => ''
+    } : null;
+
+  let dmkOn = false;
+  let dmkObserver = null;
+  let dmkContainer = null;
+  let dmkSent = 0, dmkWindowStart = 0;
+  const DMK_RATE = 40; // 1秒あたりの送信上限(高頻度チャットでの暴発抑制)
+
+  // 要素内をテキスト/絵文字に分解して parts 配列で返す(出現順)。各要素は {text} か {img,alt}。
+  // 絵文字/スタンプは画像として親へ渡す(親が <img> で描画)。Twitch のバッジ(chat-badge)は除外。
+  function dmkPartsFromEl(el) {
+    if (!el) return [];
+    const parts = [];
+    let buf = '';
+    const flush = () => { const t = buf.replace(/\s+/g, ' '); if (t.trim()) parts.push({ text: t }); buf = ''; };
+    (function walk(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType === 3) buf += c.nodeValue;                 // テキストノード
+        else if (c.nodeType === 1) {
+          if (c.tagName === 'IMG') {                              // 絵文字/スタンプ(バッジは除外)
+            if (!c.classList.contains('chat-badge')) { flush(); parts.push({ img: c.currentSrc || c.src || '', alt: c.getAttribute('alt') || '' }); }
+          } else walk(c);
+        }
+      }
+    })(el);
+    flush();
+    return parts;
+  }
+  // parts を安全化: https の画像のみ・枚数/文字数/セグメント数の上限・空除去。
+  function dmkCleanParts(parts) {
+    const out = [];
+    let textLen = 0, imgs = 0;
+    for (const p of (parts || [])) {
+      if (p && p.img) {
+        if (imgs >= 24 || !/^https:\/\//i.test(String(p.img))) continue; // 絵文字画像は https のみ・最大24個
+        out.push({ img: String(p.img).slice(0, 500), alt: String(p.alt || '').slice(0, 40) });
+        imgs++;
+      } else if (p && p.text != null) {
+        let t = String(p.text);
+        if (textLen + t.length > 200) t = t.slice(0, 200 - textLen);
+        if (t) { out.push({ text: t }); textLen += t.length; }
+      }
+      if (out.length >= 60) break;
+    }
+    return out;
+  }
+  function dmkSend(line) {
+    if (!dmkSite) return;
+    try {
+      const aEl = dmkSite.author(line);
+      const author = aEl ? (aEl.textContent || '').trim().slice(0, 40) : '';
+      let parts;
+      if (dmkSite.extractParts) {
+        parts = dmkSite.extractParts(line); // サイト専用(テキスト+絵文字画像。Twitch)
+      } else {
+        const textEl = dmkSite.text(line);
+        parts = dmkPartsFromEl(textEl || line); // 専用本文要素を分解(YouTube #message 等。絵文字画像込み)
+        if (!textEl && author && parts.length && parts[0].text) {
+          // フォールバック(行全体を読んだ時): 先頭の著者名を取り除く
+          const t = parts[0].text.replace(/^\s+/, '');
+          if (t.startsWith(author)) parts[0].text = t.slice(author.length);
+        }
+      }
+      parts = dmkCleanParts(parts);
+      if (!parts.length) return;
+      let color = '';
+      try { color = dmkSite.color(line) || ''; } catch (e) { /* noop */ }
+      const now = Date.now();
+      if (now - dmkWindowStart > 1000) { dmkWindowStart = now; dmkSent = 0; }
+      if (dmkSent >= DMK_RATE) return; // 一気に大量に来たら間引く
+      dmkSent++;
+      window.parent.postMessage({ [MAGIC]: true, type: 'chat-message', parts, author, color, ts: now }, '*');
+    } catch (e) { /* noop */ }
+  }
+  function dmkProcessNode(node) {
+    if (!dmkSite || !node || node.nodeType !== 1) return;
+    if (node.matches && node.matches(dmkSite.sel)) dmkSend(node);
+    else if (node.querySelectorAll) node.querySelectorAll(dmkSite.sel).forEach(dmkSend);
+  }
+  function dmkAttach(container) {
+    if (dmkObserver) dmkObserver.disconnect();
+    dmkObserver = new MutationObserver((muts) => {
+      for (const m of muts) for (const n of m.addedNodes) dmkProcessNode(n);
+    });
+    dmkObserver.observe(container, { childList: true });
+  }
+  // 入れ子チャット(現状 YouTube の live_chat)を持つ子 iframe にだけ ON/OFF を伝える。広告/第三者 iframe には
+  // 送らず、targetOrigin も YouTube に固定。ON 中は dmkTick から毎周期呼び、遅延ロードの live_chat も取りこぼさない。
+  function dmkBroadcastChildren() {
+    if (!host.includes('youtube.com')) return; // 入れ子チャットを持つのは現状 YouTube のみ
+    const frames = document.querySelectorAll('iframe#chatframe, iframe[src*="/live_chat"]');
+    for (const f of frames) {
+      try { f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: dmkOn }, 'https://www.youtube.com'); } catch (e) { /* noop */ }
+    }
+  }
+  function dmkTick() {
+    if (!dmkSite) return;
+    if (!dmkOn) {
+      if (dmkObserver) { dmkObserver.disconnect(); dmkObserver = null; }
+      dmkContainer = null;
+      return;
+    }
+    dmkBroadcastChildren(); // ON中は毎周期、遅れて出てくる live_chat 子へも value:true を送り直す(取りこぼし対策)
+    if (dmkContainer && dmkContainer.isConnected) return; // 監視中なら何もしない
+    for (const sel of dmkSite.containers) {
+      const c = document.querySelector(sel);
+      if (c) { dmkContainer = c; dmkAttach(c); break; } // SPA再生成にもこのポーリングで張り直す
+    }
+  }
+  // 親から呼ばれる(set-danmaku-enabled)。自分の監視を ON/OFF し、入れ子チャットの子へも伝播する。
+  function danmakuSetEnabled(on) {
+    dmkOn = !!on;
+    dmkTick();
+    dmkBroadcastChildren(); // OFF も即時伝播(dmkTick は OFF だと早期 return するため)
+  }
+  if (dmkSite) setInterval(dmkTick, 1500);
+
+  // 入れ子フレーム連携: 子からの chat-message は親へ中継し、子の frame-hello には現在の弾幕状態を返す
+  // (子の読込が遅れても取りこぼさない)。親からの下り(set-*)は上の本体リスナが処理する。
+  // 中継を許可するのは対象サイト配下のフレームのみ(YouTube live_chat 等)。第三者/広告 iframe からの偽装を弾く。
+  const DMK_RELAY_HOSTS = ['twitch.tv', 'youtube.com', 'openrec.tv'];
+  function dmkOriginAllowed(origin) {
+    try { const h = new URL(origin).hostname; return DMK_RELAY_HOSTS.some((d) => h === d || h.endsWith('.' + d)); }
+    catch (e) { return false; }
+  }
+  window.addEventListener('message', (e) => {
+    if (e.source === window.parent) return;   // 子フレームからのメッセージだけ扱う
+    if (!dmkOriginAllowed(e.origin)) return;  // 対象サイト配下の子のみ(広告/第三者iframeを弾く)
+    const d = e.data;
+    if (!d || d[MAGIC] !== true) return;
+    if (d.type === 'chat-message') {
+      if (!dmkOn) return; // ON の間だけ中継(不要中継・注入面の縮小)
+      try { window.parent.postMessage(d, '*'); } catch (err) { /* noop */ }
+    } else if (d.type === 'frame-hello') {
+      try { e.source.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: dmkOn }, e.origin || '*'); } catch (err) { /* noop */ }
+    }
+  });
 })();
