@@ -2118,8 +2118,21 @@ function closeWindow(win) {
   clearStackMax(win); // 全画面のまま閉じても body の状態を残さない
   hideWinLoading(win); // 読み込み待ち中に閉じてもスピナー/保険タイマーを残さない
   selectedWins.delete(win); // 複数選択に残さない
-  const i = wins.indexOf(win);
-  if (i >= 0) wins.splice(i, 1);
+  // 確認済みの Chromium バグ crbug.com/371871759 への対処(我々のコードの不具合ではない)。
+  // 同一サイトの枠はサイト分離で1プロセスに同居し、音声出力デバイス(シンク)を共有する。修正前の
+  // Chromium はその共有シンクを「最初にシンクを作ったサブフレーム」に束縛するため、それ(=同サイトで
+  // 最初の枠)を閉じるとシンクごと落ち、残りの同サイト枠が無音になる(映像は続く/リロードでしか戻らない)。
+  // M132 のコミット f93860fac35e でシンクをメインフレームに束縛して修正されたが、その条件は
+  // main_frame_token.Is<LocalFrameToken>()(=メインフレームが同一プロセス)のときだけ。本拡張のメイン
+  // フレームは chrome-extension:// ページで Twitch 枠とは別プロセス=リモート扱いのため条件を満たさず、
+  // 最新 Chrome でも依然オーナー(最初の枠)束縛のまま再発する。よって自前で復帰させる:
+  // 閉じる枠がそのオーナーなら、残りの同サイト枠を作り直してシンクを再生成し音を復帰させる(下の remount)。
+  // 2つ目以降(非オーナー)を閉じる時は何もしない。詳細根拠はメモリ audio-sink-first-frame-bug.md 参照。
+  const closedHost = hostOf(win.url);
+  const closedIdx = wins.indexOf(win);
+  const sameSiteSurvivors = wins.filter((w) => w !== win && w.frame && hostOf(w.url) === closedHost);
+  const wasSinkOwner = sameSiteSurvivors.length > 0 && sameSiteSurvivors.every((w) => wins.indexOf(w) > closedIdx);
+  if (closedIdx >= 0) wins.splice(closedIdx, 1);
   if (win.video && win.video._hls) {
     try { win.video._hls.destroy(); } catch (e) { /* noop */ }
   }
@@ -2133,6 +2146,10 @@ function closeWindow(win) {
   updateCount();
   saveLineup();
   renderMixer();
+  if (wasSinkOwner) {
+    // 共有シンクのオーナー枠を閉じた → 残りの同サイト枠を作り直して音声を復帰(=手動リロードの自動化)。
+    setTimeout(() => { sameSiteSurvivors.forEach((w) => { if (wins.indexOf(w) >= 0) remountFrame(w); }); }, 150);
+  }
 }
 
 function updateCount() {

@@ -281,22 +281,26 @@
   window.addEventListener('popstate', () => setTimeout(reportUrl, 0));
   window.addEventListener('hashchange', () => setTimeout(reportUrl, 0));
 
-  // ---- Twitch のみ: シアターモードを1回 click して player を最大化 ----
-  // ※デスクトップ版サイト専用(モバイル版にはこのボタンが無い)。モバイルは上の枠内シアター(🎭)で。
+  // ---- Twitch のみ: シアターモードにして player を最大化(デスクトップ版サイト専用) ----
+  // ※モバイル版にはこのボタンが無い(モバイルは上の枠内シアター 🎭 が担当)。
+  // 注意: シアターは「トグル」。Twitch は前回のシアター状態を自前で記憶しているため、再読込時に
+  // 既にシアターで開くことがある。そこを無条件に click すると "解除" してしまい、「一瞬シアター→
+  // デフォルトに戻る」不具合になる。そこで『まだシアターでない時だけ』1回 click する。
+  // 判定: シアター中はトグルボタンの aria-label が「終了 / Exit」系になる(=その時は触らない)。
   if (host.includes('twitch.tv')) {
-    const SELECTORS = [
-      '[data-a-target="player-theatre-mode-button"]',
-      'button[aria-label*="シアター"]',
-      'button[aria-label*="Theatre" i]',
-      'button[aria-label*="Theater" i]'
-    ];
+    const BTN = '[data-a-target="player-theatre-mode-button"], button[aria-label*="シアター"], button[aria-label*="Theatre" i], button[aria-label*="Theater" i]';
+    // 起動時に1回だけ: プレイヤーが現れたら、まだデフォルトの時だけシアターへ(既にシアターなら触らない)。
+    // ※ SPA遷移ごとの再実行は、シアター切替→プレイヤー再生成→vaft再スワップ→再navigate…のループを招き
+    //    配信が激しくカクつくため行わない(ホーム経由のシアター化は別の安全な方法で対応する)。
     let tries = 0;
     const tTimer = setInterval(() => {
-      if (tries++ >= 20) { clearInterval(tTimer); return; }
-      for (const sel of SELECTORS) {
-        const el = document.querySelector(sel);
-        if (el) { el.click(); clearInterval(tTimer); return; }
-      }
+      if (tries++ >= 24) { clearInterval(tTimer); return; }
+      const btn = document.querySelector(BTN);
+      if (!btn) return; // プレイヤー(ボタン)がまだ無い → 次のポーリングへ
+      const label = btn.getAttribute('aria-label') || '';
+      if (/終了|exit|minimi/i.test(label)) { clearInterval(tTimer); return; } // 既にシアター → 触らない
+      btn.click(); // まだデフォルト → シアターへ(1回だけ)
+      clearInterval(tTimer);
     }, 500);
   }
 
@@ -383,9 +387,14 @@
   // セレクタはサイト更新で変わりうるので複数候補+防御的に(見つからなければ静かに何もしない)。
   const dmkSite =
     host.includes('twitch.tv') ? {
-      sel: '.chat-line__message, [data-a-target="chat-line-message"]',
-      containers: ['.chat-scrollable-area__message-container', '[data-test-selector="chat-scrollable-area__message-container"]', '.chat-list--default'],
-      author: (n) => n.querySelector('.chat-author__display-name, [data-a-target="chat-message-username"]'),
+      // sel/containers はライブ + VOD(アーカイブ)両対応。.vod-message と .video-chat__message-list-wrapper が
+      // VOD のチャットリプレイ用(twitch.tv/videos/...)。VOD は本文/絵文字/色の内側セレクタをライブと共用するので
+      // extractParts/color は変更不要。ライブ用は VOD ページでマッチせず、その逆も同様なので併記で衝突しない。
+      sel: '.chat-line__message, [data-a-target="chat-line-message"], .vod-message',
+      containers: ['.chat-scrollable-area__message-container', '[data-test-selector="chat-scrollable-area__message-container"]', '.chat-list--default', '.video-chat__message-list-wrapper', '[data-test-selector="video-chat-message-list-wrapper"]'],
+      // ライブの綺麗な表示名(.chat-author__display-name)を最優先。無い時だけ VOD 専用の著者ラッパへフォールバック。
+      // ※ querySelector の複数指定は「文書順で最初」を返すため、ラッパが先に来ないよう || で順序を明示する。
+      author: (n) => n.querySelector('.chat-author__display-name, [data-a-target="chat-message-username"]') || n.querySelector('.video-chat__message-author, [data-test-selector="comment-author-selector"]'),
       // 本文 = テキスト断片 + 絵文字/スタンプ(emote img)を出現順に parts 化。スタンプは画像として親へ渡す。
       // テキスト断片 + 行内の非バッジ img(絵文字/スタンプ/ビッツ)を出現順に。emote のクラス名変更にも強い。
       extractParts: (n) => {
@@ -495,7 +504,10 @@
     dmkObserver = new MutationObserver((muts) => {
       for (const m of muts) for (const n of m.addedNodes) dmkProcessNode(n);
     });
-    dmkObserver.observe(container, { childList: true });
+    // subtree:true は VOD(アーカイブ)対応で必須。VOD のチャットリプレイは新着行を wrapper 直下ではなく
+    // ネストした <ul> に追加する(間に <div> が挟まることもある)ため、childList だけだと取りこぼす。
+    // dmkProcessNode は sel に一致するノードだけ送るので、内部の遅延ロード(絵文字 img 等)で多重送信はしない。
+    dmkObserver.observe(container, { childList: true, subtree: true });
   }
   // 入れ子チャット(現状 YouTube の live_chat)を持つ子 iframe にだけ ON/OFF を伝える。広告/第三者 iframe には
   // 送らず、targetOrigin も YouTube に固定。ON 中は dmkTick から毎周期呼び、遅延ロードの live_chat も取りこぼさない。
