@@ -14,7 +14,7 @@ const MIN_H = 135; // 枠の最小高さ(16:9 で 240×135。CSS の .win min-he
 const SNAP_GAP = 6; // 整形(グリッドスナップ)時の枠どうしの隙間
 const EDGE_KEEP = 100; // 枠/パネルがステージ外へはみ出しても、掴んで戻せるよう画面内に必ず残す可視量
 const TOP_OVERHANG = 30; // 上方向へのはみ出し上限。台形ヘッダ(高さ62px)の半分は掴めるよう残す
-const IDLE_CURSOR_MS = 3000; // この時間ポインタが動かないとカーソルを自動で消す(視聴の没入用)
+const IDLE_CURSOR_MS = 10000; // この時間ポインタが動かないとカーソル+常駐UI/機能パネルを自動で消す(視聴の没入用)
 const TOOLBAR_HIDE_MS = 30000; // この時間操作が無いとツールバーを自動で隠す(復帰は ≡メニュー)
 const IS_COARSE = window.matchMedia('(pointer: coarse)').matches; // 主ポインタが指(スマホ/タブレット)か
 const ZOOM_DEFAULT_FULL = 75; // 枠内サイト縮小率(🔍)の既定(全幅タイル)。一覧しやすいよう少し縮める
@@ -50,15 +50,16 @@ const DMK_DEFAULTS = {
 };
 let dmkGlobal = Object.assign({}, DMK_DEFAULTS);
 // 設定パネルのコントロール定義(全体/この枠 共通)。
+// 種類ごと(group)にまとめて表示する。同じ group の項目が連続するよう並べること。
 const DMK_CONTROLS = [
-  { key: 'fontSize', label: 'サイズ', type: 'range', min: 12, max: 48, unit: 'px' },
-  { key: 'speed', label: '速度', type: 'range', min: 40, max: 400, unit: '' },
-  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%' },
-  { key: 'useColor', label: '色を使う', type: 'toggle' },
-  { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%' },
-  { key: 'longShrink', label: '長文を縮小', type: 'toggle' },
-  { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字' },
-  { key: 'speedByLength', label: '長さで速度', type: 'toggle' }
+  { key: 'fontSize', label: '文字サイズ', type: 'range', min: 12, max: 48, unit: 'px', group: 'サイズ' },
+  { key: 'longShrink', label: '長文を縮小', type: 'toggle', group: 'サイズ' },
+  { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字', group: 'サイズ' },
+  { key: 'speed', label: '速さ', type: 'range', min: 40, max: 400, unit: '', group: '速度' },
+  { key: 'speedByLength', label: '長さで速度', type: 'toggle', group: '速度' },
+  { key: 'useColor', label: '色を使う', type: 'toggle', group: '色' },
+  { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色' },
+  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示' }
 ];
 
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
@@ -84,8 +85,10 @@ let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をま�
 let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
 // 弾幕設定パネルの状態(init→wireToolbar→setupDanmakuPanel が同期実行されるため、ここ=init より前で初期化する)。
-let dmkPanelTarget = 'global'; // 編集対象: 'global'(全体既定) | 'win'(この枠=activeWin の overrides)
-const dmkPanelControls = {};   // key -> { input, valEl }
+let dmkPanelWin = null; // 弾幕設定の編集対象: null=全体の既定 / win=その枠の上書き(適用先ドロップダウンで選ぶ)
+const dmkPanelControls = {};   // key -> { input, valEl, revert }
+let dmkPresets = [];           // 弾幕設定のプリセット [{name, settings}](chrome.storage に保存・全体共有)
+const DMK_PRESETS_KEY = 'mvDanmakuPresets';
 
 // スマホ縦積みモード: 指が主ポインタ かつ 狭い画面(940px はスマホ横持ちまで拾う閾値)。
 // デスクトップでは URL に #stack を付けると強制オン(動作確認用)。
@@ -341,6 +344,7 @@ async function applyLayout(layout) {
 
 // 配置ダイアログ(#layout-dialog)の開閉と、保存済み一覧の描画。
 function openLayoutDialog() {
+  if (stackMode) return; // スマホ(縦積み)では配置は使わない(メニューでも隠しているが念のため)
   const dlg = document.getElementById('layout-dialog');
   if (!dlg) return;
   const name = document.getElementById('layout-name');
@@ -566,10 +570,15 @@ function createWindow(url, opts = {}) {
     focusWindow(win);
     revealHeader(win);
   });
-  // 長押しで浮かせてドラッグ(縦積み=並び替え / 自由配置=移動)。Shift+クリックは選択なので除外。
-  el.addEventListener('pointerdown', (e) => { if (!(e.shiftKey && e.button === 0)) maybeStartLongPress(win, e); });
-  // 長押しで Android のコンテキストメニュー(画像保存等)が誤爆しないように(縦積み中のみ)。
-  el.addEventListener('contextmenu', (e) => { if (stackMode) e.preventDefault(); });
+  // 浮かせてドラッグ: 左は長押し(タッチ対応)、右ボタン(マウス)は動かせば即つかむ=長押し不要。
+  // Shift+左クリックは選択なので除外。
+  el.addEventListener('pointerdown', (e) => {
+    if (e.button === 2 && e.pointerType === 'mouse') { armRightDrag(win, e); return; }
+    if (!(e.shiftKey && e.button === 0)) maybeStartLongPress(win, e);
+  });
+  // 右クリックは枠の移動に割り当てたため、枠の上ではブラウザのコンテキストメニューを出さない
+  // (Android の長押しメニュー誤爆防止も兼ねる)。
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
   makeBarHandle(win, bar);
   edges.forEach((h) => h.addEventListener('pointerdown', (e) => beginResize(win, h.dataset.dir, e)));
   // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
@@ -785,6 +794,7 @@ function updateStackMode() {
   stackMode = on;
   document.body.classList.toggle('stack-mode', on);
   toggleMainMenu(false); // モード切替をまたいでメニューを残さない
+  closeLayoutDialog();    // 配置はスマホ非対応。モード切替時に開きっぱなしにしない
   if (on) {
     wins.forEach((w) => {
       w.freeRect = w.maximized && w.prevRect ? w.prevRect : getRect(w);
@@ -801,6 +811,7 @@ function updateStackMode() {
   }
   wins.forEach((w) => sendTheaterEnabled(w, on && !w.light)); // モード切替を各フレームへ(軽量はシアター不要)
   wins.forEach((w) => applyFrameZoom(w)); // 既定縮小率がモードで変わる(自由配置=等倍 / 縦積み=75/50%)
+  wins.forEach((w) => syncMenuModeVisibility(w)); // PCでは幅/高さ/縮小を隠す(縦積み専用のため)
   renderMixer(); // ▲▼(並び替え)の出し分けを更新
 }
 
@@ -925,6 +936,32 @@ function maybeStartLongPress(win, e) {
   win.el.addEventListener('pointercancel', cleanup);
 }
 
+// 右ボタンのドラッグ(マウス): 長押し不要で即つかんで移動。押下では始めず、少し動いた時点で開始する
+// (純粋な右クリックでは何も起きないように。右クリックメニューは contextmenu 抑止で出さない)。動き始めたら
+// 通常のドラッグ機構(beginStackDrag: setPointerCapture + onStackDragMove)へ引き継ぐ。
+function armRightDrag(win, e) {
+  if (win.el.classList.contains('stack-max')) return;
+  const sx = e.clientX, sy = e.clientY, pid = e.pointerId;
+  let started = false;
+  const onMove = (ev) => {
+    if (ev.pointerId !== pid || started) return;
+    if (Math.abs(ev.clientX - sx) > LONG_PRESS_SLOP || Math.abs(ev.clientY - sy) > LONG_PRESS_SLOP) {
+      started = true;
+      cleanup();
+      beginStackDrag(win, ev);
+    }
+  };
+  const onUp = (ev) => { if (ev.pointerId === pid) cleanup(); };
+  const cleanup = () => {
+    window.removeEventListener('pointermove', onMove, true);
+    window.removeEventListener('pointerup', onUp, true);
+    window.removeEventListener('pointercancel', onUp, true);
+  };
+  window.addEventListener('pointermove', onMove, true);
+  window.addEventListener('pointerup', onUp, true);
+  window.addEventListener('pointercancel', onUp, true);
+}
+
 // ドラッグ状態の生成と「浮かせる」見た目の適用(ローカル=親ポインタ / リモート=frame内中継 共通)。
 // mode: 'stack'=縦積みの並び替え / 'free'=自由配置の任意位置移動。レイアウト(stackMode)で決まる。
 function startStackDragState(win, clientX, clientY) {
@@ -1028,6 +1065,12 @@ function onTileDragMsg(e) {
       (w.frame && w.frame.contentWindow === e.source) ||
       (w.chatFrame && w.chatFrame.contentWindow === e.source));
     if (win) { toggleMultiSelect(win); revealHeader(win); }
+  } else if (d.type === 'tile-raise') {
+    // frame 内で右クリック → ドラッグ前でもその枠を即最前面へ(重なりの下から出す)。
+    const win = wins.find((w) =>
+      (w.frame && w.frame.contentWindow === e.source) ||
+      (w.chatFrame && w.chatFrame.contentWindow === e.source));
+    if (win) { focusWindow(win); revealHeader(win); }
   }
 }
 
@@ -1151,7 +1194,7 @@ function focusWindow(win) {
   win.el.style.zIndex = ++zCounter;
   // 弾幕設定パネルが「この枠」対象で開いていれば、フォーカス先に追従して描き直す。
   const dp = document.getElementById('danmaku-panel');
-  if (dp && !dp.hidden && dmkPanelTarget === 'win') renderDanmakuPanel();
+  if (dp && !dp.hidden) renderDanmakuPanel(); // 開いていれば適用先ドロップダウンのラベル等を最新化
 }
 
 // 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
@@ -1289,12 +1332,13 @@ function buildQuickControls(win) {
     menu.appendChild(d);
   };
 
-  // 表示・サイズ系(軽量 / 縮小 / 幅 / 高さ)。文言は syncLightBtn / syncMenuLabels が状態で更新。
+  // 表示・サイズ系(軽量 / 縮小 / 幅 / 高さ)。文言は syncMenuLabels が状態で更新。縮小/幅/高さは縦積み専用の
+  // 効果しか持たないため、PC(自由配置)では syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
   if (!win.video) win.menuLight = mkToggle(() => toggleLight(win));
   if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
   win.menuSpan = mkToggle(() => toggleSpan(win));
   win.menuTall = mkToggle(() => toggleTall(win));
-  if (!win.video) win.menuDanmaku = mkToggle(() => toggleDanmaku(win)); // 💬 弾幕(チャットを流す。Kickは対象外)
+  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); }); // 💬 弾幕。on は永続なので保存(Kickは対象外)
   if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   mkSep();
   // 操作系。
@@ -1304,6 +1348,7 @@ function buildQuickControls(win) {
   mkItem('🔄 再読込', () => reloadWindow(win));
   mkItem('↗ 元サイトを新タブ', () => openOriginal(win));
   syncMenuLabels(win);
+  syncMenuModeVisibility(win); // PC(自由配置)では幅/高さ/縮小を隠す(縦積みでのみ効くため)
 
   // ⋮ は pointerdown で確定(タッチの合成 click が下の iframe へ漏れるのを防ぐ。反応も速い)。
   menuBtn.addEventListener('pointerdown', (e) => {
@@ -1353,6 +1398,14 @@ function positionWinMenu(btn, menu) {
 // ⋮メニューの可変ラベル(高さ・幅・縮小トグルの現在値)を状態に合わせて更新する。
 function isTall(win) {
   return win.tall === true; // 既定は全枠 16:9。縦長は ⋮メニューの「高さ切替」で明示したときだけ
+}
+// PC(自由配置)では「幅・高さ・縮小」は実質無効/非推奨なので枠メニューから隠す(縦積みでのみ意味を持つ)。
+// 軽量はPCでも機能するので残す。モードは実行中に切り替わりうる(タブレット等)ため、メニュー生成時と
+// updateStackMode の両方から呼んで追従させる。
+function syncMenuModeVisibility(win) {
+  for (const m of [win.menuSpan, win.menuTall, win.menuZoom]) {
+    if (m) m.btn.style.display = stackMode ? '' : 'none';
+  }
 }
 function syncMenuLabels(win) {
   if (win.menuTall) {
@@ -1447,6 +1500,13 @@ function clearDanmakuLayer(win) {
 // 枠の実効設定 = 全体の既定(dmkGlobal)に、その枠の上書き(overrides)を重ねたもの。
 function dmkSettings(win) {
   return Object.assign({}, dmkGlobal, (win && win.danmaku && win.danmaku.overrides) || {});
+}
+// この枠の実効設定が全体の既定と1つでも違うか(↺・●・解除ボタンの出し分けに使う。
+// 「overrides にキーがあるか」ではなく「実際に値が違うか」で見る=全体と同値の上書きは個別扱いしない)。
+function dmkHasDiff(win) {
+  if (!win || !win.danmaku) return false;
+  const eff = dmkSettings(win);
+  return DMK_CONTROLS.some((c) => eff[c.key] !== dmkGlobal[c.key]);
 }
 // 色文字列(#rgb / #rrggbb / rgb()) を [r,g,b] に。失敗は null。
 function dmkParseColor(c) {
@@ -1605,14 +1665,13 @@ function dmkSanitize(o) {
 }
 
 // ====== 弾幕設定パネル(全体の既定 / この枠の上書き) ======
-// 状態(dmkPanelTarget / dmkPanelControls)は init より前で初期化済み(ファイル先頭)。
+// 状態(dmkPanelWin / dmkPanelControls)は init より前で初期化済み(ファイル先頭)。
 
 // 編集を反映先へ書き込む。global なら dmkGlobal、win なら activeWin.danmaku.overrides。
 function dmkEditValue(key, value) {
-  if (dmkPanelTarget === 'win') {
-    if (!activeWin) return;
-    activeWin.danmaku.overrides = activeWin.danmaku.overrides || {};
-    activeWin.danmaku.overrides[key] = value;
+  if (dmkPanelWin) {
+    dmkPanelWin.danmaku.overrides = dmkPanelWin.danmaku.overrides || {};
+    dmkPanelWin.danmaku.overrides[key] = value;
   } else {
     dmkGlobal[key] = value;
   }
@@ -1622,9 +1681,29 @@ function dmkEditValue(key, value) {
 function applyDanmakuSettings() {
   wins.forEach((w) => { if (w.danmaku.layer) w.danmaku.layer.style.opacity = dmkSettings(w).opacity / 100; });
 }
-// パネルの各コントロールを現在の対象(全体 or この枠の実効値)に合わせて描き直す。
+// 適用先ドロップダウンの選択肢を「全体の既定 + 弾幕対象の各枠(Kick以外)」で作り直し、現在の対象を選択。
+// 個別設定のある枠には ● を付けて分かるようにする。対象枠が閉じられていたら全体へ戻す。
+function populateDmkScope() {
+  const sel = document.getElementById('dmk-scope');
+  if (!sel) return;
+  const want = dmkPanelWin ? String(dmkPanelWin.id) : 'global';
+  sel.innerHTML = '';
+  const og = document.createElement('option');
+  og.value = 'global'; og.textContent = '全体の既定';
+  sel.appendChild(og);
+  wins.filter((w) => !w.video).forEach((w) => {
+    const o = document.createElement('option');
+    o.value = String(w.id);
+    o.textContent = winLabel(w) + (dmkHasDiff(w) ? ' ●' : ''); // ● = 全体と違う個別設定あり
+    sel.appendChild(o);
+  });
+  sel.value = want;
+  if (sel.value !== want) { dmkPanelWin = null; sel.value = 'global'; } // 対象枠が消えていた
+}
+// パネルの各コントロールを現在の対象(全体の既定 or その枠の実効値)に合わせて描き直す。
 function renderDanmakuPanel() {
-  const src = dmkPanelTarget === 'win' ? dmkSettings(activeWin) : dmkGlobal;
+  if (dmkPanelWin && !wins.includes(dmkPanelWin)) dmkPanelWin = null; // 閉じられた枠は全体へ
+  const src = dmkPanelWin ? dmkSettings(dmkPanelWin) : dmkGlobal;
   DMK_CONTROLS.forEach((c) => {
     const ui = dmkPanelControls[c.key];
     if (!ui) return;
@@ -1636,25 +1715,120 @@ function renderDanmakuPanel() {
       ui.input.value = src[c.key];
       ui.valEl.textContent = src[c.key] + (c.unit || '');
     }
+    if (ui.revert) ui.revert.classList.toggle('is-hidden', !(dmkPanelWin && src[c.key] !== dmkGlobal[c.key])); // 全体と実際に違う項目だけ ↺ を可視化(場所は常に確保)
   });
-  document.getElementById('dmk-tgt-global').classList.toggle('active', dmkPanelTarget === 'global');
-  document.getElementById('dmk-tgt-win').classList.toggle('active', dmkPanelTarget === 'win');
-  const nameEl = document.getElementById('dmk-target-name');
+  populateDmkScope();
+  renderDmkOnOff();
   const resetBtn = document.getElementById('dmk-reset');
-  if (dmkPanelTarget === 'win') {
-    nameEl.textContent = activeWin ? ' — ' + winLabel(activeWin) : ' — (枠を選択)';
-    const hasOverride = activeWin && activeWin.danmaku.overrides && Object.keys(activeWin.danmaku.overrides).length > 0;
-    resetBtn.hidden = !hasOverride;
-  } else {
-    nameEl.textContent = '';
-    resetBtn.hidden = true;
+  if (resetBtn) {
+    if (dmkPanelWin) { // 枠: 全体と違う設定がある時だけ「解除」を出す
+      resetBtn.textContent = 'この枠の個別設定を解除';
+      resetBtn.hidden = !dmkHasDiff(dmkPanelWin);
+    } else { // 全体: いつでも初期値へ戻せる
+      resetBtn.textContent = '初期値に戻す';
+      resetBtn.hidden = false;
+    }
   }
 }
-// パネルを開く。win 指定ありなら「この枠」対象(その枠をフォーカス)、なしなら「全体」対象。
+// 適用先に応じた弾幕 ON/OFF。枠選択中=その枠のトグル / 全体=全枠まとめて ON/OFF。
+function renderDmkOnOff() {
+  const box = document.getElementById('dmk-onoff');
+  if (!box) return;
+  box.innerHTML = '';
+  if (dmkPanelWin) {
+    const label = document.createElement('span');
+    label.className = 'dmk-onoff-label';
+    label.textContent = 'この枠の弾幕';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dmk-toggle';
+    const on = !!dmkPanelWin.danmaku.on;
+    btn.classList.toggle('on', on);
+    btn.textContent = on ? 'ON' : 'OFF';
+    btn.addEventListener('click', () => { toggleDanmaku(dmkPanelWin); renderDanmakuPanel(); saveLineup(); });
+    box.append(label, btn);
+  } else {
+    const label = document.createElement('span');
+    label.className = 'dmk-onoff-label';
+    label.textContent = '弾幕(全枠)';
+    const onBtn = document.createElement('button');
+    onBtn.type = 'button'; onBtn.className = 'dmk-bulk'; onBtn.textContent = 'すべてON';
+    onBtn.addEventListener('click', () => setAllDanmaku(true));
+    const offBtn = document.createElement('button');
+    offBtn.type = 'button'; offBtn.className = 'dmk-bulk'; offBtn.textContent = 'すべてOFF';
+    offBtn.addEventListener('click', () => setAllDanmaku(false));
+    box.append(label, onBtn, offBtn);
+  }
+}
+function setAllDanmaku(on) {
+  wins.filter((w) => !w.video).forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
+  saveLineup();
+}
+// プリセット: 現在の適用先の実効値を名前付きで保存し、選んで適用/削除(chrome.storage で全体共有)。
+function renderDmkPresets() {
+  const sel = document.getElementById('dmk-preset-sel');
+  if (!sel) return;
+  sel.innerHTML = '';
+  if (!dmkPresets.length) {
+    const o = document.createElement('option');
+    o.value = ''; o.textContent = '(プリセットなし)';
+    sel.appendChild(o);
+    return;
+  }
+  const o0 = document.createElement('option');
+  o0.value = ''; o0.textContent = '(選択)';
+  sel.appendChild(o0);
+  dmkPresets.forEach((p, i) => {
+    const o = document.createElement('option');
+    o.value = String(i); o.textContent = p.name;
+    sel.appendChild(o);
+  });
+}
+function saveDmkPresets() {
+  try { chrome.storage.local.set({ [DMK_PRESETS_KEY]: dmkPresets }); } catch (e) { /* noop */ }
+}
+function dmkPresetSave() {
+  const name = (window.prompt('プリセット名', '') || '').trim();
+  if (!name) return;
+  const src = dmkPanelWin ? dmkSettings(dmkPanelWin) : dmkGlobal;
+  dmkPresets.push({ name: name.slice(0, 40), settings: dmkSanitize(src) });
+  saveDmkPresets();
+  renderDmkPresets();
+  document.getElementById('dmk-preset-sel').value = String(dmkPresets.length - 1);
+}
+function dmkPresetApply() {
+  const sel = document.getElementById('dmk-preset-sel');
+  if (sel.value === '') return; // プレースホルダ「(選択)」時は何もしない(Number('')===0 で先頭に誤爆するため)
+  const p = dmkPresets[Number(sel.value)];
+  if (!p) return;
+  const s = dmkSanitize(p.settings);
+  if (dmkPanelWin) {
+    // 枠: プリセット値のうち「全体と違うもの」だけ上書きにする(同値は上書きにせず全体に追従=↺/●を出さない)。
+    const ovr = {};
+    DMK_CONTROLS.forEach((c) => { if (c.key in s && s[c.key] !== dmkGlobal[c.key]) ovr[c.key] = s[c.key]; });
+    dmkPanelWin.danmaku.overrides = ovr;
+  } else {
+    dmkGlobal = Object.assign({}, DMK_DEFAULTS, s); // 全体: 既定へプリセットを重ねる
+  }
+  applyDanmakuSettings();
+  renderDanmakuPanel();
+  saveLineup();
+}
+function dmkPresetDelete() {
+  const sel = document.getElementById('dmk-preset-sel');
+  if (sel.value === '') return; // プレースホルダ時は何もしない(Number('')===0 で先頭を消してしまうため)
+  const i = Number(sel.value);
+  if (!dmkPresets[i]) return;
+  dmkPresets.splice(i, 1);
+  saveDmkPresets();
+  renderDmkPresets();
+}
+// パネルを開く。win 指定ありなら適用先=その枠(フォーカスもする)、なしなら全体の既定。
 function openDanmakuPanel(win) {
   const panel = document.getElementById('danmaku-panel');
   if (!panel) return;
-  if (win) { dmkPanelTarget = 'win'; focusWindow(win); } else { dmkPanelTarget = 'global'; }
+  dmkPanelWin = (win && !win.video) ? win : null; // Kick は弾幕対象外なので全体扱い
+  if (win) focusWindow(win);
   panel.hidden = false;
   raisePanel(panel);
   centerPanel(panel);
@@ -1664,25 +1838,34 @@ function setupDanmakuPanel() {
   const panel = document.getElementById('danmaku-panel');
   if (!panel) return;
   const rows = panel.querySelector('.dmk-rows');
+  let curGroup = null;
   DMK_CONTROLS.forEach((c) => {
+    if (c.group && c.group !== curGroup) { // 種類ごとの見出しを挿入(サイズ/速度/色/表示)
+      curGroup = c.group;
+      const h = document.createElement('div');
+      h.className = 'dmk-group';
+      h.textContent = c.group;
+      rows.appendChild(h);
+    }
     const row = document.createElement('div');
     row.className = 'dmk-row';
     const label = document.createElement('span');
     label.className = 'dmk-label';
     label.textContent = c.label;
     row.appendChild(label);
+    let ctrl;
     if (c.type === 'toggle') {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dmk-toggle';
       btn.addEventListener('click', () => {
-        const src = dmkPanelTarget === 'win' ? dmkSettings(activeWin) : dmkGlobal;
-        dmkEditValue(c.key, !src[c.key]);
+        const cur = dmkPanelWin ? dmkSettings(dmkPanelWin) : dmkGlobal;
+        dmkEditValue(c.key, !cur[c.key]);
         renderDanmakuPanel();
         saveLineup();
       });
       row.appendChild(btn);
-      dmkPanelControls[c.key] = { input: btn };
+      ctrl = { input: btn };
     } else {
       const input = document.createElement('input');
       input.type = 'range';
@@ -1693,17 +1876,52 @@ function setupDanmakuPanel() {
         dmkEditValue(c.key, Number(input.value));
         val.textContent = input.value + (c.unit || '');
       });
-      input.addEventListener('change', () => saveLineup()); // つまみを離したら保存
+      input.addEventListener('change', () => { saveLineup(); renderDanmakuPanel(); }); // 離したら保存 + ↺/● を更新
       row.append(input, val);
-      dmkPanelControls[c.key] = { input, valEl: val };
+      ctrl = { input, valEl: val };
     }
+    // ↺ 個別リセット: この枠の上書きを1項目だけ全体へ戻す。上書き中のときだけ表示(render で出し分け)。
+    const rev = document.createElement('button');
+    rev.type = 'button';
+    rev.className = 'dmk-revert';
+    rev.textContent = '↺';
+    rev.title = 'この項目を全体の値に戻す';
+    rev.classList.add('is-hidden'); // 既定は不可視(場所は確保=つまみ幅を固定)
+    rev.addEventListener('click', () => {
+      if (dmkPanelWin && dmkPanelWin.danmaku.overrides) {
+        delete dmkPanelWin.danmaku.overrides[c.key];
+        applyDanmakuSettings();
+        renderDanmakuPanel();
+        saveLineup();
+      }
+    });
+    row.appendChild(rev);
+    ctrl.revert = rev;
+    dmkPanelControls[c.key] = ctrl;
     rows.appendChild(row);
   });
-  document.getElementById('dmk-tgt-global').addEventListener('click', () => { dmkPanelTarget = 'global'; renderDanmakuPanel(); });
-  document.getElementById('dmk-tgt-win').addEventListener('click', () => { dmkPanelTarget = 'win'; renderDanmakuPanel(); });
-  document.getElementById('dmk-reset').addEventListener('click', () => {
-    if (activeWin) { activeWin.danmaku.overrides = {}; applyDanmakuSettings(); renderDanmakuPanel(); saveLineup(); }
+  const scope = document.getElementById('dmk-scope');
+  if (scope) scope.addEventListener('change', () => {
+    dmkPanelWin = scope.value === 'global' ? null : (wins.find((w) => String(w.id) === scope.value) || null);
+    renderDanmakuPanel();
   });
+  document.getElementById('dmk-reset').addEventListener('click', () => {
+    if (dmkPanelWin) { dmkPanelWin.danmaku.overrides = {}; } // 枠: 個別設定を全解除(全体に追従)
+    else { dmkGlobal = Object.assign({}, DMK_DEFAULTS); }    // 全体: 初期値へ
+    applyDanmakuSettings();
+    renderDanmakuPanel();
+    saveLineup();
+  });
+  document.getElementById('dmk-preset-apply').addEventListener('click', dmkPresetApply);
+  document.getElementById('dmk-preset-save').addEventListener('click', dmkPresetSave);
+  document.getElementById('dmk-preset-del').addEventListener('click', dmkPresetDelete);
+  try {
+    chrome.storage.local.get(DMK_PRESETS_KEY, (r) => {
+      const arr = r && r[DMK_PRESETS_KEY];
+      if (Array.isArray(arr)) dmkPresets = arr.filter((p) => p && p.name).map((p) => ({ name: String(p.name).slice(0, 40), settings: dmkSanitize(p.settings) }));
+      renderDmkPresets();
+    });
+  } catch (e) { renderDmkPresets(); }
   document.getElementById('danmaku-close').addEventListener('click', () => { panel.hidden = true; });
   makePanelDraggable(panel, panel.querySelector('.dmk-head'));
   wirePanelRaise(panel); // 掴む/フォーカスで最前面
@@ -2142,6 +2360,11 @@ function closeWindow(win) {
     // アクティブ窓を閉じたら、残っている最前面寄りの窓へフォーカスを引き継ぐ。
     if (wins.length) focusWindow(wins[wins.length - 1]);
   }
+  if (dmkPanelWin === win) { // 弾幕設定の対象枠を閉じた → 全体へ戻す(非アクティブ/最後の枠でも取りこぼさない)
+    dmkPanelWin = null;
+    const dp = document.getElementById('danmaku-panel');
+    if (dp && !dp.hidden) renderDanmakuPanel();
+  }
   if (stackMode) relayoutStack(); // 縦積みでは閉じた直後に残りのタイルを詰め直す(hideWindow と同じ。隙間を残さない)
   updateCount();
   saveLineup();
@@ -2398,10 +2621,18 @@ function renderMixer() {
 }
 
 // ミキサーパネルの配線(トグル/閉じる/マスタ/ドラッグ)。サイズ変更は不要なのでリサイズは無し。
+const MIXER_HEIGHT_KEY = 'mvMixerHeight'; // 枠一覧パネルの高さ(縦リサイズ結果)を保存して次回復元する
 function setupMixer() {
   const panel = document.getElementById('mixer-panel');
   makePanelDraggable(panel, panel.querySelector('.mixer-head'));
   wirePanelRaise(panel); // 掴む/フォーカスで最前面へ
+  // 下端ハンドルで縦リサイズ(枠が増えて一覧が伸びる時用)。高さは保存し、次回も復元する。
+  const resize = document.createElement('div');
+  resize.className = 'mixer-resize';
+  resize.title = '下端をドラッグして高さを変える';
+  panel.appendChild(resize);
+  makeMixerResizable(panel, resize);
+  try { chrome.storage.local.get(MIXER_HEIGHT_KEY, (r) => { const h = r && r[MIXER_HEIGHT_KEY]; if (h) panel.style.height = h + 'px'; }); } catch (e) { /* noop */ }
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('mixer-btn').addEventListener('click', () => {
     panel.hidden = !panel.hidden;
@@ -2475,6 +2706,35 @@ function makePanelDraggable(el, handle) {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', end);
       handle.removeEventListener('pointercancel', end);
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  });
+}
+
+// 枠一覧パネルの下端ハンドルで縦リサイズ。高さは [MIN_H, 画面に収まる範囲] にクランプして保存(次回復元)。
+function makeMixerResizable(panel, handle) {
+  const MIN_H = 200;
+  handle.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !e.isPrimary) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const startH = panel.offsetHeight;
+    document.body.classList.add('panel-dragging'); // ドラッグ中は iframe にポインタを奪わせない(掴み外れ防止)
+    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    const onMove = (ev) => {
+      const maxH = Math.max(MIN_H, stage.clientHeight - panel.offsetTop - 8); // 下端が画面外へ出ないように
+      panel.style.height = Math.max(MIN_H, Math.min(maxH, startH + ev.clientY - startY)) + 'px';
+    };
+    const end = () => {
+      document.body.classList.remove('panel-dragging');
+      try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      try { chrome.storage.local.set({ [MIXER_HEIGHT_KEY]: panel.offsetHeight }); } catch (_) { /* noop */ }
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', end);
@@ -2661,10 +2921,25 @@ function setupIdleHide() {
   const toolbar = document.getElementById('toolbar');
   let cursorTimer = null;
   let toolbarTimer = null;
+  let idle = false;
+  // body.idle(カーソル+常駐UIを消す)はトップ文書にしか効かない。枠(iframe)の上のカーソルは iframe 側の
+  // 文書が管理するので、idle の変化を各 frame へ通知して中のカーソルも消す/戻す(stream-control が set-idle を処理)。
+  const broadcastIdle = (on) => {
+    wins.forEach((w) => {
+      try { if (w.frame) w.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
+      try { if (w.chatFrame) w.chatFrame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
+    });
+  };
+  const setIdle = (on) => {
+    if (on === idle) return; // 変化時のみ(postMessage 連発を防ぐ)
+    idle = on;
+    document.body.classList.toggle('idle', on);
+    broadcastIdle(on);
+  };
   // ツールバー上にポインタがある(操作中)なら消さない/隠さない。離れて静止すれば次の動きで再武装される。
   const hideCursor = () => {
     if (toolbar.matches(':hover')) return;
-    document.body.classList.add('idle');
+    setIdle(true);
   };
   const hideToolbar = () => {
     if (toolbar.matches(':hover')) return;
@@ -2672,7 +2947,7 @@ function setupIdleHide() {
   };
   let lastArm = 0;
   const arm = () => {
-    document.body.classList.remove('idle'); // カーソルを戻す(toolbar-hidden は触らない)
+    setIdle(false); // カーソル+常駐UIを戻す(枠内へも通知)。toolbar-hidden は触らない
     const now = Date.now();
     if (now - lastArm < 250) return; // pointermove 連発でのタイマ再生成を間引く(精度より省電力)
     lastArm = now;
@@ -2682,6 +2957,13 @@ function setupIdleHide() {
     toolbarTimer = setTimeout(hideToolbar, TOOLBAR_HIDE_MS);
   };
   ['pointermove', 'pointerdown'].forEach((ev) => document.addEventListener(ev, arm, { passive: true }));
+  // 枠(iframe)内の操作は親の pointermove に乗らない。content script が tile-activity を中継してくるので
+  // それで arm() する。これで枠の上で動かしている間もトップを「活動中」に保てる(カーソル/≡ が消えない)。
+  window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d[MAGIC] !== true || d.type !== 'tile-activity') return;
+    if (wins.some((w) => (w.frame && w.frame.contentWindow === e.source) || (w.chatFrame && w.chatFrame.contentWindow === e.source))) arm();
+  });
   arm();
 }
 

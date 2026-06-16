@@ -199,6 +199,15 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .mixer-master-label { font-size: 12px; color: #8b949e; } /* perf-label と同じ */
 .mixer-master input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
 .mixer-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
+/* 下端のリサイズハンドル: 枠が増えて一覧が長くなった時に縦へ伸ばせる(高さは保存)。 */
+.mixer-resize {
+  flex: 0 0 12px; cursor: ns-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.mixer-resize::before {
+  content: ""; width: 40px; height: 3px; border-radius: 2px; background: rgba(201,209,217,0.35);
+}
+.mixer-resize:hover::before { background: rgba(88,166,255,0.7); }
 .mixer-empty { color: #6e7681; font-size: 13px; text-align: center; padding: 20px; }
 /* 1行で詰めず、上=枠名(URL)+👁、下=音量つまみ(全幅)の 2段にする。URLが見切れにくい。 */
 .mixer-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-radius: 6px; }
@@ -569,15 +578,42 @@ body.panel-dragging iframe { pointer-events: none; }
 body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロールに連れられない */
 .dmk-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: move; user-select: none; touch-action: none; }
 .dmk-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dmk-target-name { color: #8b949e; }
 .dmk-x { flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px; font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer; }
 .dmk-x:hover { color: #f85149; }
-/* 対象スイッチ [全体][この枠] = 連結セグメント。 */
-.dmk-target { display: flex; padding: 0 12px 8px; }
-.dmk-tgt { flex: 1 1 0; padding: 7px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; }
-.dmk-tgt:first-child { border-radius: 6px 0 0 6px; }
-.dmk-tgt:last-child { border-radius: 0 6px 6px 0; border-left: none; }
-.dmk-tgt.active { background: rgba(31,111,235,0.25); color: #f0f6fc; border-color: #388bfd; }
+/* 適用先ドロップダウン(全体の既定 / 個別の枠を名前で選ぶ)。 */
+.dmk-scope-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+.dmk-scope-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+.dmk-scope {
+  flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-family: inherit; font-size: 13px; cursor: pointer;
+  background: #21262d; color: #f0f6fc; border: 1px solid #30363d; border-radius: 6px;
+}
+/* 種類ごとの見出し(サイズ/速度/色/表示)。 */
+.dmk-group {
+  font-size: 11px; color: #6e7681; letter-spacing: 0.04em;
+  border-top: 1px solid #21262d; padding-top: 8px;
+}
+.dmk-group:first-child { border-top: none; padding-top: 0; }
+/* ↺ 個別リセット(この枠だけ全体と違う項目に出る)。 */
+.dmk-revert {
+  flex: 0 0 auto; width: 26px; height: 26px; line-height: 1; font-size: 13px; cursor: pointer;
+  background: transparent; color: #d29922; border: 1px solid rgba(210,153,34,0.5); border-radius: 6px;
+}
+.dmk-revert:hover { background: rgba(210,153,34,0.15); color: #f0f6fc; }
+/* 隠しても場所は確保する(display:none にすると隣のつまみ幅が変わって UI がずれるため visibility で消す)。 */
+.dmk-revert.is-hidden { visibility: hidden; }
+/* 適用先に応じた弾幕 ON/OFF(枠=トグル / 全体=すべてON/OFF)。 */
+.dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+.dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+.dmk-onoff .dmk-toggle { flex: 1 1 auto; }
+.dmk-bulk {
+  flex: 1 1 0; padding: 6px 0; font-family: inherit; font-size: 12px; cursor: pointer;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+}
+.dmk-bulk:hover { border-color: #58a6ff; color: #f0f6fc; }
+/* プリセット(現在の適用先の値を保存・適用・削除)。 */
+.dmk-presets { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 12px; border-top: 1px solid #21262d; }
+.dmk-presets-head { font-size: 11px; color: #6e7681; }
+.dmk-presets-btns { display: flex; gap: 6px; }
 .dmk-rows { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 10px; }
 .dmk-row { display: flex; align-items: center; gap: 10px; }
 .dmk-label { flex: 0 0 80px; font-size: 12px; color: #8b949e; }
@@ -740,6 +776,21 @@ body.has-stack-max #stack-restore { display: inline-flex; }
 body.idle #toolbar-show,
 body.idle #stack-restore { opacity: 0; }
 
+/* 同じく idle 連動で、開いている機能パネル/ダイアログ(追加・配置・位置・一覧/ミキサー・弾幕設定)も
+   一緒にフェードアウトする(視聴の没入用)。パフォーマンス(#perf-panel)は常時監視に意味があるので除外。
+   ポインタを動かせば arm() が body.idle を外して復帰。消えている間は pointer-events:none で下へ抜ける。 */
+.mixer-panel, .dmk-panel { transition: opacity 0.2s ease; }
+body.idle .pos-dialog-overlay.open,
+body.idle .mixer-panel,
+body.idle .dmk-panel { opacity: 0; pointer-events: none; }
+/* 追加/配置は overlay 透明・中パネルのみ操作可なので、中パネルの操作も idle 中は無効化する。 */
+body.idle #add-dialog.pos-dialog-overlay.open .pos-dialog,
+body.idle #layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: none; }
+
+/* スマホ(縦積み)では「配置」は使わない(整列/整形/座標保存は自由配置=PC向け)。≡メニューから隠す。
+   タッチPC(coarse だが広い=非 stack)では配置は使えるので、メディアではなく body.stack-mode で判定する。 */
+body.stack-mode #mm-layout { display: none; }
+
 /* ===== スマホ/タッチ環境 ===== */
 /* 主ポインタが指(pointer: coarse)か画面が狭いときは、文字とタップ目標をひと回り大きくする。 */
 @media (pointer: coarse), (max-width: 700px) {
@@ -769,8 +820,22 @@ body.idle #stack-restore { opacity: 0; }
   .mixer-row-label { font-size: 15px; padding: 9px 8px; }
   .mixer-row-eye { width: 44px; height: 44px; font-size: 20px; }
   .mixer-master input[type="range"], .mixer-row-vol { height: 30px; }
-  .dmk-row input[type="range"] { height: 28px; } /* タッチで掴みやすく */
-  .dmk-tgt, .dmk-toggle { padding-top: 9px; padding-bottom: 9px; }
+  /* 弾幕設定: タッチでは各コントロールを大きく。はみ出す時はパネル内スクロール(小画面対策)。 */
+  .dmk-panel { width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; }
+  .dmk-head { padding: 14px; }
+  .dmk-title { font-size: 15px; }
+  .dmk-x { font-size: 20px; padding: 4px 10px; }
+  .dmk-scope-row, .dmk-onoff { padding: 0 14px 10px; }
+  .dmk-rows { gap: 12px; padding: 6px 14px 12px; }
+  .dmk-row { gap: 12px; }
+  .dmk-label { flex-basis: 92px; font-size: 14px; }
+  .dmk-val { flex-basis: 52px; font-size: 14px; }
+  .dmk-group { font-size: 13px; padding-top: 12px; }
+  .dmk-row input[type="range"] { height: 40px; } /* タッチで掴みやすく */
+  .dmk-scope, .dmk-toggle, .dmk-bulk { padding-top: 12px; padding-bottom: 12px; font-size: 15px; }
+  .dmk-revert { width: 40px; height: 40px; font-size: 17px; }
+  .dmk-presets { padding: 12px 14px 14px; }
+  .dmk-presets-head { font-size: 13px; }
 
   .win-title { font-size: 15px; }
   .win-grip { width: 30px; font-size: 26px; }

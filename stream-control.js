@@ -210,12 +210,19 @@
   let lpDown = null; // { sx, sy, cx, cy } 押下時の screen / クライアント座標
   let lpDragging = false;
   let lpEndedAt = 0; // ドラッグ直後の click 誤発火(リンク踏み)抑止用
+  let rmbDown = null; // 右ボタンのドラッグ用(マウスのみ)。押下時の screen 座標。動かしたら即つかむ=長押し不要
   const post = (type, extra) => {
     try {
       window.parent.postMessage(Object.assign({ [MAGIC]: true, type }, extra || {}), '*');
     } catch (e) { /* noop */ }
   };
   window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button === 2) { // 右ボタン: 動かせば即つかんで移動(長押し不要)。右クリックメニューは出さない。
+      rmbDown = { sx: e.screenX, sy: e.screenY };
+      lpDragging = false;
+      post('tile-raise'); // ドラッグ前でも、右クリックした枠を即座に最前面へ
+      return;
+    }
     if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
     if (e.shiftKey) { // Shift+クリック = 親へ「この枠を複数選択にトグル」(サイトには通さない)
       try { e.preventDefault(); } catch (_) { /* noop */ }
@@ -233,6 +240,11 @@
   }, true); // capture: サイト側が stopPropagation しても拾う
   window.addEventListener('pointermove', (e) => {
     if (!e.isPrimary) return;
+    // 右ボタンを押したまま動かしたら、その時点でドラッグ開始(現在位置を始点にしてジャンプを防ぐ)。
+    if (rmbDown && !lpDragging && (Math.abs(e.screenX - rmbDown.sx) > LP_SLOP || Math.abs(e.screenY - rmbDown.sy) > LP_SLOP)) {
+      lpDragging = true;
+      post('tile-drag-start', { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY });
+    }
     if (lpDragging) {
       post('tile-drag-move', { sx: e.screenX, sy: e.screenY });
       return;
@@ -245,6 +257,7 @@
   const lpEnd = () => {
     clearTimeout(lpTimer);
     lpDown = null;
+    rmbDown = null;
     if (lpDragging) {
       lpDragging = false;
       lpEndedAt = Date.now();
@@ -259,12 +272,49 @@
   }, { capture: true, passive: false });
   // 長押し待ち中(lpDown)から抑止する。成立(lpDragging)を待つと、待つ間のわずかな移動で先に
   // 選択や選択メニューが始まってしまい、ドラッグ移動後も選択が残る。押している間は選択/メニュー/D&Dを止める。
-  window.addEventListener('contextmenu', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true);
+  // 右クリックは「枠の移動」操作に割り当てたため、枠内では常にブラウザのコンテキストメニューを出さない。
+  window.addEventListener('contextmenu', (e) => { e.preventDefault(); }, true);
   window.addEventListener('selectstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true);
   window.addEventListener('dragstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true); // リンク/画像のD&D抑止
   window.addEventListener('click', (e) => {
     if (Date.now() - lpEndedAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);
+
+  // ---- 無操作時のカーソル自動非表示を枠(iframe)内にも同期 ----
+  // 親(multiview)の body.idle(cursor:none)はトップ文書にしか効かない。枠の上のカーソルは iframe 側の
+  // 文書が管理するので、(a) 枠内の操作を tile-activity として親へ中継して「活動中」を伝え(枠の上で動かして
+  // いる間はカーソル/≡ を消さない)、(b) 親からの set-idle を受けてこの文書のカーソルを消す/戻す。入れ子へも伝播。
+  let idleStyleEl = null;
+  const setFrameCursorHidden = (on) => {
+    if (on) {
+      if (!idleStyleEl) {
+        idleStyleEl = document.createElement('style');
+        idleStyleEl.textContent = '*, *::before, *::after { cursor: none !important; }';
+      }
+      if (!idleStyleEl.isConnected) (document.head || document.documentElement).appendChild(idleStyleEl);
+    } else if (idleStyleEl && idleStyleEl.isConnected) {
+      idleStyleEl.remove();
+    }
+  };
+  let lastActivity = 0;
+  const relayActivity = () => {
+    setFrameCursorHidden(false); // ローカルでも即カーソルを戻す(往復待ちのチラつき防止)
+    const now = Date.now();
+    if (now - lastActivity < 400) return; // 中継は間引く(postMessage 連発を防ぐ)
+    lastActivity = now;
+    post('tile-activity');
+  };
+  window.addEventListener('pointermove', relayActivity, { capture: true, passive: true });
+  window.addEventListener('pointerdown', relayActivity, { capture: true, passive: true });
+  window.addEventListener('message', (e) => {
+    if (e.source !== window.parent) return; // この枠を埋め込んでいる親からのみ
+    const d = e.data;
+    if (!d || d[MAGIC] !== true || d.type !== 'set-idle') return;
+    setFrameCursorHidden(d.value === true);
+    for (const f of document.querySelectorAll('iframe')) { // 入れ子(YouTube live_chat 等)のカーソルも同期
+      try { f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: d.value }, '*'); } catch (e2) { /* noop */ }
+    }
+  });
 
   // ---- 枠が今開いている URL を親(multiview)へ知らせる ----
   // 直下フレーム(枠本体)からのものだけ親=multiview に届く。枠内で別ページへ移動したら
@@ -553,7 +603,9 @@
     if (!dmkOriginAllowed(e.origin)) return;  // 対象サイト配下の子のみ(広告/第三者iframeを弾く)
     const d = e.data;
     if (!d || d[MAGIC] !== true) return;
-    if (d.type === 'chat-message') {
+    if (d.type === 'tile-activity') { // 入れ子(live_chat 等)の操作も上(最終的にトップ)へ「活動中」として中継
+      try { window.parent.postMessage(d, '*'); } catch (err) { /* noop */ }
+    } else if (d.type === 'chat-message') {
       if (!dmkOn) return; // ON の間だけ中継(不要中継・注入面の縮小)
       try { window.parent.postMessage(d, '*'); } catch (err) { /* noop */ }
     } else if (d.type === 'frame-hello') {

@@ -112,18 +112,32 @@
     <div class="perf-note">CPU/メモリは PC 全体の値。枠ごと・GPU は Chrome の Shift+Esc で。</div>
   </div>
 
-  <!-- 弾幕設定パネル: 全体の既定 / この枠の上書き を [全体][この枠] で切替。行は JS(setupDanmakuPanel)が生成。 -->
+  <!-- 弾幕設定パネル: 「適用先」ドロップダウンで 全体の既定 / 個別の枠 を選ぶ。設定行は種類ごと(サイズ/速度/
+       色/表示)に JS(setupDanmakuPanel)が見出し付きで生成。枠を選ぶと、全体と違う項目に ↺(個別リセット)が出る。 -->
   <div id="danmaku-panel" class="dmk-panel" hidden>
     <div class="dmk-head">
-      <span class="dmk-title">💬 弾幕設定<span id="dmk-target-name" class="dmk-target-name"></span></span>
+      <span class="dmk-title">💬 弾幕設定</span>
       <button id="danmaku-close" class="dmk-x" type="button" title="閉じる">✕</button>
     </div>
-    <div class="dmk-target">
-      <button id="dmk-tgt-global" class="dmk-tgt active" type="button">全体</button>
-      <button id="dmk-tgt-win" class="dmk-tgt" type="button">この枠</button>
+    <div class="dmk-scope-row">
+      <span class="dmk-scope-label">適用先</span>
+      <select id="dmk-scope" class="dmk-scope" title="設定の適用先(全体の既定 / 個別の枠)"></select>
     </div>
+    <!-- 弾幕 ON/OFF。枠選択中=その枠のトグル / 全体=全枠まとめて。中身は JS(renderDmkOnOff)が生成。 -->
+    <div id="dmk-onoff" class="dmk-onoff"></div>
     <div class="dmk-rows"></div>
-    <button id="dmk-reset" class="dmk-reset" type="button" hidden>全体に合わせる(上書き解除)</button>
+    <!-- 初期値に戻す(全体=既定値へ / 枠=個別設定を解除)。文言は renderDanmakuPanel が適用先で切替。 -->
+    <button id="dmk-reset" class="dmk-reset" type="button" hidden>初期値に戻す</button>
+    <!-- プリセット: 現在の適用先の値を名前付きで保存し、選んで適用/削除(chrome.storage で全体共有)。 -->
+    <div class="dmk-presets">
+      <div class="dmk-presets-head">プリセット</div>
+      <select id="dmk-preset-sel" class="dmk-scope" title="保存したプリセット"></select>
+      <div class="dmk-presets-btns">
+        <button id="dmk-preset-apply" class="dmk-bulk" type="button">適用</button>
+        <button id="dmk-preset-save" class="dmk-bulk" type="button">現在を保存</button>
+        <button id="dmk-preset-del" class="dmk-bulk" type="button">削除</button>
+      </div>
+    </div>
   </div>
 
   <div id="stage">
