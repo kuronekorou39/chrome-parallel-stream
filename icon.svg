@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- ポップアップのヒーローボタンのアイコン(2×2 グリッド)をベースにした拡張機能アイコン。
+       フレーム=青→紫の淡いグラデ、タイル=明→濃の青グラデ、右上に「Rec中」を示す控えめな赤丸。
+       スケーラブルなので 16/32/48/128px の PNG を書き出せる。色は自由に変更可。 -->
+  <defs>
+    <linearGradient id="gFrame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b3a6b"/>
+      <stop offset="0.55" stop-color="#102347"/>
+      <stop offset="1" stop-color="#2a1a55"/>
+    </linearGradient>
+    <!-- タイルは枠全体にまたがる座標系にして、左上=明るい / 右下=濃い のグラデにする(単調さ回避)。 -->
+    <linearGradient id="gTile" x1="82" y1="82" x2="430" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#a6d8ff"/>
+      <stop offset="0.5" stop-color="#79c0ff"/>
+      <stop offset="1" stop-color="#4f9eff"/>
+    </linearGradient>
+    <!-- 赤丸のソフトなグロー(中心から外へフェード)。 -->
+    <radialGradient id="gGlow">
+      <stop offset="0.35" stop-color="#ff6a66" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ff6a66" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="96"
+        fill="url(#gFrame)" stroke="#58a6ff" stroke-width="8" stroke-opacity="0.6"/>
+  <g fill="url(#gTile)">
+    <rect x="82"  y="82"  width="155" height="155" rx="29"/>
+    <rect x="275" y="82"  width="155" height="155" rx="29"/>
+    <rect x="82"  y="275" width="155" height="155" rx="29"/>
+    <rect x="275" y="275" width="155" height="155" rx="29"/>
+  </g>
+  <!-- Rec中アクセント: 右上に控えめな赤丸(グロー + 赤丸 + 小ハイライト)。 -->
+  <circle cx="424" cy="102" r="54" fill="url(#gGlow)"/>
+  <circle cx="424" cy="102" r="34" fill="#ff4040"/>
+  <circle cx="413" cy="91" r="10" fill="#ffffff" fill-opacity="0.4"/>
+</svg>
