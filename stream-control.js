@@ -246,10 +246,20 @@ function mvInOwnFrame() {
   let lpDragging = false;
   let lpEndedAt = 0; // ドラッグ直後の click 誤発火(リンク踏み)抑止用
   let rmbDown = null; // 右ボタンのドラッグ用(マウスのみ)。押下時の screen 座標。動かしたら即つかむ=長押し不要
+  let lpPid = null;   // ドラッグ中のポインタID(キャプチャの解放に使う)
   const post = (type, extra) => {
     try {
       window.parent.postMessage(Object.assign({ [MAGIC]: true, type }, extra || {}), '*');
     } catch (e) { /* noop */ }
+  };
+
+  // ドラッグ開始時にこの文書でポインタを捕捉する。捕捉しないと、離した瞬間にカーソルが
+  // このフレームの外(枠の外や、サイト内の入れ子 iframe の上)にあると pointerup が届かず、
+  // lpDragging が true のまま残る。そうなると selectstart を抑止し続けるので、文字選択も
+  // 入力欄へのフォーカスもできなくなり、親へ tile-drag-end も飛ばないので枠が掴まれたままになる。
+  const capturePointer = (pid) => {
+    lpPid = pid;
+    try { document.documentElement.setPointerCapture(pid); } catch (e) { /* noop */ }
   };
   window.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button === 2) { // 右ボタン: 動かせば即つかんで移動(長押し不要)。右クリックメニューは出さない。
@@ -267,9 +277,11 @@ function mvInOwnFrame() {
     lpDown = { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY };
     lpDragging = false;
     clearTimeout(lpTimer);
+    const pid = e.pointerId;
     lpTimer = setTimeout(() => {
       if (!lpDown) return;
       lpDragging = true;
+      capturePointer(pid);
       post('tile-drag-start', lpDown);
     }, LP_MS);
   }, true); // capture: サイト側が stopPropagation しても拾う
@@ -278,6 +290,7 @@ function mvInOwnFrame() {
     // 右ボタンを押したまま動かしたら、その時点でドラッグ開始(現在位置を始点にしてジャンプを防ぐ)。
     if (rmbDown && !lpDragging && (Math.abs(e.screenX - rmbDown.sx) > LP_SLOP || Math.abs(e.screenY - rmbDown.sy) > LP_SLOP)) {
       lpDragging = true;
+      capturePointer(e.pointerId);
       post('tile-drag-start', { sx: e.screenX, sy: e.screenY, cx: e.clientX, cy: e.clientY });
     }
     if (lpDragging) {
@@ -293,6 +306,10 @@ function mvInOwnFrame() {
     clearTimeout(lpTimer);
     lpDown = null;
     rmbDown = null;
+    if (lpPid !== null) {
+      try { document.documentElement.releasePointerCapture(lpPid); } catch (e) { /* 既に解放済み */ }
+      lpPid = null;
+    }
     if (lpDragging) {
       lpDragging = false;
       lpEndedAt = Date.now();
@@ -301,6 +318,19 @@ function mvInOwnFrame() {
   };
   window.addEventListener('pointerup', lpEnd, true);
   window.addEventListener('pointercancel', lpEnd, true);
+  window.addEventListener('lostpointercapture', lpEnd, true); // 捕捉を奪われた場合も終了扱いにする
+  // 最後の保険。何らかの理由でポインタイベントが途切れても、抑止状態を残さない。
+  // ここが残ると文字選択も入力欄へのフォーカスもできなくなるため、必ず解除する。
+  // blur では終わらせない(ドラッグ中に枠の外へフォーカスが移ることがあり、誤って中断してしまう)。
+  const LP_WATCHDOG_MS = 5000;
+  let lpLastEvent = 0;
+  setInterval(() => {
+    if (!lpDragging && !lpDown && !rmbDown) return;
+    if (Date.now() - lpLastEvent < LP_WATCHDOG_MS) return;
+    lpEnd();
+  }, 1000);
+  window.addEventListener('pointermove', () => { lpLastEvent = Date.now(); }, { capture: true, passive: true });
+  window.addEventListener('pointerdown', () => { lpLastEvent = Date.now(); }, { capture: true, passive: true });
   // ドラッグ中はサイト側のスクロール・テキスト選択・長押しメニューを抑止し、離した直後の click も無効化。
   window.addEventListener('touchmove', (e) => {
     if (lpDragging && e.cancelable) e.preventDefault();
