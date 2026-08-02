@@ -261,7 +261,24 @@ function mvInOwnFrame() {
     lpPid = pid;
     try { document.documentElement.setPointerCapture(pid); } catch (e) { /* noop */ }
   };
+  // 枠の移動(長押し / 右ドラッグ)を扱うのは、multiview の直下のフレームだけにする。
+  // サイト内の入れ子フレーム(YouTube の live_chat 等)でも動かすと、そこでの押下が長押し判定に
+  // 入って選択を抑止してしまう。しかも post 先は multiview ではなくサイト自身なので意味も無い。
+  const isDirectTile = window.parent === window.top;
+
+  // 入力欄の上では移動操作を始めない。押している間 selectstart を抑止するため、
+  // contenteditable ではキャレットを置けなくなり、文字が打てなくなる
+  // (YouTube ライブのチャット入力がこれ。<input> は focus が別扱いなので影響が出にくい)。
+  const isEditable = (el) => {
+    try {
+      return !!(el && el.closest && el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
+    } catch (e) {
+      return false;
+    }
+  };
+
   window.addEventListener('pointerdown', (e) => {
+    if (!isDirectTile || isEditable(e.target)) return;
     if (e.pointerType === 'mouse' && e.button === 2) { // 右ボタン: 動かせば即つかんで移動(長押し不要)。右クリックメニューは出さない。
       rmbDown = { sx: e.screenX, sy: e.screenY };
       lpDragging = false;
@@ -339,8 +356,14 @@ function mvInOwnFrame() {
   // 選択や選択メニューが始まってしまい、ドラッグ移動後も選択が残る。押している間は選択/メニュー/D&Dを止める。
   // 右クリックは「枠の移動」操作に割り当てたため、枠内では常にブラウザのコンテキストメニューを出さない。
   window.addEventListener('contextmenu', (e) => { e.preventDefault(); }, true);
-  window.addEventListener('selectstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true);
-  window.addEventListener('dragstart', (e) => { if (lpDragging || lpDown) e.preventDefault(); }, true); // リンク/画像のD&D抑止
+  // 入力欄の上では抑止しない(contenteditable はキャレットを置く操作自体が選択のため、
+  // 抑止すると文字が打てなくなる)。
+  window.addEventListener('selectstart', (e) => {
+    if ((lpDragging || lpDown) && !isEditable(e.target)) e.preventDefault();
+  }, true);
+  window.addEventListener('dragstart', (e) => {
+    if ((lpDragging || lpDown) && !isEditable(e.target)) e.preventDefault();
+  }, true); // リンク/画像のD&D抑止
   window.addEventListener('click', (e) => {
     if (Date.now() - lpEndedAt < 400) { e.preventDefault(); e.stopPropagation(); }
   }, true);
