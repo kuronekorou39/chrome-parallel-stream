@@ -2064,6 +2064,31 @@ function clearMultiSelect() {
 //  - 両端のグリップ(.win-grip): ヘッダを枠の上辺に沿って左右にスライド(両端で止まる)。
 //  - 中央の本体(.win-bar-main): つかむと枠を移動。
 // ポインタをキャプチャするので iframe/動画の上をドラッグしても追従する。ボタン上では発火しない。
+// ポインタドラッグの定型(捕捉 → 移動 → 終了 → 解放)。
+// 同じ形を各所で手書きしていたため、setPointerCapture の付け忘れ(右ドラッグでリスナが残る)や
+// releasePointerCapture の呼び忘れ(リサイズ)といった取りこぼしが実際に起きていた。ここに集約する。
+//
+// target を捕捉すると以後の pointer イベントは target に集まるので、クロスオリジン iframe(映像)の
+// 上を通っても追従できる。pointerId で絞るのは、2本目の指が同じドラッグを動かしたり終わらせたり
+// しないようにするため。戻り値を呼べば途中で終了させられる。
+function onPointerDrag(target, e, onMove, onEnd) {
+  const pid = e.pointerId;
+  try { target.setPointerCapture(pid); } catch (_) { /* noop */ }
+  const move = (ev) => { if (ev.pointerId === pid) onMove(ev); };
+  const end = (ev) => {
+    if (ev && ev.pointerId !== undefined && ev.pointerId !== pid) return;
+    try { target.releasePointerCapture(pid); } catch (_) { /* 既に解放済み */ }
+    target.removeEventListener('pointermove', move);
+    target.removeEventListener('pointerup', end);
+    target.removeEventListener('pointercancel', end);
+    if (onEnd) onEnd();
+  };
+  target.addEventListener('pointermove', move);
+  target.addEventListener('pointerup', end);
+  target.addEventListener('pointercancel', end);
+  return end;
+}
+
 function makeBarHandle(win, bar) {
   bar.addEventListener('pointerdown', (e) => {
     if (stackMode || e.button !== 0 || !e.isPrimary || win.maximized) return; // 縦積み中は移動/スライドなし
@@ -2076,26 +2101,17 @@ function makeBarHandle(win, bar) {
     const startBarX = win.barX || 0;
     const r = getRect(win);
     bar.classList.add('sliding');
-    try { bar.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-    const onMove = (ev) => {
+    onPointerDrag(bar, e, (ev) => {
       if (slideMode) {
         win.barX = startBarX + (ev.clientX - sx);
         clampBarX(win); // 枠内+画面内に収めて反映
       } else {
         setRect(win, r.x + (ev.clientX - sx), r.y + (ev.clientY - sy), r.w, r.h);
       }
-    };
-    const end = () => {
+    }, () => {
       bar.classList.remove('sliding');
-      try { bar.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
-      bar.removeEventListener('pointermove', onMove);
-      bar.removeEventListener('pointerup', end);
-      bar.removeEventListener('pointercancel', end);
       if (!slideMode) saveLineup(); // 枠を動かしたら位置を保存(スライドのみのときは保存しない)
-    };
-    bar.addEventListener('pointermove', onMove);
-    bar.addEventListener('pointerup', end);
-    bar.addEventListener('pointercancel', end);
+    });
   });
 }
 
@@ -2110,8 +2126,7 @@ function beginResize(win, dir, e) {
   const r = getRect(win);
   const sx = e.clientX;
   const sy = e.clientY;
-  try { cap.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-  const onMove = (ev) => {
+  onPointerDrag(cap, e, (ev) => {
     const dx = ev.clientX - sx;
     const dy = ev.clientY - sy;
     let x = r.x;
@@ -2123,16 +2138,7 @@ function beginResize(win, dir, e) {
     if (dir.includes('w')) { w = Math.max(MIN_W, r.w - dx); x = r.x + r.w - w; } // 右辺を固定
     if (dir.includes('n')) { h = Math.max(MIN_H, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
     setRect(win, x, y, w, h);
-  };
-  const onUp = () => {
-    cap.removeEventListener('pointermove', onMove);
-    cap.removeEventListener('pointerup', onUp);
-    cap.removeEventListener('pointercancel', onUp);
-    saveLineup(); // リサイズ後のサイズ・位置を保存
-  };
-  cap.addEventListener('pointermove', onMove);
-  cap.addEventListener('pointerup', onUp);
-  cap.addEventListener('pointercancel', onUp);
+  }, () => saveLineup()); // リサイズ後のサイズ・位置を保存
 }
 
 function toggleMax(win) {
@@ -2773,8 +2779,7 @@ function makePanelDraggable(el, handle) {
     // ドラッグ中は全 iframe を無反応にする。クロスオリジン iframe の上を通るとポインタが
     // そちらへ吸われて掴めなくなる(「下に枠があると持てない」)ため、物理的に通させない。
     document.body.classList.add('panel-dragging');
-    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-    const onMove = (ev) => {
+    onPointerDrag(handle, e, (ev) => {
       // 枠と同じく EDGE_KEEP px を画面内に残してはみ出しを許容する。
       // 上はドラッグハンドル(ヘッダ)がパネル先頭にあるので 0 で止める(出すと掴めなくなる)。
       const minL = EDGE_KEEP - el.offsetWidth;
@@ -2782,17 +2787,7 @@ function makePanelDraggable(el, handle) {
       const maxT = Math.max(0, stage.clientHeight - EDGE_KEEP);
       el.style.left = Math.max(minL, Math.min(maxL, sl + ev.clientX - sx)) + 'px';
       el.style.top = Math.max(0, Math.min(maxT, st + ev.clientY - sy)) + 'px';
-    };
-    const end = () => {
-      document.body.classList.remove('panel-dragging');
-      try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
-      handle.removeEventListener('pointermove', onMove);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
-    };
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    }, () => document.body.classList.remove('panel-dragging'));
   });
 }
 
@@ -2806,23 +2801,14 @@ function makeMixerResizable(panel, handle) {
     const startY = e.clientY;
     const startH = panel.offsetHeight;
     document.body.classList.add('panel-dragging'); // ドラッグ中は iframe にポインタを奪わせない(掴み外れ防止)
-    try { handle.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-    const onMove = (ev) => {
+    onPointerDrag(handle, e, (ev) => {
       const maxH = Math.max(MIN_H, stage.clientHeight - panel.offsetTop - 8); // 下端が画面外へ出ないように
       panel.style.height = Math.max(MIN_H, Math.min(maxH, startH + ev.clientY - startY)) + 'px';
-    };
-    const end = () => {
+    }, () => {
       document.body.classList.remove('panel-dragging');
-      try { handle.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
-      handle.removeEventListener('pointermove', onMove);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
       panel.dataset.userResized = '1'; // 起動時の復元が後から来ても、この操作を巻き戻さない
       try { MV.storage.local.set({ [MIXER_HEIGHT_KEY]: panel.offsetHeight }); } catch (_) { /* noop */ }
-    };
-    handle.addEventListener('pointermove', onMove);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
+    });
   });
 }
 
