@@ -12,10 +12,10 @@ const MAX_LAYOUTS = 30;
 const COOKIE_RELAX_KEY = 'cookieRelaxEnabled';
 let cookieRelaxOn = true; // 起動時に storage から読み直す
 const MAX_WINDOWS = 20;
-// 枠の最小サイズ。中央のリサイズ操作盤(3×34=102px)が枠内に収まり、映像も潰れない大きさにする。
-// CSS の .win min-width / min-height と一致させること。
-const MIN_W = 320;
-const MIN_H = 180; // 16:9
+// 枠の最小サイズ。CSS の .win min-width / min-height と一致させること。
+// リサイズのつまみは右下の1点だけで場所を取らないため、小さめの枠も並べられるようにしてある。
+const MIN_W = 240;
+const MIN_H = 135; // 16:9
 const SNAP_GAP = 6; // 整形(グリッドスナップ)時の枠どうしの隙間
 const EDGE_KEEP = 100; // 枠/パネルがステージ外へはみ出しても、掴んで戻せるよう画面内に必ず残す可視量
 const TOP_OVERHANG = 30; // 上方向へのはみ出し上限。台形ヘッダ(高さ62px)の半分は掴めるよう残す
@@ -519,27 +519,20 @@ function createWindow(url, opts = {}) {
     // ※ iframe は生成後 DOM 上で move しないこと(再ペアレントすると埋め込みが壊れる)。
   }
 
-  // リサイズ用コントローラ(オンマウス時だけ出す)。
-  // 辺や角に置くと、配信サイト側のボタン(全画面・設定・チャット折りたたみ・再生バー)と必ず
-  // 取り合いになる。クロスオリジンの iframe なので「下にボタンがあるか」は親から判定できず、
-  // 一度受け取ったポインタを iframe へ渡し直す手段も無い。そこでサイトが UI を置かない中央へ集約する。
-  // 中央の穴はサイトへ素通しする(多くのプレイヤーは中央クリックが再生/一時停止のため)。
-  const resizePad = document.createElement('div');
-  resizePad.className = 'win-resize-pad';
-  [['nw', '↖'], ['n', '↑'], ['ne', '↗'],
-   ['w', '←'], [null, ''], ['e', '→'],
-   ['sw', '↙'], ['s', '↓'], ['se', '↘']].forEach(([dir, glyph]) => {
-    const cell = document.createElement('div');
-    if (!dir) { cell.className = 'win-rhole'; resizePad.appendChild(cell); return; } // 中央は穴
-    cell.className = 'win-rgrip win-rgrip-' + dir;
-    cell.dataset.dir = dir;
-    cell.textContent = glyph;
-    resizePad.appendChild(cell);
-  });
+  // リサイズ用のつまみ。右下の1点だけに置き、オンマウス/一時表示のときだけ出す。
+  // 隅ぴったりに置くと配信サイト側のボタン(全画面・設定・下端の再生バー)と取り合いになる。
+  // クロスオリジンの iframe なので「下にサイトのボタンがあるか」は親から判定できず、いったん
+  // 受け取ったポインタを iframe へ渡し直す API も無い。判定では解けないので、位置で避ける
+  // (隅から少し内側へ寄せ、再生バーの上に来るようにする。量は CSS 側で調整)。
+  const resizeGrip = document.createElement('div');
+  resizeGrip.className = 'win-resize-grip';
+  resizeGrip.dataset.dir = 'se';
+  resizeGrip.title = 'ドラッグして枠の大きさを変える';
+  resizeGrip.textContent = '⤡';
 
   // タップはサイト/プレイヤーへそのまま通す(シールドは置かない)。タイルの掴み(長押し)は
   // 枠内の content script(stream-control.js)が検知して親へ中継する(onTileDragMsg)。
-  el.append(bar, body, resizePad);
+  el.append(bar, body, resizeGrip);
   stage.appendChild(el);
 
   const win = {
@@ -609,8 +602,7 @@ function createWindow(url, opts = {}) {
   // (Android の長押しメニュー誤爆防止も兼ねる)。
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   makeBarHandle(win, bar);
-  resizePad.querySelectorAll('.win-rgrip').forEach((g) =>
-    g.addEventListener('pointerdown', (e) => beginResize(win, g.dataset.dir, e)));
+  resizeGrip.addEventListener('pointerdown', (e) => beginResize(win, resizeGrip.dataset.dir, e));
   // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
   volSlider.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
   volSlider.addEventListener('input', () => {
@@ -941,7 +933,7 @@ function maybeStartLongPress(win, e) {
   if (!e.isPrimary || e.button !== 0) return;
   if (!reapStuckDrag()) return; // 進行中ドラッグがあれば新規は掴ませない(古い残骸なら畳んで継続)
   if (win.el.classList.contains('stack-max')) return;
-  if (e.target.closest('.win-quick, .win-menu, .win-badge, .win-adjust, .win-bar, .win-resize-pad, button, input')) return;
+  if (e.target.closest('.win-quick, .win-menu, .win-badge, .win-adjust, .win-bar, .win-resize-grip, button, input')) return;
   const pid = e.pointerId;
   const sx = e.clientX, sy = e.clientY;
   let lx = sx, ly = sy;

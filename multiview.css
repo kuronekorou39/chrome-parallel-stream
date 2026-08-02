@@ -273,7 +273,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   position: absolute; display: flex; flex-direction: column;
   background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-  min-width: 320px; min-height: 180px; /* JS の MIN_W / MIN_H と一致させること。中央のリサイズ操作盤(102px)が収まる大きさ */
+  min-width: 240px; min-height: 135px; /* JS の MIN_W / MIN_H と一致させること */
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
   user-select: none; -webkit-user-select: none; /* 枠の長押しで親要素のテキストが選択されるのを防ぐ(iframe 内は stream-control.js が担当) */
 }
@@ -425,38 +425,27 @@ body.panel-dragging iframe { pointer-events: none; }
 /* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
 /* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
    枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
-/* ===== リサイズ用コントローラ(枠の中央) =====
-   辺や角に置くと配信サイト側のボタン(全画面・設定・チャット折りたたみ・再生バー)と必ず
-   取り合いになる。クロスオリジンの iframe なので「下にサイトのボタンがあるか」は親から
-   判定できず、受け取ったポインタを iframe へ渡し直す手段も無いため、判定では解決できない。
-   そこでサイトが UI を置かない中央に集約する。オンマウス/一時表示のときだけ出す。 */
-.win-resize-pad {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  z-index: 7; display: grid;
-  grid-template-columns: repeat(3, 34px);
-  grid-template-rows: repeat(3, 34px);
-  opacity: 0; transition: opacity 0.15s ease;
-  border-radius: 10px; overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.55);
-}
-.win:hover .win-resize-pad, .win.show-bar .win-resize-pad { opacity: 1; }
-/* 中央の穴はサイトへ素通しする(多くのプレイヤーは中央クリックが再生/一時停止のため)。 */
-.win-rhole { pointer-events: none; }
-.win-rgrip {
-  pointer-events: none; /* 出ていないときは押せない。表示中だけ auto にする */
-  touch-action: none;
+/* ===== リサイズ用のつまみ(右下) =====
+   隅ぴったりに置くと配信サイト側のボタン(全画面・設定・下端の再生バー)と取り合いになる。
+   クロスオリジンの iframe なので「下にサイトのボタンがあるか」は親から判定できず、受け取った
+   ポインタを iframe へ渡し直す手段も無いため、判定では解決できない。位置で避ける。
+   --grip-inset-b は再生バー(おおむね 40〜56px)の上へ逃がすための距離。触ってみて調整する。 */
+.win-resize-grip {
+  --grip-inset-r: 10px;
+  --grip-inset-b: 52px;
+  position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
+  z-index: 7; width: 30px; height: 30px;
   display: flex; align-items: center; justify-content: center;
   background: rgba(13,17,23,0.78); color: #8b949e;
-  border: 1px solid rgba(48,54,61,0.9);
-  font-size: 14px; line-height: 1; user-select: none;
+  border: 1px solid rgba(48,54,61,0.9); border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.5);
+  font-size: 15px; line-height: 1; user-select: none;
+  cursor: nwse-resize; touch-action: none;
+  opacity: 0; pointer-events: none; /* 出ていないときは押せない */
+  transition: opacity 0.15s ease;
 }
-.win:hover .win-resize-pad .win-rgrip,
-.win.show-bar .win-resize-pad .win-rgrip { pointer-events: auto; }
-.win-rgrip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
-.win-rgrip-n, .win-rgrip-s { cursor: ns-resize; }
-.win-rgrip-e, .win-rgrip-w { cursor: ew-resize; }
-.win-rgrip-nw, .win-rgrip-se { cursor: nwse-resize; }
-.win-rgrip-ne, .win-rgrip-sw { cursor: nesw-resize; }
+.win:hover .win-resize-grip, .win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
+.win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
 
 /* ===== メニュー位置ダイアログ(中央モーダル) ===== */
 .pos-dialog-overlay {
@@ -725,8 +714,8 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 }
 .cookie-note strong { color: #f0b849; }
 body.stack-mode .win { min-width: 0; min-height: 0; } /* 全幅タイルは MIN_W より狭くなる */
-/* 縦積み(スマホ)は常に整列済みでリサイズしないので、中央の操作盤は出さない。 */
-body.stack-mode .win-resize-pad,
+/* 縦積み(スマホ)は常に整列済みでリサイズしないので、つまみは出さない。 */
+body.stack-mode .win-resize-grip,
 body.stack-mode .win-grip { display: none; }
 body.stack-mode .win-controls button.max { display: none; }
 /* 台形ヘッダは PC 含め出さない。移動は長押しドラッグ、操作は簡易UI(.win-quick + ⋮メニュー)。 */
