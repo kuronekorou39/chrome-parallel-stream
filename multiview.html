@@ -6,7 +6,11 @@
        枠ドラッグ中のピンチ誤爆でページごとズームしないよう拡大は禁止(OSのアクセシビリティ設定で上書き可)。 -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Multiview</title>
-  <link rel="stylesheet" href="multiview.css" />
+  <!-- ?v= はキャッシュ避け。GitHub Pages はキャッシュ制御を設定できず、更新しても利用者が
+       古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
+       multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
+       合わせて上げること(上げ忘れると古いまま配られる)。 -->
+  <link rel="stylesheet" href="multiview.css?v=0.2.1" />
 </head>
 <body>
   <div id="toolbar">
@@ -163,7 +167,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js"></script>
-  <script src="multiview.js"></script>
+  <script src="ext-bridge.js?v=0.2.1"></script>
+  <script src="multiview.js?v=0.2.1"></script>
 </body>
 </html>
