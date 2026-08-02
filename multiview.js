@@ -1905,9 +1905,17 @@ function dmkPresetDelete() {
 function openDanmakuPanel(win) {
   const panel = document.getElementById('danmaku-panel');
   if (!panel) return;
-  // 全体対象で開く操作(ツールバー / ≡メニュー)は、表示中にもう一度押したら閉じる。
-  // 枠を指定して開くときは対象を切り替えたいので、開いたままにする。
-  if (!win && !panel.hidden) { panel.hidden = true; return; }
+  // 全体対象で開く操作(ツールバー / ≡メニュー)のときの挙動:
+  //   枠を対象にして開いている → 全体へ切り替えるだけ(閉じない)
+  //   既に全体で開いている     → 閉じる
+  // 「枠→全体の切り替え」と「閉じる」を同じ一回の操作にまとめると、枠を見ていたときに
+  // 全体設定へ移れなくなるため、段階を分ける。
+  // 枠を指定して開くとき(枠のメニュー)は、対象の切り替えが目的なので常に開く。
+  if (!win && !panel.hidden) {
+    if (dmkPanelWin) { dmkPanelWin = null; renderDanmakuPanel(); return; }
+    panel.hidden = true;
+    return;
+  }
   dmkPanelWin = (win && !win.video) ? win : null; // Kick は弾幕対象外なので全体扱い
   if (win) focusWindow(win);
   panel.hidden = false;
