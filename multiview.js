@@ -3217,15 +3217,9 @@ function updateWinTitle(win) {
     const light = !!win.light || !!win.video;
     // 🎭=シアター動作中 / 🔎=有効だが主映像を探索中(診断用。frame 内 stream-control からの通知)。
     const mark = win.theaterState === 'on' ? ' 🎭' : win.theaterState === 'searching' ? ' 🔎' : '';
-    // 🛡=この枠に広告ブロッカー(vaft)が入っている / 🚫=Twitch枠なのに入っていない。
-    // undefined(未報告)のうちは何も出さない。Twitch以外の枠では報告自体が来ない。
-    // 未注入(🚫)のときは、ホバーせずに原因が読めるよう内訳もそのまま出す。
-    // f=広告スキッパーの page-script(fetch差し替え) / w=Worker差し替え / host=枠が読んでいるホスト。
-    const ab = win.adblock;
-    const detail = ab
-      ? ` m:${ab.marker ? 1 : 0} p:${ab.pageMarker ? 1 : 0} w:${ab.workerHooked ? 1 : 0} ${ab.host.replace('.twitch.tv', '')}`
-      : '';
-    const shield = win.vaft === undefined ? '' : win.vaft === null ? ' 🚫' + detail : ' 🛡';
+    // 🛡=この枠に広告ブロック(別拡張の vaft)が効いている / 🚫=Twitch枠なのに効いていない。
+    // 未報告(undefined)のうちは何も出さない。Twitch 以外の枠では報告自体が来ない。
+    const shield = win.vaft === undefined ? '' : win.vaft === null ? ' 🚫' : ' 🛡';
     win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + mark + shield;
     win.badgeEl.classList.toggle('light', light);
     // 通常モードのバッジは CSS で display:none にされているため、診断が乗るときだけ表示を戻す。

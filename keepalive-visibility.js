@@ -29,33 +29,16 @@
   // フォーカス喪失で止める実装にも備え、hasFocus を true 固定。
   try { document.hasFocus = function () { return true; }; } catch (e) { /* noop */ }
 
-  // ---- 診断: 広告ブロッカーがこの枠に入っているかを親へ知らせる ----
-  // 広告ブロックは別拡張(chrome-ad-skipper)の担当だが、枠は別オリジンなので
-  // 拡張ページ側から中を覗けず、「入っているのに効かない」のか「そもそも入っていない」のかを
-  // 切り分けられない。vaft が立てる window.twitchAdSolutionsVersion を MAIN world のここから
-  // 読んで親へ送り、枠のバッジに出す。
-  // 別拡張なので注入順は保証されない。数回に分けて確認し、状態が変わったときだけ報告する。
+  // ---- 広告ブロックがこの枠に効いているかを親へ知らせる ----
+  // 広告ブロックは別拡張(chrome-ad-skipper)の担当。枠は別オリジンなので拡張ページ側から
+  // 中を覗けず、効いているかどうかを利用者が確認する手段が無い。vaft が立てる
+  // window.twitchAdSolutionsVersion を MAIN world のここから読んで親へ送り、枠のバッジに出す。
+  // 別拡張なので注入の順序もタイミングも保証されない。数回に分けて確認し、変化時だけ報告する。
   if (location.hostname.indexOf('twitch.tv') !== -1) {
-    // vaft が居ない場合の切り分け用に、広告スキッパーの別スクリプト(page-script が window.fetch を
-    // 差し替える)が届いているかも一緒に見る。fetch だけ差し替わっていれば「その拡張の MAIN world は
-    // 枠に届いているが vaft だけ動いていない」、両方無ければ「その拡張自体が枠に届いていない」。
-    var isPatched = function (fn) {
-      try { return !/\[native code\]/.test(Function.prototype.toString.call(fn)); } catch (e) { return false; }
-    };
     var reported;
     var reportAdblock = function () {
       var v = window.twitchAdSolutionsVersion;
-      var state = {
-        vaft: typeof v === 'number' ? v : null,
-        fetchHooked: isPatched(window.fetch),
-        workerHooked: isPatched(window.Worker),
-        // 広告スキッパーが vaft と同条件で入れている最小マーカー。
-        // これが有るのに vaft が無ければ「注入枠は届いているが vaft 固有の理由で走っていない」。
-        marker: !!window.__adSkipperMarker,
-        // page-script 自身の印。fetch の差し替えは Twitch 自身も行うため判定に使えない。
-        pageMarker: !!window.__adSkipperPageMarker,
-        host: location.hostname
-      };
+      var state = { vaft: typeof v === 'number' ? v : null, host: location.hostname };
       var key = JSON.stringify(state);
       if (key === reported) return;
       reported = key;
