@@ -57,14 +57,20 @@ UI は [GitHub Pages](https://kuronekorou39.github.io/chrome-parallel-stream/mul
 配信サイトを iframe で並べるという性質上、通常の拡張機能より踏み込んだことをしています。
 **インストールする前に理解してください。**
 
-### 1. 対象サイトの CSP と X-Frame-Options を除去します
+### 1. 対象サイトの X-Frame-Options を除去します
 
-`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / mellow-fan(旧 OPENREC)への **サブフレーム
-リクエスト**から `content-security-policy` と `x-frame-options` を削除します。
+`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / mellow-fan(旧 OPENREC)への
+**サブフレームリクエスト**から `x-frame-options` を削除します。これを外さないと iframe への埋め込みが
+拒否され、マルチビューは成立しません。
 
-各サイトは iframe への埋め込みを明示的に拒否しているため、これを外さないとマルチビューは成立しません。
-CSP も外しているのは、`frame-ancestors` ディレクティブが同様に埋め込みを拒否するためで、
-declarativeNetRequest はヘッダ単位でしか操作できず「そのディレクティブだけ外す」ことができないからです。
+**CSP は除去しません。** 各サイトの応答ヘッダを実測したところ、埋め込みを拒否しているのは
+X-Frame-Options だけで、CSP に `frame-ancestors` を入れているサイトはありませんでした
+(`player.twitch.tv` は `frame-ancestors` に `parent=` の値をそのまま入れる仕様なので、
+正しい `parent` を渡していれば除去は不要)。CSP を外すと、そのサイトの `script-src` などの保護まで
+無効にしてしまうため、必要のないものは触りません。
+
+例外は Kick のチャットだけで、Cloudflare 越しにヘッダを確認できていないため従来どおり CSP も
+除去しています(`rules.json` の2つ目のルール。確認でき次第やめます)。
 
 適用範囲は `initiatorDomains` で絞ってあります。対象は **この拡張の UI ページのオリジン**と、
 **対象サイト自身**です。後者が必要なのは、枠の中で動画ページへ移動したときのリクエストの発信元が
