@@ -63,10 +63,16 @@ let dmkGlobal = Object.assign({}, DMK_DEFAULTS);
 // 設定パネルのコントロール定義(全体/この枠 共通)。
 // adv:true は「詳細」に畳む項目。まず出すのは普段いじる4つだけにして、最初の見た目を軽くする。
 // 詳細側は種類ごと(group)にまとめて表示するので、同じ group の項目が連続するよう並べること。
+// 簡易側の3つは steps を持つ。数値を自由に決めるのではなく、用意した段階から選ぶだけにする
+// (つまみは段階のインデックスを動かし、目盛りと名前を出す)。実際に保存されるのは steps の値。
+// 既定値(22 / 180 / 30)は必ず steps に含めること。含めないと初期状態がどの段階にも一致しない。
 const DMK_CONTROLS = [
-  { key: 'fontSize', label: '文字サイズ', type: 'range', min: 12, max: 48, unit: 'px', group: 'サイズ' },
-  { key: 'speed', label: '速さ', type: 'range', min: 40, max: 400, unit: '', group: '速度' },
-  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示' },
+  { key: 'fontSize', label: '文字サイズ', type: 'range', min: 12, max: 48, unit: 'px', group: 'サイズ',
+    steps: [14, 18, 22, 28, 36], stepNames: ['極小', '小', '中', '大', '特大'] },
+  { key: 'speed', label: '速さ', type: 'range', min: 40, max: 400, unit: '', group: '速度',
+    steps: [100, 140, 180, 240, 320], stepNames: ['とても遅い', '遅い', 'ふつう', '速い', 'とても速い'] },
+  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示',
+    steps: [20, 30, 50, 75, 100], stepNames: ['ごく薄い', '薄い', 'ふつう', '濃い', 'くっきり'] },
   { key: 'longShrink', label: '長文を縮小', type: 'toggle', group: 'サイズ', adv: true },
   { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字', group: 'サイズ', adv: true },
   { key: 'speedByLength', label: '長さで速度', type: 'toggle', group: '速度', adv: true },
@@ -1756,6 +1762,16 @@ function populateDmkScope() {
   sel.value = want;
   if (sel.value !== want) { dmkPanelWin = null; sel.value = 'global'; } // 対象枠が消えていた
 }
+// 値に一番近い段階のインデックスを返す。
+function nearestStepIndex(steps, value) {
+  const v = Number(value);
+  let best = 0;
+  for (let i = 1; i < steps.length; i++) {
+    if (Math.abs(steps[i] - v) < Math.abs(steps[best] - v)) best = i;
+  }
+  return best;
+}
+
 // パネルの各コントロールを現在の対象(全体の既定 or その枠の実効値)に合わせて描き直す。
 function renderDanmakuPanel() {
   if (dmkPanelWin && !wins.includes(dmkPanelWin)) dmkPanelWin = null; // 閉じられた枠は全体へ
@@ -1767,6 +1783,11 @@ function renderDanmakuPanel() {
       const on = !!src[c.key];
       ui.input.classList.toggle('on', on);
       ui.input.textContent = on ? 'ON' : 'OFF';
+    } else if (ui.steps) {
+      // 保存値が段階とぴったり一致しないこと(旧設定・プリセット)もあるので、一番近い段階に寄せる。
+      const i = nearestStepIndex(ui.steps, src[c.key]);
+      ui.input.value = String(i);
+      ui.valEl.textContent = ui.stepNames[i];
     } else {
       ui.input.value = src[c.key];
       ui.valEl.textContent = src[c.key] + (c.unit || '');
@@ -1912,6 +1933,26 @@ function buildDmkRow(c) {
       });
       row.appendChild(btn);
       ctrl = { input: btn };
+    } else if (c.steps) {
+      // 段階選択。つまみは 0..n-1 のインデックスを動かし、値は steps から引く。
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0'; input.max = String(c.steps.length - 1); input.step = '1';
+      // list を付けると Chrome がつまみの下に目盛りを描く(段階があることが見て分かる)。
+      const ticks = document.createElement('datalist');
+      ticks.id = 'dmk-ticks-' + c.key;
+      c.steps.forEach((_, i) => { const o = document.createElement('option'); o.value = String(i); ticks.appendChild(o); });
+      input.setAttribute('list', ticks.id);
+      const val = document.createElement('span');
+      val.className = 'dmk-val dmk-val-name';
+      input.addEventListener('input', () => {
+        const i = Number(input.value);
+        dmkEditValue(c.key, c.steps[i]);
+        val.textContent = c.stepNames[i];
+      });
+      input.addEventListener('change', () => { saveLineup(); renderDanmakuPanel(); });
+      row.append(input, val, ticks);
+      ctrl = { input, valEl: val, steps: c.steps, stepNames: c.stepNames };
     } else {
       const input = document.createElement('input');
       input.type = 'range';

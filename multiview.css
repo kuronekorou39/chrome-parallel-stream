@@ -605,8 +605,10 @@ body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロー�
 /* 適用先に応じた弾幕 ON/OFF(枠=トグル / 全体=すべてON/OFF)。 */
 .dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
 .dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
-/* 一番よく押すので、設定行のトグルより大きく取る。 */
-.dmk-onoff .dmk-toggle { flex: 1 1 auto; padding: 12px 0; font-size: 15px; font-weight: bold; }
+/* 一番よく押すので、設定行のトグルより大きく取る。「すべてON/OFF」も同じ大きさに揃える
+   (プリセットの小さいボタンも .dmk-bulk なので、この行の中だけを対象にする)。 */
+.dmk-onoff .dmk-toggle,
+.dmk-onoff .dmk-bulk { flex: 1 1 auto; padding: 12px 0; font-size: 15px; font-weight: bold; }
 .dmk-bulk {
   flex: 1 1 0; padding: 6px 0; font-family: inherit; font-size: 12px; cursor: pointer;
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
@@ -621,6 +623,10 @@ body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロー�
 .dmk-label { flex: 0 0 80px; font-size: 12px; color: #8b949e; }
 .dmk-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
 .dmk-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+/* 段階名(「ふつう」等)は数値より長いので幅を広げる。 */
+.dmk-val-name { flex: 0 0 72px; }
+/* datalist は目盛りの指定にだけ使う。中身のテキストは出さない。 */
+.dmk-row datalist { display: none; }
 .dmk-toggle { flex: 1 1 auto; padding: 6px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; }
 .dmk-toggle.on { background: #0d2818; border-color: #3fb950; color: #3fb950; } /* ON は緑 */
 .dmk-reset { margin: 0 12px 12px; padding: 8px 0; font-family: inherit; font-size: 12px; cursor: pointer; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
