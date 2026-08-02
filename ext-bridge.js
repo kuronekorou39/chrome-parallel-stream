@@ -52,26 +52,77 @@
   // ---- 拡張機能が入っていないときの案内 ----
   // このページは UI だけで、枠の埋め込み(CSP/X-Frame-Options の除去)も枠内の音量・弾幕も
   // 拡張機能側が担っている。拡張が無いと枠が真っ白なまま理由も分からないので、明示する。
+  // 手順そのものを画面に出す。リンク先へ飛ばすだけだと、着地先で何をすればいいか分からない。
+  // chrome://extensions はウェブページからリンクにしても Chrome が遷移を拒否するため、
+  // クリックさせず「コピーして貼る」形で見せる。
+  const REPO_URL = 'https://github.com/kuronekorou39/chrome-parallel-stream';
+  const ZIP_URL = REPO_URL + '/archive/refs/heads/main.zip';
+
   function showMissingExtensionNotice() {
     if (document.getElementById('mv-no-ext')) return;
+
     const el = document.createElement('div');
     el.id = 'mv-no-ext';
     el.style.cssText = [
       'position:fixed', 'left:0', 'right:0', 'top:0', 'z-index:2147483647',
-      'background:#3c0d11', 'color:#ffdcd9', 'border-bottom:1px solid #f85149',
-      'font:13px/1.6 system-ui,sans-serif', 'padding:10px 14px', 'text-align:center'
+      'background:#1b0d0f', 'color:#ffdcd9', 'border-bottom:1px solid #f85149',
+      'font:13px/1.7 system-ui,sans-serif', 'padding:14px 18px',
+      'max-height:70vh', 'overflow:auto', 'box-shadow:0 4px 18px rgba(0,0,0,0.6)'
     ].join(';');
-    const link = document.createElement('a');
-    link.href = 'https://github.com/kuronekorou39/chrome-parallel-stream';
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = 'インストール方法';
-    link.style.color = '#ff9c94';
-    el.append(
-      '拡張機能 Parallel Stream が見つかりません。このページは UI だけで、配信の埋め込みと枠内の音量・弾幕は拡張機能が担当します。' +
-        'このままでは枠が表示されず、設定も保存されません。 ',
-      link
-    );
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'max-width:760px;margin:0 auto';
+
+    const h = document.createElement('div');
+    h.textContent = '⚠ 拡張機能「Parallel Stream」が必要です';
+    h.style.cssText = 'font-size:15px;font-weight:bold;color:#ff9c94;margin-bottom:6px';
+
+    const lead = document.createElement('div');
+    lead.textContent =
+      'このページは操作画面だけです。配信サイトの埋め込み、枠ごとの音量、弾幕は拡張機能が行うため、' +
+      '入れていないと枠が1つも表示されず、設定も保存されません。';
+    lead.style.cssText = 'margin-bottom:10px';
+
+    const code = (t) => {
+      const c = document.createElement('code');
+      c.textContent = t;
+      c.style.cssText =
+        'background:#000;color:#ffd9d5;padding:1px 6px;border-radius:4px;' +
+        'font-family:ui-monospace,Consolas,monospace;user-select:all';
+      return c;
+    };
+
+    const ol = document.createElement('ol');
+    ol.style.cssText = 'margin:0 0 10px;padding-left:1.4em';
+    const li = (...nodes) => {
+      const l = document.createElement('li');
+      l.append(...nodes);
+      l.style.marginBottom = '3px';
+      ol.appendChild(l);
+    };
+
+    const zip = document.createElement('a');
+    zip.href = ZIP_URL;
+    zip.textContent = 'ZIP をダウンロード';
+    zip.style.cssText = 'color:#ff9c94;font-weight:bold';
+    li('リポジトリを取得して展開する(', zip, ' / または git clone)');
+    li('Chrome のアドレスバーに ', code('chrome://extensions'), ' を貼って開き、「デベロッパーモード」を ON');
+    li('「パッケージ化されていない拡張機能を読み込む」を押し、展開したフォルダ(', code('manifest.json'), ' がある場所)を選ぶ');
+    li('このページを再読み込みする');
+
+    const more = document.createElement('a');
+    more.href = REPO_URL + '#インストール';
+    more.target = '_blank';
+    more.rel = 'noopener';
+    more.textContent = '詳しい説明とこの拡張がブラウザに与える影響';
+    more.style.color = '#ff9c94';
+
+    const foot = document.createElement('div');
+    foot.style.cssText = 'font-size:12px;opacity:0.85';
+    foot.append(more);
+
+    wrap.append(h, lead, ol, foot);
+    el.appendChild(wrap);
     (document.body || document.documentElement).appendChild(el);
   }
 

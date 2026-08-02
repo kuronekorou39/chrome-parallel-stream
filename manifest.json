@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parallel Stream",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Twitch / YouTube / OPENREC / Kick の配信を1画面に並べて見るマルチビュー。枠ごとの音量・コメント弾幕つき。",
   "icons": {
     "16": "icon-16.png",
@@ -43,13 +43,19 @@
         "*://*.youtube.com/*",
         "*://*.openrec.tv/*"
       ],
-      "js": ["stream-control.js"],
+      "js": [
+        "stream-control.js"
+      ],
       "all_frames": true,
       "run_at": "document_idle"
     },
     {
-      "matches": ["*://player.twitch.tv/*"],
-      "js": ["twitch-keepalive.js"],
+      "matches": [
+        "*://player.twitch.tv/*"
+      ],
+      "js": [
+        "twitch-keepalive.js"
+      ],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
@@ -60,20 +66,30 @@
         "*://*.twitch.tv/*",
         "*://*.openrec.tv/*"
       ],
-      "js": ["keepalive-visibility.js"],
+      "js": [
+        "keepalive-visibility.js"
+      ],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
     },
     {
-      "matches": ["https://kuronekorou39.github.io/chrome-parallel-stream/*"],
-      "js": ["page-bridge.js"],
+      "matches": [
+        "https://kuronekorou39.github.io/chrome-parallel-stream/*"
+      ],
+      "js": [
+        "page-bridge.js"
+      ],
       "run_at": "document_start"
     }
   ],
   "declarative_net_request": {
     "rule_resources": [
-      { "id": "ruleset_streams", "enabled": true, "path": "rules.json" }
+      {
+        "id": "ruleset_streams",
+        "enabled": true,
+        "path": "rules.json"
+      }
     ]
   }
 }
