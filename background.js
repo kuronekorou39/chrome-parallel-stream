@@ -102,8 +102,12 @@ function safeNav(key) {
 
 // ====== メッセージハンドラ ======
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== 'object') return false;
+  // 自分の拡張の文脈(popup / multiview ページ / 自分が注入した content script)からのみ受け付ける。
+  // UI ページを通常の https オリジンへ置けるようにしたことで、page-bridge.js 経由の依頼が入り口として
+  // 増えたため、送信元の確認を必須にする。
+  if (sender.id !== chrome.runtime.id) return false;
 
   if (msg.type === 'rerun-probes') {
     runAllProbes()
@@ -128,14 +132,40 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg.type === 'relax-cookies') {
-    Promise.all((msg.domains || []).map((d) => relaxCookies(d)))
+    // 対象は埋め込みでログインを使うサイトだけに固定する。任意ドメインを受けると
+    // 「どんなサイトの Cookie 保護でも恒久的に外せる」プリミティブになってしまうため。
+    const domains = (msg.domains || []).filter((d) => RELAXABLE_DOMAINS.includes(d));
+    Promise.all(domains.map((d) => relaxCookies(d)))
       .then((counts) => sendResponse({ ok: true, counts }))
       .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
     return true;
   }
 
+  // ---- UI ページを通常オリジンに置いたときの中継(page-bridge.js から来る) ----
+  // content script からは chrome.system.* / chrome.tabs.* を呼べないため、ここで代行する。
+  if (msg.type === 'bridge-system-cpu') {
+    chrome.system.cpu.getInfo().then(sendResponse).catch(() => sendResponse(null));
+    return true;
+  }
+
+  if (msg.type === 'bridge-system-memory') {
+    chrome.system.memory.getInfo().then(sendResponse).catch(() => sendResponse(null));
+    return true;
+  }
+
+  if (msg.type === 'bridge-open-tab') {
+    // 開けるのは http(s) のみ(javascript: 等を弾く)。
+    const url = typeof msg.url === 'string' ? msg.url : '';
+    if (/^https?:\/\//i.test(url)) chrome.tabs.create({ url });
+    sendResponse({ ok: true });
+    return true;
+  }
+
   return false;
 });
+
+// Cookie の SameSite を緩められるドメイン(埋め込み内でログインを使うサイトのみ)。
+const RELAXABLE_DOMAINS = ['twitch.tv', 'openrec.tv', 'kick.com'];
 
 // 対象ドメインの Cookie を SameSite=None; Secure に再設定する。
 // 既定(Lax)だと別サイト扱いの埋め込みフレームへログインCookieが送られず未ログインになる。

@@ -7,7 +7,6 @@
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
 const MULTIVIEW_LAYOUTS_KEY = 'multiviewLayouts';
 const MAX_LAYOUTS = 30;
-const AD_SKIP_KEY = 'adSkipEnabled'; // 広告スキップのオン/オフ。各枠の stream-control.js が storage で追従する。
 const MAX_WINDOWS = 20;
 const MIN_W = 240; // 枠の最小幅(台形廃止で小さくできる。小さめの枠を並べられるように)
 const MIN_H = 135; // 枠の最小高さ(16:9 で 240×135。CSS の .win min-height と一致させること)
@@ -87,7 +86,7 @@ const wins = [];
 // 弾幕設定パネルの状態(init→wireToolbar→setupDanmakuPanel が同期実行されるため、ここ=init より前で初期化する)。
 let dmkPanelWin = null; // 弾幕設定の編集対象: null=全体の既定 / win=その枠の上書き(適用先ドロップダウンで選ぶ)
 const dmkPanelControls = {};   // key -> { input, valEl, revert }
-let dmkPresets = [];           // 弾幕設定のプリセット [{name, settings}](chrome.storage に保存・全体共有)
+let dmkPresets = [];           // 弾幕設定のプリセット [{name, settings}](MV.storage に保存・全体共有)
 const DMK_PRESETS_KEY = 'mvDanmakuPresets';
 
 // スマホ縦積みモード: 指が主ポインタ かつ 狭い画面(940px はスマホ横持ちまで拾う閾値)。
@@ -103,7 +102,7 @@ let stackMode = false;
   window.addEventListener('hashchange', updateStackMode); // #stack の付け外しで切替(動作確認用)
   window.addEventListener('resize', relayoutOnResize);
   window.addEventListener('message', onFrameUrl);
-  window.addEventListener('message', onFrameAdState);
+  window.addEventListener('message', onFrameState);
   window.addEventListener('message', onTileDragMsg); // frame内長押し → タイルドラッグの中継
   window.addEventListener('message', onChatMessage); // frame からのチャット → 弾幕として流す
 
@@ -139,7 +138,7 @@ let stackMode = false;
     }, 0);
   });
 
-  const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
+  const data = await MV.storage.local.get(MULTIVIEW_ACTIVE_KEY);
   const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
 
   // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
@@ -182,15 +181,17 @@ function onFrameUrl(e) {
 }
 
 // content script(stream-control.js)からの状態通知。
-//  - ad-state: 広告検知中 → 「広告スキップ中」表示(.ad-skipping)を出す/消す。
 //  - theater-state: 枠内シアター発動中 → バッジに 🎭 を出す(効いているかの確認用)。
-function onFrameAdState(e) {
+function onFrameState(e) {
   const d = e.data;
   if (!d || d[MAGIC] !== true) return;
   const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
   if (!win) return;
-  if (d.type === 'ad-state') {
-    win.el.classList.toggle('ad-skipping', !!d.adSkipping);
+  if (d.type === 'adblock-state') {
+    // 枠内に広告ブロッカー(別拡張の vaft)が入っているかの診断。バッジに 🛡/🚫 で出す。
+    win.adblock = d.state || null;
+    win.vaft = win.adblock ? win.adblock.vaft : null;
+    updateWinTitle(win);
   } else if (d.type === 'theater-state') {
     win.theaterState = d.state; // 'on' | 'searching' | 'off'
     updateWinTitle(win); // バッジの 🎭/🔎 表示を更新
@@ -223,7 +224,7 @@ function currentLineupItems() {
 function saveLineup() {
   if (restoring) return;
   try {
-    chrome.storage.local.set({
+    MV.storage.local.set({
       [MULTIVIEW_ACTIVE_KEY]: { wins: currentLineupItems(), masterVolume, danmakuGlobal: dmkGlobal, timestamp: new Date().toISOString() }
     });
   } catch (e) {
@@ -282,7 +283,7 @@ async function loadDeferred(deferred) {
 
 async function listLayouts() {
   try {
-    const data = await chrome.storage.local.get(MULTIVIEW_LAYOUTS_KEY);
+    const data = await MV.storage.local.get(MULTIVIEW_LAYOUTS_KEY);
     const arr = data[MULTIVIEW_LAYOUTS_KEY];
     return Array.isArray(arr) ? arr : [];
   } catch (e) {
@@ -311,7 +312,7 @@ async function saveLayout(name) {
   const layouts = await listLayouts();
   layouts.unshift(layout); // 新しいものを先頭に
   try {
-    await chrome.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: layouts.slice(0, MAX_LAYOUTS) });
+    await MV.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: layouts.slice(0, MAX_LAYOUTS) });
   } catch (e) {
     /* noop */
   }
@@ -322,7 +323,7 @@ async function deleteLayout(id) {
   const layouts = await listLayouts();
   const next = layouts.filter((l) => l.id !== id);
   try {
-    await chrome.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: next });
+    await MV.storage.local.set({ [MULTIVIEW_LAYOUTS_KEY]: next });
   } catch (e) {
     /* noop */
   }
@@ -647,7 +648,7 @@ function setupKickVideo(video, url, body) {
     showVideoError(body, 'Kick はチャンネルURL(kick.com/<channel>)を入れてください');
     return;
   }
-  chrome.runtime
+  MV.runtime
     .sendMessage({ type: 'get-kick-playback', channel })
     .then((resp) => {
       if (!resp || !resp.ok) {
@@ -1764,7 +1765,7 @@ function setAllDanmaku(on) {
   wins.filter((w) => !w.video).forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
   saveLineup();
 }
-// プリセット: 現在の適用先の実効値を名前付きで保存し、選んで適用/削除(chrome.storage で全体共有)。
+// プリセット: 現在の適用先の実効値を名前付きで保存し、選んで適用/削除(MV.storage で全体共有)。
 function renderDmkPresets() {
   const sel = document.getElementById('dmk-preset-sel');
   if (!sel) return;
@@ -1785,7 +1786,7 @@ function renderDmkPresets() {
   });
 }
 function saveDmkPresets() {
-  try { chrome.storage.local.set({ [DMK_PRESETS_KEY]: dmkPresets }); } catch (e) { /* noop */ }
+  try { MV.storage.local.set({ [DMK_PRESETS_KEY]: dmkPresets }); } catch (e) { /* noop */ }
 }
 function dmkPresetSave() {
   const name = (window.prompt('プリセット名', '') || '').trim();
@@ -1916,7 +1917,7 @@ function setupDanmakuPanel() {
   document.getElementById('dmk-preset-save').addEventListener('click', dmkPresetSave);
   document.getElementById('dmk-preset-del').addEventListener('click', dmkPresetDelete);
   try {
-    chrome.storage.local.get(DMK_PRESETS_KEY, (r) => {
+    MV.storage.local.get(DMK_PRESETS_KEY, (r) => {
       const arr = r && r[DMK_PRESETS_KEY];
       if (Array.isArray(arr)) dmkPresets = arr.filter((p) => p && p.name).map((p) => ({ name: String(p.name).slice(0, 40), settings: dmkSanitize(p.settings) }));
       renderDmkPresets();
@@ -2199,7 +2200,7 @@ function tileAll() {
 // ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
 // src を読み込む。これでフレーム内でログイン状態になり、チャット投稿などができる。
 function loadFrameWithLogin(frameEl, domain, src) {
-  chrome.runtime
+  MV.runtime
     .sendMessage({ type: 'relax-cookies', domains: [domain] })
     .then(() => { frameEl.src = src; })
     .catch(() => { frameEl.src = src; }); // 失敗しても一応読み込む
@@ -2326,7 +2327,7 @@ function reloadWindow(win) {
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
 function openOriginal(win) {
   try {
-    chrome.tabs.create({ url: win.url });
+    MV.tabs.create({ url: win.url });
   } catch (e) {
     window.open(win.url, '_blank', 'noopener');
   }
@@ -2632,7 +2633,7 @@ function setupMixer() {
   resize.title = '下端をドラッグして高さを変える';
   panel.appendChild(resize);
   makeMixerResizable(panel, resize);
-  try { chrome.storage.local.get(MIXER_HEIGHT_KEY, (r) => { const h = r && r[MIXER_HEIGHT_KEY]; if (h) panel.style.height = h + 'px'; }); } catch (e) { /* noop */ }
+  try { MV.storage.local.get(MIXER_HEIGHT_KEY, (r) => { const h = r && r[MIXER_HEIGHT_KEY]; if (h) panel.style.height = h + 'px'; }); } catch (e) { /* noop */ }
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('mixer-btn').addEventListener('click', () => {
     panel.hidden = !panel.hidden;
@@ -2734,7 +2735,7 @@ function makeMixerResizable(panel, handle) {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', end);
       handle.removeEventListener('pointercancel', end);
-      try { chrome.storage.local.set({ [MIXER_HEIGHT_KEY]: panel.offsetHeight }); } catch (_) { /* noop */ }
+      try { MV.storage.local.set({ [MIXER_HEIGHT_KEY]: panel.offsetHeight }); } catch (_) { /* noop */ }
     };
     handle.addEventListener('pointermove', onMove);
     handle.addEventListener('pointerup', end);
@@ -2754,15 +2755,6 @@ function wireToolbar() {
   masterSlider.addEventListener('change', () => saveLineup());
   document.getElementById('tile-btn').addEventListener('click', tileAll);
 
-  // 広告スキップのオン/オフ(YouTube枠が対象)。ここは状態を storage に保存するだけで、実際の
-  // 検知・スキップは各枠の content script(stream-control.js)が storage を見て行う。既定はオフ。
-  const adskipBtn = document.getElementById('adskip-btn');
-  chrome.storage.local.get(AD_SKIP_KEY, (d) => adskipBtn.classList.toggle('adskip-on', d[AD_SKIP_KEY] === true));
-  adskipBtn.addEventListener('click', () => {
-    const enabled = !adskipBtn.classList.contains('adskip-on');
-    adskipBtn.classList.toggle('adskip-on', enabled);
-    chrome.storage.local.set({ [AD_SKIP_KEY]: enabled });
-  });
   // ⚡ 軽量プレイヤー一括切替(押すたびに 全部軽量 ⇄ 全部通常。枠ごとの個別切替はヘッダの⚡)。
   document.getElementById('light-btn').addEventListener('click', toggleAllLight);
   // 縦積みの「全画面」からの復帰ボタン(全画面中だけ画面下に出る)。
@@ -2819,7 +2811,7 @@ function wireToolbar() {
   setupPerfPanel();
   setupMixer();
   setupDanmakuPanel();
-  chrome.storage.local.get(TOOLBAR_POS_KEY, (d) => {
+  MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));
   });
@@ -2827,25 +2819,15 @@ function wireToolbar() {
 
 // ====== スマホ用メインメニュー(縦リスト) ======
 // スマホ(縦積み)ではツールバーのバー表示をやめ、≡ から右クリックメニュー風の縦リストを出す。
-// 項目: 追加・整列・一覧・広告スキップ・パフォーマンス(音量/並びはミキサー、軽量は各枠のバッジ)。
+// 項目: 追加・配置・一覧・パフォーマンス・弾幕設定(音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
 function toggleMainMenu(force) {
   const menu = document.getElementById('main-menu');
   const backdrop = document.getElementById('main-menu-backdrop');
   const show = force != null ? force : menu.hidden;
-  if (show) syncMainMenu();
   menu.hidden = !show;
   if (backdrop) backdrop.hidden = !show;
-}
-
-// 開くたびに状態表示(広告スキップの ON/OFF)を現物のボタンから読み直す。
-function syncMainMenu() {
-  const adOn = document.getElementById('adskip-btn').classList.contains('adskip-on');
-  const ad = document.getElementById('mm-adskip');
-  const label = ad.querySelector('.mm-label'); // アイコン(.mm-icon)は残し、ラベルだけ ON/OFF 更新
-  if (label) label.textContent = adOn ? '広告スキップ: ON' : '広告スキップ: OFF';
-  ad.classList.toggle('on', adOn);
 }
 
 function setupMainMenu() {
@@ -2870,11 +2852,6 @@ function setupMainMenu() {
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
-  // 広告スキップはトグルなので閉じずに、その場で ON/OFF 表示を更新する。
-  mkAct('mm-adskip', () => {
-    document.getElementById('adskip-btn').click();
-    syncMainMenu();
-  });
   // 透明バックドロップ: メニュー外のタップは「閉じる」だけで、下のタイルへは絶対に流さない。
   document.getElementById('main-menu-backdrop').addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -2977,7 +2954,7 @@ function applyToolbarPos(pos, save = true) {
   document.querySelectorAll('.pos-pick').forEach((b) => b.classList.toggle('active', b.dataset.pos === pos));
   relayoutStack(); // 縦積み中はツールバーの避け方が変わるので積み直す(自由配置では何もしない)
   if (save) {
-    try { chrome.storage.local.set({ [TOOLBAR_POS_KEY]: pos }); } catch (e) { /* noop */ }
+    try { MV.storage.local.set({ [TOOLBAR_POS_KEY]: pos }); } catch (e) { /* noop */ }
   }
 }
 
@@ -3048,7 +3025,7 @@ function setupPerfPanel() {
 
     let cpu = 0;
     try {
-      const info = await chrome.system.cpu.getInfo();
+      const info = await MV.system.cpu.getInfo();
       let user = 0, kernel = 0, total = 0;
       for (const p of info.processors) { user += p.usage.user; kernel += p.usage.kernel; total += p.usage.total; }
       if (prevCpu) {
@@ -3062,7 +3039,7 @@ function setupPerfPanel() {
 
     let mem = 0, memTitle = '';
     try {
-      const m = await chrome.system.memory.getInfo();
+      const m = await MV.system.memory.getInfo();
       mem = Math.round((1 - m.availableCapacity / m.capacity) * 100);
       const usedGB = (m.capacity - m.availableCapacity) / 1073741824;
       const totGB = m.capacity / 1073741824;
@@ -3240,8 +3217,20 @@ function updateWinTitle(win) {
     const light = !!win.light || !!win.video;
     // 🎭=シアター動作中 / 🔎=有効だが主映像を探索中(診断用。frame 内 stream-control からの通知)。
     const mark = win.theaterState === 'on' ? ' 🎭' : win.theaterState === 'searching' ? ' 🔎' : '';
-    win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + mark;
+    // 🛡=この枠に広告ブロッカー(vaft)が入っている / 🚫=Twitch枠なのに入っていない。
+    // undefined(未報告)のうちは何も出さない。Twitch以外の枠では報告自体が来ない。
+    // 未注入(🚫)のときは、ホバーせずに原因が読めるよう内訳もそのまま出す。
+    // f=広告スキッパーの page-script(fetch差し替え) / w=Worker差し替え / host=枠が読んでいるホスト。
+    const ab = win.adblock;
+    const detail = ab
+      ? ` m:${ab.marker ? 1 : 0} p:${ab.pageMarker ? 1 : 0} w:${ab.workerHooked ? 1 : 0} ${ab.host.replace('.twitch.tv', '')}`
+      : '';
+    const shield = win.vaft === undefined ? '' : win.vaft === null ? ' 🚫' + detail : ' 🛡';
+    win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + mark + shield;
     win.badgeEl.classList.toggle('light', light);
+    // 通常モードのバッジは CSS で display:none にされているため、診断が乗るときだけ表示を戻す。
+    win.badgeEl.classList.toggle('diag', win.vaft !== undefined);
+    win.badgeEl.classList.toggle('diag-warn', win.vaft === null); // 未注入は常時赤で出す
     // Kick は切替不可。通常⇄軽量できる枠だけタップのヒントを出す。
     const canToggle = !win.video && (win.light || !!toLightUrl(win.url));
     win.badgeEl.disabled = !canToggle;

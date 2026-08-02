@@ -199,6 +199,22 @@
   // プレイヤーの上書きや、遅延ロード/SPA遷移で現れた新しい video にも、親の指定値を当て続ける。
   // (枠ごと音量は 🎨 パネルで操作する設計なので、これで取り違え・戻し問題は起きない)
   setInterval(applyVol, 1000);
+  // YouTube はプレイヤーが video.volume を周期的に大きめ(自分の記憶値)へ戻すことがあり、1秒ポーリングだと
+  // 戻すまでの間だけ音量が跳ね上がって聞こえる(特にスマホ)。volumechange/play を捕捉して即座に親指定値へ
+  // 当て直す。音量/ミュートを当てるだけで play() は呼ばないので、再生ループや churn は起こさない。
+  // Twitch(IVS/Web Audio)は video.volume を音量制御に使わず干渉の恐れがあるため対象外、YouTube 限定。
+  if (host.includes('youtube.com')) {
+    const fixVol = (v) => {
+      if (mvVolume === null || !v || v.tagName !== 'VIDEO') return;
+      const wantMuted = mvVolume <= 0;
+      try {
+        if (Math.abs(v.volume - mvVolume) > 0.005) v.volume = mvVolume;
+        if (v.muted !== wantMuted) v.muted = wantMuted;
+      } catch (e) { /* noop */ }
+    };
+    ['volumechange', 'play', 'playing'].forEach((ev) =>
+      document.addEventListener(ev, (e) => fixVol(e.target), true)); // capture=非バブルのメディアイベントも拾う
+  }
 
   // ---- 長押し → 親へ「このタイルを掴んだ」を中継(縦積みのドラッグ並び替え用) ----
   // サイト内の通常タップ・クリック・スクロールには一切干渉しない(静止 LP_MS で発火、動けば不成立)。
@@ -340,7 +356,7 @@
   if (host.includes('twitch.tv')) {
     const BTN = '[data-a-target="player-theatre-mode-button"], button[aria-label*="シアター"], button[aria-label*="Theatre" i], button[aria-label*="Theater" i]';
     // 起動時に1回だけ: プレイヤーが現れたら、まだデフォルトの時だけシアターへ(既にシアターなら触らない)。
-    // ※ SPA遷移ごとの再実行は、シアター切替→プレイヤー再生成→vaft再スワップ→再navigate…のループを招き
+    // ※ SPA遷移ごとの再実行は、シアター切替→プレイヤー再生成→再navigate…のループを招き
     //    配信が激しくカクつくため行わない(ホーム経由のシアター化は別の安全な方法で対応する)。
     let tries = 0;
     const tTimer = setInterval(() => {
@@ -352,82 +368,6 @@
       btn.click(); // まだデフォルト → シアターへ(1回だけ)
       clearInterval(tTimer);
     }, 500);
-  }
-
-  // ---- YouTube のみ: 広告を自動スキップ ----
-  // 別プロジェクト(chrome-ad-skipper)の YouTube 広告スキップ技術をこのプロジェクトへ移植したもの。
-  // 検知(#movie_player の ad-showing クラス)はこの content script(ISOLATED world)で行い、実際の
-  // スキップ(player.skipAd() 等の内部API / 広告 video のシーク)は YouTube の JS コンテキストでしか
-  // 触れないので、MAIN world の yt-ad-skip-main.js へ postMessage で依頼する。ボタンで飛ばせる
-  // スキップ可能広告は、この ISOLATED 側でも直接 click しておく(内部APIが変わったときの保険)。
-  if (host.includes('youtube.com')) {
-    const AD_SKIP_SOURCE = 'mvAdSkip'; // yt-ad-skip-main.js 側と一致させること
-    const AD_SKIP_KEY = 'adSkipEnabled'; // multiview ツールバーのトグルが書き込む storage キー
-    const PLAYER_SELECTOR = '#movie_player';
-    const POLL_INTERVAL = 300;        // ad-showing の監視間隔
-    const SKIP_RETRY_INTERVAL = 1500; // 同一広告中にスキップを再試行する間隔
-    const SKIP_BUTTON_SELECTORS = [
-      '.ytp-ad-skip-button-modern',
-      '.ytp-ad-skip-button',
-      '.ytp-skip-ad-button',
-      '.ytp-ad-overlay-close-button' // 動画下部のオーバーレイ広告を閉じる
-    ];
-    let adSkipEnabled = false; // デフォルト OFF。ユーザーがツールバーのトグルで ON にするまで何もしない。
-    let adPlaying = false;
-    let lastSkipAttempt = 0;
-
-    // 広告検知の状態を親(multiview)へ通知 → その枠に「広告スキップ中」表示を出す/消す。
-    const notifyAdState = (on) => {
-      try {
-        window.parent.postMessage({ [MAGIC]: true, type: 'ad-state', adSkipping: on }, '*');
-      } catch (e) { /* noop */ }
-    };
-
-    // オン/オフは multiview ツールバーのトグルが storage に書き込む。起動時に現在値を読み、
-    // 以後は storage.onChanged で追従する(枠を開いたままトグルしても即反映される)。
-    try {
-      chrome.storage.local.get(AD_SKIP_KEY, (d) => { adSkipEnabled = d[AD_SKIP_KEY] === true; });
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes[AD_SKIP_KEY]) {
-          adSkipEnabled = changes[AD_SKIP_KEY].newValue === true;
-          if (!adSkipEnabled) { adPlaying = false; notifyAdState(false); } // OFF にしたら検知状態もリセット
-        }
-      });
-    } catch (e) { /* noop */ }
-
-    const clickSkipButtons = () => {
-      for (const sel of SKIP_BUTTON_SELECTORS) {
-        const btn = document.querySelector(sel);
-        if (btn) { try { btn.click(); } catch (e) { /* noop */ } }
-      }
-    };
-
-    const checkAd = () => {
-      if (!adSkipEnabled) return; // OFF のときは検知もスキップ依頼もしない(MAIN world も黙ったまま)
-      const player = document.querySelector(PLAYER_SELECTOR);
-      if (!player) return;
-      if (player.classList.contains('ad-showing')) {
-        if (!adPlaying) { adPlaying = true; lastSkipAttempt = 0; notifyAdState(true); }
-        const now = Date.now();
-        if (now - lastSkipAttempt > SKIP_RETRY_INTERVAL) {
-          lastSkipAttempt = now;
-          clickSkipButtons();
-          window.postMessage({ source: AD_SKIP_SOURCE, type: 'skip-ad' }, '*');
-        }
-      } else if (adPlaying) {
-        adPlaying = false;
-        notifyAdState(false);
-        setTimeout(() => window.postMessage({ source: AD_SKIP_SOURCE, type: 'resume-playback' }, '*'), 300);
-      }
-    };
-
-    // class 変化に即応(MutationObserver)しつつ、取りこぼし用にポーリングも回す。
-    (function observePlayer() {
-      const player = document.querySelector(PLAYER_SELECTOR);
-      if (!player) { setTimeout(observePlayer, 1000); return; }
-      new MutationObserver(checkAd).observe(player, { attributes: true, attributeFilter: ['class'] });
-    })();
-    setInterval(checkAd, POLL_INTERVAL);
   }
 
   // ---- コメント弾幕: チャットDOMを監視して新着コメントを親(multiview)へ送る ----

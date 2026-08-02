@@ -15,7 +15,6 @@
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)">🎚 一覧</button>
     <button id="danmaku-settings-btn" class="tb-btn" title="弾幕(コメントを流す)の設定">💬 弾幕</button>
-    <button id="adskip-btn" class="tb-btn" title="YouTube枠の広告を自動スキップ(既定オフ)。Twitchは vaft で常時ブロック。">広告スキップ</button>
     <button id="light-btn" class="tb-btn" title="全部の枠を軽量プレイヤーへ切替/通常へ戻す(配信・動画ページを開いている枠が対象。スマホで複数枠を並べる時用)">⚡ 軽量</button>
     <span class="tb-item" title="全体の音量(全枠まとめて。0でミュート)"><span id="master-vol-icon">🔇</span><input type="range" id="master-vol" min="0" max="100" value="0" /></span>
     <button id="perf-btn" class="tb-btn" title="パフォーマンス(FPS・CPU・メモリ)を表示">📊</button>
@@ -26,8 +25,7 @@
   <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る">⛶ 全画面を終了</button>
 
   <!-- ≡ から出す縦リストメニュー(右クリックメニュー風。PC/スマホ共通)。
-       上の4つ(追加・配置・一覧・パフォーマンス)はパネル/ダイアログを開くもの、最下段の広告スキップだけは
-       その場で ON/OFF するトグルなので区切り線で分ける。各項目は既存ツールバーボタンの機能をそのまま呼ぶ。
+       各項目はパネル/ダイアログを開くもので、既存ツールバーボタンの機能をそのまま呼ぶ。
        アイコンは固定幅の .mm-icon 列に入れ、絵文字/＋の幅差でラベル開始位置がずれないように揃える。
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
@@ -37,7 +35,6 @@
     <button id="mm-mixer" type="button"><span class="mm-icon">🎚</span><span class="mm-label">一覧</span></button>
     <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
     <button id="mm-danmaku" type="button"><span class="mm-icon">💬</span><span class="mm-label">弾幕設定</span></button>
-    <button id="mm-adskip" type="button"><span class="mm-icon">⏭</span><span class="mm-label">広告スキップ: OFF</span></button>
   </div>
 
   <div id="pos-dialog" class="pos-dialog-overlay">
@@ -164,6 +161,9 @@
     </div>
   </div>
   <script src="hls.min.js"></script>
+  <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
+       multiview.js より先に読むこと(MV.* を使うため)。 -->
+  <script src="ext-bridge.js"></script>
   <script src="multiview.js"></script>
 </body>
 </html>

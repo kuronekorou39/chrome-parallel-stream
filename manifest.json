@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Parallel Stream Probe",
-  "version": "0.1.0",
-  "description": "Phase 1 capability probe: Android向け自作Chromiumブラウザでマルチビュー実現可能性を実機で検証する。",
+  "name": "Parallel Stream",
+  "version": "0.2.0",
+  "description": "Twitch / YouTube / OPENREC / Kick の配信を1画面に並べて見るマルチビュー。枠ごとの音量・コメント弾幕つき。",
   "icons": {
     "16": "icon-16.png",
     "48": "icon-48.png",
@@ -29,7 +29,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Parallel Stream Probe",
+    "default_title": "Parallel Stream",
     "default_icon": {
       "16": "icon-16.png",
       "32": "icon-32.png",
@@ -48,24 +48,26 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["*://*.youtube.com/*"],
-      "js": ["yt-ad-skip-main.js"],
-      "world": "MAIN",
-      "all_frames": true,
-      "run_at": "document_idle"
-    },
-    {
-      "matches": ["*://*.twitch.tv/*"],
-      "js": ["vaft-twitch.js"],
+      "matches": ["*://player.twitch.tv/*"],
+      "js": ["twitch-keepalive.js"],
       "world": "MAIN",
       "all_frames": true,
       "run_at": "document_start"
     },
     {
-      "matches": ["*://player.twitch.tv/*"],
-      "js": ["twitch-keepalive.js"],
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://*.twitch.tv/*",
+        "*://*.openrec.tv/*"
+      ],
+      "js": ["keepalive-visibility.js"],
       "world": "MAIN",
       "all_frames": true,
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://kuronekorou39.github.io/chrome-parallel-stream/*"],
+      "js": ["page-bridge.js"],
       "run_at": "document_start"
     }
   ],

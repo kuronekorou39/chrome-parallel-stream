@@ -36,14 +36,23 @@ function activateTab(name) {
 
 // ---------- Multiview (専用ページの入口) ----------
 
-const MULTIVIEW_URL = chrome.runtime.getURL('multiview.html');
+// 通常の https オリジンに置いた UI ページを既定の入口にする。
+// 理由: 拡張ページ(chrome-extension://)の中の iframe には、他の拡張の content script が
+// 一切注入されない(Chrome の仕様)。広告スキッパー等を枠に効かせるには通常ページである必要がある。
+// 拡張ページ版も同じコードで動くので、ホスト版が開けないときの控えとして残す。
+const MULTIVIEW_HOSTED_URL = 'https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html';
+const MULTIVIEW_LOCAL_URL = chrome.runtime.getURL('multiview.html');
+const MULTIVIEW_URL = MULTIVIEW_HOSTED_URL;
 
 // 専用ページのタブを開く。既に開いていればそれをフォーカスする(重複タブを作らない)。
 async function openMultiview() {
   $('open-multiview').disabled = true;
   try {
     const all = await chrome.tabs.query({});
-    const existing = all.find((t) => t.url && t.url.startsWith(MULTIVIEW_URL));
+    // ホスト版・拡張ページ版のどちらが開いていても、それをフォーカスして重複タブを作らない。
+    const existing = all.find(
+      (t) => t.url && (t.url.startsWith(MULTIVIEW_HOSTED_URL) || t.url.startsWith(MULTIVIEW_LOCAL_URL))
+    );
     if (existing) {
       await chrome.tabs.update(existing.id, { active: true });
       if (existing.windowId != null) {
