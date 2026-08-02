@@ -1,40 +1,44 @@
 // multiview の UI ページから拡張機能の機能を使うための薄い橋渡し。multiview.js より先に読むこと。
 //
-// このページは2通りの置かれ方をする:
-//   1. 拡張ページ (chrome-extension://.../multiview.html) … chrome.* がそのまま使える
-//   2. 通常の https ページ (GitHub Pages 等)          … chrome.* は使えない
+// UI ページは通常の https オリジン(GitHub Pages)に置く。拡張ページ(chrome-extension://)の中の
+// iframe には他の拡張の content script が一切注入されず(Chrome の仕様。executeScript も
+// "Cannot access contents of the page" で弾かれる)、広告スキッパー等が枠に効かないため。
 //
-// 2 が必要な理由: 拡張ページの中に置いた iframe には、他の拡張(広告スキッパー等)の content script が
-// 一切注入されない(Chrome の仕様。executeScript も "Cannot access contents of the page" で弾かれる)。
-// 通常ページの iframe なら普通に注入されるため、枠に他拡張の機能を効かせるにはこちらに置く必要がある。
-//
-// 2 のときは、拡張が同オリジンへ注入する page-bridge.js へ postMessage で依頼し、結果を受け取る。
-// どちらの場合も呼び出し側は MV.* を chrome.* と同じ形で使えるので、multiview.js 側の差分は最小で済む。
+// ページからは chrome.* を直接使えないので、拡張が同オリジンへ注入する page-bridge.js へ
+// postMessage で依頼し、結果を受け取る。呼び出し側は MV.* を chrome.* と同じ形で使える。
 (function extBridge() {
   'use strict';
 
-  const DIRECT = typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.local);
+  const HOSTED_URL = 'https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html';
+  const REPO_URL = 'https://github.com/kuronekorou39/chrome-parallel-stream';
+  const ZIP_URL = REPO_URL + '/archive/refs/heads/main.zip';
+
+  // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
+  // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが
+  // 効かないので、開かれたら黙って正しい方へ転送する(古いブックマークもこれで直る)。
+  if (location.protocol === 'chrome-extension:') {
+    location.replace(HOSTED_URL + location.search + location.hash);
+    return;
+  }
+
   const REQ = 'mvBridgeReq';
   const RES = 'mvBridgeRes';
   const TIMEOUT_MS = 5000;
 
-  // ---- 通常ページ用: page-bridge.js への依頼 ----
   let seq = 0;
   const pending = new Map();
 
-  if (!DIRECT) {
-    window.addEventListener('message', (e) => {
-      if (e.source !== window) return; // 同一ウィンドウ(=注入された content script)からのみ
-      const d = e.data;
-      if (!d || d.__mv !== RES) return;
-      const p = pending.get(d.id);
-      if (!p) return;
-      pending.delete(d.id);
-      clearTimeout(p.timer);
-      if (d.ok) p.resolve(d.result);
-      else p.reject(new Error(d.error || 'bridge error'));
-    });
-  }
+  window.addEventListener('message', (e) => {
+    if (e.source !== window) return; // 同一ウィンドウ(=注入された content script)からのみ
+    const d = e.data;
+    if (!d || d.__mv !== RES) return;
+    const p = pending.get(d.id);
+    if (!p) return;
+    pending.delete(d.id);
+    clearTimeout(p.timer);
+    if (d.ok) p.resolve(d.result);
+    else p.reject(new Error(d.error || 'bridge error'));
+  });
 
   function call(op, payload, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -49,15 +53,46 @@
     });
   }
 
+  // ---- 公開 API(chrome.* と同じ形) ----
+  // storage.get は Promise 形式と callback 形式の両方で呼ばれるため、どちらも受ける。
+  const storageLocal = {
+    get(keys, cb) {
+      const p = call('storage.get', { keys }).catch(() => ({})); // 失敗は「保存なし」扱いで UI を止めない
+      if (typeof cb === 'function') p.then((r) => cb(r));
+      return p;
+    },
+    set(items, cb) {
+      const p = call('storage.set', { items }).catch(() => undefined); // 保存失敗で UI を落とさない
+      if (typeof cb === 'function') p.then(() => cb());
+      return p;
+    }
+  };
+
+  window.MV = {
+    storage: { local: storageLocal },
+    runtime: {
+      // background.js の onMessage へ中継する(Cookie 緩和・Kick の再生URL取得)
+      sendMessage: (msg) => call('runtime.sendMessage', { msg })
+    },
+    system: {
+      // content script からは chrome.system.* を呼べないため background へ回す
+      cpu: { getInfo: () => call('system.cpu', {}) },
+      memory: { getInfo: () => call('system.memory', {}) }
+    },
+    tabs: {
+      create(opts) {
+        // ユーザー操作起点なのでブロックされない
+        window.open(opts && opts.url, '_blank', 'noopener');
+        return Promise.resolve();
+      }
+    }
+  };
+
   // ---- 拡張機能が入っていないときの案内 ----
   // このページは UI だけで、枠の埋め込み(CSP/X-Frame-Options の除去)も枠内の音量・弾幕も
-  // 拡張機能側が担っている。拡張が無いと枠が真っ白なまま理由も分からないので、明示する。
-  // 手順そのものを画面に出す。リンク先へ飛ばすだけだと、着地先で何をすればいいか分からない。
+  // 拡張機能側が担っている。拡張が無いと枠が真っ白なまま理由も分からないので、手順ごと明示する。
   // chrome://extensions はウェブページからリンクにしても Chrome が遷移を拒否するため、
   // クリックさせず「コピーして貼る」形で見せる。
-  const REPO_URL = 'https://github.com/kuronekorou39/chrome-parallel-stream';
-  const ZIP_URL = REPO_URL + '/archive/refs/heads/main.zip';
-
   function showMissingExtensionNotice() {
     if (document.getElementById('mv-no-ext')) return;
 
@@ -126,56 +161,12 @@
     (document.body || document.documentElement).appendChild(el);
   }
 
-  if (!DIRECT) {
-    // 短めの ping で在否を判定する(実処理の待ち時間とは分ける)。
-    call('ping', {}, 2500).catch(() => {
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', showMissingExtensionNotice, { once: true });
-      } else {
-        showMissingExtensionNotice();
-      }
-    });
-  }
-
-  // ---- 公開 API(chrome.* と同じ形) ----
-  // storage.get は Promise 形式と callback 形式の両方で呼ばれるため、どちらも受ける。
-  const storageLocal = {
-    get(keys, cb) {
-      const p = DIRECT ? chrome.storage.local.get(keys) : call('storage.get', { keys });
-      const safe = p.catch(() => ({})); // 取得失敗は「保存なし」として扱い、UI を止めない
-      if (typeof cb === 'function') safe.then((r) => cb(r));
-      return safe;
-    },
-    set(items, cb) {
-      const p = DIRECT ? chrome.storage.local.set(items) : call('storage.set', { items });
-      const safe = p.catch(() => undefined); // 保存失敗で UI を落とさない(次回保存で復帰する)
-      if (typeof cb === 'function') safe.then(() => cb());
-      return safe;
+  // 短めの ping で在否を判定する(実処理の待ち時間とは分ける)。
+  call('ping', {}, 2500).catch(() => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', showMissingExtensionNotice, { once: true });
+    } else {
+      showMissingExtensionNotice();
     }
-  };
-
-  window.MV = {
-    // 拡張ページとして動いているか(診断・分岐用)
-    direct: DIRECT,
-    storage: { local: storageLocal },
-    runtime: {
-      // background.js の onMessage / onMessageExternal 相当へ中継する
-      sendMessage(msg) {
-        return DIRECT ? chrome.runtime.sendMessage(msg) : call('runtime.sendMessage', { msg });
-      }
-    },
-    system: {
-      // content script からは chrome.system.* を呼べないため、通常ページでは background へ回す
-      cpu: { getInfo: () => (DIRECT ? chrome.system.cpu.getInfo() : call('system.cpu', {})) },
-      memory: { getInfo: () => (DIRECT ? chrome.system.memory.getInfo() : call('system.memory', {})) }
-    },
-    tabs: {
-      create(opts) {
-        if (DIRECT) return chrome.tabs.create(opts);
-        // 通常ページなら素の window.open で十分(ユーザー操作起点なのでブロックされない)
-        window.open(opts && opts.url, '_blank', 'noopener');
-        return Promise.resolve();
-      }
-    }
-  };
+  });
 })();

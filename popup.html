@@ -10,17 +10,13 @@
 <body>
   <header>
     <div class="title-row">
-      <nav class="tabs">
-        <button class="tab active" data-tab="multiview" type="button">Multiview</button>
-        <button class="tab" data-tab="probe" type="button">Debug</button>
-      </nav>
+      <span class="app-title">Parallel Stream</span>
       <span id="status" class="status"></span>
     </div>
   </header>
 
   <main>
-    <!-- ===== Multiview パネル(入口) ===== -->
-    <div class="panel" data-panel="multiview">
+    <div class="panel">
       <button id="open-multiview" type="button" class="hero-btn">
         <span class="hero-icon" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
         <span class="hero-text">
@@ -39,50 +35,6 @@
         <div id="saved-list" class="block">
           <span class="empty">なし</span>
         </div>
-      </section>
-    </div>
-
-    <!-- ===== Probe パネル ===== -->
-    <div class="panel hidden" data-panel="probe">
-      <div class="actions">
-        <button id="rerun" type="button">Re-run probes</button>
-        <button id="copy-json" type="button">Copy report as JSON</button>
-        <button id="copy-md" type="button">Copy report as Markdown</button>
-      </div>
-
-      <section>
-        <h2>Custom APIs <span class="hint">(標準外として検出された namespace)</span></h2>
-        <div id="custom-apis" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Windows Probe Result</h2>
-        <div id="windows-probe" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Fullscreen Probe Result</h2>
-        <div id="fullscreen-probe" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Webview / Custom Namespace Probe</h2>
-        <div id="webview-probe" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Standard APIs <span class="hint">(参考: 想定範囲内)</span></h2>
-        <div id="standard-apis" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Errors</h2>
-        <div id="errors" class="block"></div>
-      </section>
-
-      <section>
-        <h2>Meta</h2>
-        <div id="meta" class="block"></div>
       </section>
     </div>
   </main>

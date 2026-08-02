@@ -13,6 +13,7 @@
     },
     "condition": {
       "resourceTypes": ["sub_frame"],
+      "initiatorDomains": ["kuronekorou39.github.io"],
       "requestDomains": [
         "twitch.tv",
         "youtube.com",

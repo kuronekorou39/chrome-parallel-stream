@@ -2120,13 +2120,6 @@ function beginResize(win, dir, e) {
   cap.addEventListener('pointercancel', onUp);
 }
 
-function cursorForDir(dir) {
-  if (dir === 'n' || dir === 's') return 'ns-resize';
-  if (dir === 'e' || dir === 'w') return 'ew-resize';
-  if (dir === 'ne' || dir === 'sw') return 'nesw-resize';
-  return 'nwse-resize'; // nw, se
-}
-
 function toggleMax(win) {
   if (stackMode) return; // 縦積み中は常に整列済み(⛶ボタン自体も CSS で隠している)
   if (win.maximized) {

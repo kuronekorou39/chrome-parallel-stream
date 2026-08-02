@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parallel Stream",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Twitch / YouTube / OPENREC / Kick の配信を1画面に並べて見るマルチビュー。枠ごとの音量・コメント弾幕つき。",
   "icons": {
     "16": "icon-16.png",
@@ -10,14 +10,10 @@
   },
   "permissions": [
     "tabs",
-    "windows",
-    "scripting",
     "activeTab",
     "storage",
     "cookies",
-    "sidePanel",
     "declarativeNetRequest",
-    "webNavigation",
     "system.cpu",
     "system.memory"
   ],

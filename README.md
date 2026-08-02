@@ -66,9 +66,8 @@ UI は [GitHub Pages](https://kuronekorou39.github.io/chrome-parallel-stream/mul
 CSP も外しているのは、`frame-ancestors` ディレクティブが同様に埋め込みを拒否するためで、
 declarativeNetRequest はヘッダ単位でしか操作できず「そのディレクティブだけ外す」ことができないからです。
 
-**副作用:** このルールは適用範囲を絞っていないため、この拡張を入れている間は、あなたが訪れる
-**任意のサイト**がこれらのドメインを iframe で埋め込んだ場合にも適用されます。埋め込まれたページは
-CSP による保護を失った状態で読み込まれます。
+適用範囲は `initiatorDomains` で **この拡張の UI ページのオリジンから発したリクエストだけ**に絞って
+あります。無関係なサイトがこれらのドメインを埋め込んでも、そちらのヘッダには影響しません。
 
 ### 2. 対象サイトの Cookie を `SameSite=None` に書き換えます
 
@@ -89,7 +88,10 @@ Cookie を `SameSite=None; Secure` へ再設定します。
 
 `host_permissions` に `<all_urls>` を要求しています。上記のヘッダ操作と、任意の配信ページを枠として
 読み込む必要があるためです。`cookies` は 2. のため、`system.cpu` / `system.memory` は
-パフォーマンスパネルの表示に使っています。
+パフォーマンスパネルの表示に使っています。`tabs` はマルチビューのタブを開く/再利用するため、
+`storage` は設定の保存のためです。
+
+`activeTab` 以外に任意のページへスクリプトを注入する権限(`scripting`)は要求しません。
 
 ---
 
@@ -125,7 +127,6 @@ iframe」になり、他の拡張が問題なく動くようになります。
 | `rules.json` | CSP / X-Frame-Options 除去の declarativeNetRequest ルール |
 | `popup.html` / `.js` / `.css` | ツールバーのポップアップ(入口) |
 | `hls.min.js` / `hls.worker.js` | [hls.js](https://github.com/video-dev/hls.js)(Kick の HLS 直接再生用) |
-| `api-surface.js` / `windows-probe.js` / `webview-probe.js` / `fullscreen-probe.js` | 初期のケイパビリティ調査用プローブ(ポップアップの Probe タブから手動実行) |
 
 ---
 

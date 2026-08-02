@@ -1,87 +1,9 @@
 // Service Worker 本体。
-// Phase 1: ケイパビリティ・プローブ実行。
-// マルチビュー本体は拡張機能ページ(multiview.html + multiview.js)側で完結するため、
-// service worker はプローブ実行とレポート保存のみを担当する。
-
-try {
-  importScripts(
-    'api-surface.js',
-    'windows-probe.js',
-    'webview-probe.js'
-  );
-} catch (e) {
-  console.error('[background] importScripts failed:', e);
-}
-
-const STORAGE_KEY = 'probeReport';
-
-// ====== Phase 1: プローブ ======
-
-async function runAllProbes() {
-  const report = {
-    timestamp: new Date().toISOString(),
-    userAgent: safeNav('userAgent'),
-    platform: safeNav('platform'),
-    language: safeNav('language'),
-    apiSurface: null,
-    windowsProbe: null,
-    webviewProbe: null,
-    fullscreenProbe: null,
-    errors: {}
-  };
-
-  await runStep(report, 'apiSurface', () =>
-    typeof self.runApiSurfaceProbe === 'function'
-      ? self.runApiSurfaceProbe()
-      : Promise.reject(new Error('runApiSurfaceProbe is not loaded'))
-  );
-  await runStep(report, 'windowsProbe', () =>
-    typeof self.runWindowsProbe === 'function'
-      ? self.runWindowsProbe()
-      : Promise.reject(new Error('runWindowsProbe is not loaded'))
-  );
-  await runStep(report, 'webviewProbe', () =>
-    typeof self.runWebviewProbe === 'function'
-      ? self.runWebviewProbe()
-      : Promise.reject(new Error('runWebviewProbe is not loaded'))
-  );
-  await runStep(report, 'fullscreenProbe', () => runFullscreenProbeInActiveTab());
-
-  await chrome.storage.local.set({ [STORAGE_KEY]: report });
-  return report;
-}
-
-async function runStep(report, key, thunk) {
-  try {
-    report[key] = await thunk();
-  } catch (e) {
-    report.errors[key] = errorToObject(e);
-  }
-}
-
-async function runFullscreenProbeInActiveTab() {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab || tab.id == null) {
-    return { skipped: true, reason: 'no active tab' };
-  }
-  const url = tab.url || '';
-  if (/^(chrome|chrome-extension|about|edge|brave|opera):/i.test(url)) {
-    return { skipped: true, reason: 'cannot inject into restricted URL', url };
-  }
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ['fullscreen-probe.js']
-  });
-  return {
-    targetTab: { id: tab.id, url, title: tab.title },
-    frameResults: results.map((r) => ({
-      frameId: r.frameId,
-      documentId: r.documentId,
-      result: r.result,
-      error: r.error || null
-    }))
-  };
-}
+// マルチビューの UI は通常の https オリジン(GitHub Pages)に置いたページが担当し、
+// service worker は拡張の権限が要る処理だけを受け持つ:
+//   - 埋め込みフレームでログインを使うための Cookie 緩和
+//   - Kick の HLS 再生URL取得(CORS のためページからは直接叩けない)
+//   - page-bridge.js からの中継(content script では使えない chrome.system / chrome.tabs)
 
 // ====== 共通ヘルパ ======
 
@@ -92,13 +14,6 @@ function errorToObject(e) {
   return { value: String(e) };
 }
 
-function safeNav(key) {
-  try {
-    return typeof navigator !== 'undefined' ? navigator[key] : null;
-  } catch (e) {
-    return null;
-  }
-}
 
 // ====== メッセージハンドラ ======
 
@@ -109,20 +24,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 増えたため、送信元の確認を必須にする。
   if (sender.id !== chrome.runtime.id) return false;
 
-  if (msg.type === 'rerun-probes') {
-    runAllProbes()
-      .then((report) => sendResponse({ ok: true, report }))
-      .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
-    return true;
-  }
 
-  if (msg.type === 'get-report') {
-    chrome.storage.local
-      .get(STORAGE_KEY)
-      .then((data) => sendResponse({ ok: true, report: data[STORAGE_KEY] || null }))
-      .catch((e) => sendResponse({ ok: false, error: errorToObject(e) }));
-    return true;
-  }
 
   if (msg.type === 'get-kick-playback') {
     fetchKickPlayback(msg.channel)
@@ -227,9 +129,3 @@ async function fetchKickPlayback(channel) {
   return url;
 }
 
-// ====== ライフサイクル ======
-
-// Phase 1 のケイパビリティ調査(runAllProbes)は windows-probe が chrome.windows.create / remove で
-// テスト用ウィンドウを複数開閉する。これを拡張ロード時(onInstalled)に自動実行していたため、読み込みの
-// たびに「謎の空ウィンドウが複数開いて閉じる」挙動になっていた。マルチビュー本体には不要なので自動実行は
-// やめる。調査が必要なときは popup の Probe タブ(rerun-probes メッセージ)から手動で実行する。
