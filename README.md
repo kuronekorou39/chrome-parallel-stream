@@ -28,10 +28,27 @@ Kick のみ、サイトを埋め込まず [hls.js](https://github.com/video-dev/
 
 ## インストール
 
+UI は [GitHub Pages](https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html) で配信して
+いますが、**そのページを開くだけでは動きません。拡張機能のインストールが必須です。**
+
+配信サイトは `X-Frame-Options` と CSP の `frame-ancestors` で iframe 埋め込みを拒否しており、これを
+解除できるのは拡張機能だけです(`rules.json` の declarativeNetRequest)。枠ごとの音量制御・枠内シアター・
+弾幕のチャット取得も、拡張機能が枠の中へ注入する content script が担っています。拡張機能なしでは
+枠が一つも表示されず、設定も保存されません。
+
 1. このリポジトリをクローンする
 2. Chrome で `chrome://extensions` を開き、「デベロッパーモード」を ON
 3. 「パッケージ化されていない拡張機能を読み込む」で、`manifest.json` があるディレクトリを選ぶ
 4. ツールバーのアイコン → 「マルチビューを開く」
+
+拡張機能が見つからない状態で UI ページを開いた場合は、画面上部にその旨の警告が出ます。
+
+### 役割分担
+
+| | 担当 |
+| --- | --- |
+| GitHub Pages | UI(`multiview.html` / `.js` / `.css`)の配信のみ |
+| 拡張機能 | CSP / X-Frame-Options の除去、枠内 content script、Cookie 緩和、Kick の再生 URL 取得、設定の保存 |
 
 ---
 

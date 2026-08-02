@@ -36,16 +36,53 @@
     });
   }
 
-  function call(op, payload) {
+  function call(op, payload, timeoutMs) {
     return new Promise((resolve, reject) => {
       const id = ++seq;
       const timer = setTimeout(() => {
         pending.delete(id);
         // 拡張が入っていない/まだ注入されていない場合はここに来る。
         reject(new Error('拡張機能から応答がありません(未インストールの可能性)'));
-      }, TIMEOUT_MS);
+      }, timeoutMs || TIMEOUT_MS);
       pending.set(id, { resolve, reject, timer });
       window.postMessage({ __mv: REQ, id, op, payload }, location.origin);
+    });
+  }
+
+  // ---- 拡張機能が入っていないときの案内 ----
+  // このページは UI だけで、枠の埋め込み(CSP/X-Frame-Options の除去)も枠内の音量・弾幕も
+  // 拡張機能側が担っている。拡張が無いと枠が真っ白なまま理由も分からないので、明示する。
+  function showMissingExtensionNotice() {
+    if (document.getElementById('mv-no-ext')) return;
+    const el = document.createElement('div');
+    el.id = 'mv-no-ext';
+    el.style.cssText = [
+      'position:fixed', 'left:0', 'right:0', 'top:0', 'z-index:2147483647',
+      'background:#3c0d11', 'color:#ffdcd9', 'border-bottom:1px solid #f85149',
+      'font:13px/1.6 system-ui,sans-serif', 'padding:10px 14px', 'text-align:center'
+    ].join(';');
+    const link = document.createElement('a');
+    link.href = 'https://github.com/kuronekorou39/chrome-parallel-stream';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'インストール方法';
+    link.style.color = '#ff9c94';
+    el.append(
+      '拡張機能 Parallel Stream が見つかりません。このページは UI だけで、配信の埋め込みと枠内の音量・弾幕は拡張機能が担当します。' +
+        'このままでは枠が表示されず、設定も保存されません。 ',
+      link
+    );
+    (document.body || document.documentElement).appendChild(el);
+  }
+
+  if (!DIRECT) {
+    // 短めの ping で在否を判定する(実処理の待ち時間とは分ける)。
+    call('ping', {}, 2500).catch(() => {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', showMissingExtensionNotice, { once: true });
+      } else {
+        showMissingExtensionNotice();
+      }
     });
   }
 

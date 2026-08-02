@@ -20,6 +20,9 @@
 
   async function handle(op, payload) {
     switch (op) {
+      // 拡張機能が入っているかの確認用。応答があれば繋がっている。
+      case 'ping':
+        return { ok: true };
       case 'storage.get':
         return chrome.storage.local.get(payload.keys);
       case 'storage.set':
