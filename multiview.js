@@ -74,6 +74,16 @@ const DMK_CONTROLS = [
   { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色', adv: true }
 ];
 
+// 枠(iframe)に表示できるサイト。rules.json が X-Frame-Options / CSP を剥がしている対象と
+// 一致させること。ここに無いサイトは、サイト側の埋め込み拒否がそのまま効いて「接続拒否」になる。
+// 対象を増やすことは、そのドメインの埋め込み防御を利用者のブラウザで外すことを意味するので、
+// 安易に足さない(README の「この拡張がブラウザに与える影響」も合わせて更新すること)。
+const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv'];
+function isEmbeddableHost(host) {
+  const h = String(host || '').toLowerCase();
+  return EMBEDDABLE_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+}
+
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -2896,12 +2906,41 @@ function wireToolbar() {
   }
 
   const addUrl = document.getElementById('add-url');
+  const addNote = document.getElementById('add-note');
+  const note = (msg) => {
+    if (!addNote) return;
+    addNote.textContent = msg || '';
+    addNote.hidden = !msg;
+  };
   const doAdd = () => {
-    const u = addUrl.value.trim();
-    if (!u || wins.length >= MAX_WINDOWS) return;
+    const raw = addUrl.value.trim();
+    if (!raw || wins.length >= MAX_WINDOWS) return;
+    // スキームが無ければ https を補う(「twitch.tv/xxx」の貼り付けを許す)。
+    const u = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : 'https://' + raw;
+    let parsed;
+    try {
+      parsed = new URL(u);
+    } catch (e) {
+      note('URL として読めません。配信ページのアドレスを貼り付けてください。');
+      return;
+    }
+    // http(s) 以外は開かない(javascript: 等をこのページの文脈で実行させないため)。
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      note('http / https の URL だけを追加できます。');
+      return;
+    }
+    // 対応サイト以外は、サイト側の X-Frame-Options により枠内が「接続拒否」になる。
+    // 埋め込みを通すにはそのヘッダを剥がす必要があるが、対象を広げると無関係なサイトの
+    // 埋め込み防御まで外すことになるため、ここで断る(rules.json の対象と一致させること)。
+    if (!isEmbeddableHost(parsed.hostname)) {
+      note(parsed.hostname + ' は枠に表示できません。埋め込みを許可しているのは Twitch / YouTube / OPENREC / Kick だけです。');
+      return;
+    }
+    note('');
     createWindow(u);
     addUrl.value = ''; // URL欄だけクリア。ダイアログは開いたまま=続けて貼り付けて追加できる。
   };
+  addUrl.addEventListener('input', () => note('')); // 打ち直したら注意書きを消す
   document.getElementById('add-btn').addEventListener('click', doAdd);
   addUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
 
