@@ -273,7 +273,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   position: absolute; display: flex; flex-direction: column;
   background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
   box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-  min-width: 240px; min-height: 135px; /* JS の MIN_W / MIN_H と一致させること */
+  min-width: 300px; min-height: 240px; /* JS の MIN_W / MIN_H と一致させること(右下のつまみが原寸で収まる大きさ) */
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
   user-select: none; -webkit-user-select: none; /* 枠の長押しで親要素のテキストが選択されるのを防ぐ(iframe 内は stream-control.js が担当) */
 }
@@ -446,13 +446,6 @@ body.panel-dragging iframe { pointer-events: none; }
   cursor: nwse-resize; touch-action: none;
   opacity: 0; pointer-events: none; /* 出ていないときは押せない */
   transition: opacity 0.15s ease;
-}
-/* 小さい枠用(JS の setRect が付け外し)。大きいままだと枠外へ出て消え、リサイズできなくなる。 */
-.win.win-grip-sm .win-resize-grip {
-  --grip-inset-r: 12px;
-  --grip-inset-b: 44px;
-  --grip-size: 40px;
-  font-size: 20px; border-radius: 10px;
 }
 .win:hover .win-resize-grip, .win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
 .win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
