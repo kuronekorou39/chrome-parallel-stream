@@ -10,12 +10,34 @@
 (function twitchKeepAlive() {
   'use strict';
   if (window.top === window.self) return; // 埋め込み(iframe)内のみ。トップレベルでは通常動作のまま
+  // 自分の枠の中だけに限定する。無関係なサイトが player.twitch.tv を埋め込んでいる場合にまで
+  // 可視性を偽装すると、そのサイトの省電力・自動停止まで壊してしまう。
+  try {
+    const a = location.ancestorOrigins;
+    const top = a && a.length ? a[a.length - 1] : '';
+    if (top !== 'https://kuronekorou39.github.io' && top.indexOf('chrome-extension://') !== 0) return;
+  } catch (e) {
+    return;
+  }
 
   // 1) IntersectionObserver を「観測対象は常に完全交差(可視)」を報告する版へ差し替える。
   // ネイティブの root/rootMargin/thresholds はゲッター専用なので、prototype を継承せず
   // プレーンオブジェクトで API を実装する(代入で例外を出さないため)。
   const RealIO = window.IntersectionObserver;
   if (typeof RealIO === 'function') {
+    // 再通知タイマーは Observer ごとではなく全体で1本にする。Twitch は SPA でプレイヤーを
+    // 作り直すたびに Observer を生成するため、インスタンスごとに setInterval を張ると
+    // 視聴時間に比例して積み上がる(解除する経路も無かった)。
+    const live = new Set();
+    let timer = null;
+    const ensureTimer = function () {
+      if (timer !== null) return;
+      timer = setInterval(function () {
+        if (live.size === 0) { clearInterval(timer); timer = null; return; }
+        live.forEach(function (tick) { tick(); });
+      }, 1000);
+    };
+
     const Patched = function (cb, options) {
       try {
         const targets = new Set();
@@ -38,14 +60,19 @@
           thresholds: [0],
           observe: function (t) {
             targets.add(t);
+            live.add(tick);
+            ensureTimer();
             Promise.resolve().then(function () { if (targets.has(t)) notify(t); });
           },
-          unobserve: function (t) { targets.delete(t); },
-          disconnect: function () { targets.clear(); },
+          unobserve: function (t) {
+            targets.delete(t);
+            if (targets.size === 0) live.delete(tick);
+          },
+          disconnect: function () { targets.clear(); live.delete(tick); },
           takeRecords: function () { return []; }
         };
-        // Twitch は監視し続けるので、可視を定期的に再通知する。
-        setInterval(function () { targets.forEach(notify); }, 1000);
+        // Twitch は監視し続けるので、可視を定期的に再通知する(タイマーは全体で1本を共有)。
+        function tick() { targets.forEach(notify); }
         return api;
       } catch (e) {
         return new RealIO(cb, options); // 何かあれば本物にフォールバック(プレイヤーを壊さない)

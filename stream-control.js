@@ -6,8 +6,27 @@
 //   3. Twitch のみ: シアターモードを1回 click して player を最大化。
 // 最上位タブ(通常閲覧)では何もしない。
 
+// 自分の枠(multiview)の中でだけ動かす。「iframe の中かどうか」だけで判定すると、無関係なサイトが
+// 配信ページを埋め込んでいる場合にもこのスクリプトが動き、フレームの URL やポインタのスクリーン座標を
+// その相手サイトへ postMessage で渡してしまう(通常はクロスオリジンで取得できない情報)。
+// 最上位の祖先オリジンが multiview のページ(ホスト版 or 拡張ページ)のときだけ動かす。
+// なお他拡張のページ内フレームには他拡張の content script は注入されないため、
+// 祖先が chrome-extension:// なら、それは自分の拡張ページだと判断してよい。
+const MV_HOST_ORIGIN = 'https://kuronekorou39.github.io';
+function mvInOwnFrame() {
+  try {
+    const a = location.ancestorOrigins;
+    if (!a || a.length === 0) return false;
+    const top = a[a.length - 1];
+    return top === MV_HOST_ORIGIN || top.indexOf('chrome-extension://') === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
 (function streamControl() {
   if (window.top === window.self) return; // iframe 内のみ動作
+  if (!mvInOwnFrame()) return; // multiview の枠でないなら何もしない
   const MAGIC = '__multiviewControl';
   const host = location.hostname;
 

@@ -331,8 +331,12 @@ async function deleteLayout(id) {
 }
 
 // 保存済みレイアウトに戻す。今の枠を全部閉じてから、保存時の枠を作り直す。
+// 配置ダイアログは実行後も閉じないため連続で押せる。loadDeferred の待ち時間中に2回目が入ると、
+// 1回目の続きが「もう閉じた枠」を読み込んでしまうので、世代番号で古い呼び出しを打ち切る。
+let applyLayoutGen = 0;
 async function applyLayout(layout) {
   if (!layout || !Array.isArray(layout.wins)) return;
+  const gen = ++applyLayoutGen;
   restoring = true; // 復元中は自動保存を抑止(途中経過で上書きしないため)
   [...wins].forEach((w) => closeWindow(w));
   const deferred = restoreLineup(layout);
@@ -340,6 +344,7 @@ async function applyLayout(layout) {
   updateCount();
   saveLineup(); // 呼び出した配置を現在のラインナップとして確定保存
   renderMixer();
+  if (gen !== applyLayoutGen) return; // 後から別の配置が呼ばれた → ここで降りる
   await loadDeferred(deferred);
 }
 
@@ -954,10 +959,14 @@ function armRightDrag(win, e) {
   };
   const onUp = (ev) => { if (ev.pointerId === pid) cleanup(); };
   const cleanup = () => {
+    try { win.el.releasePointerCapture(pid); } catch (_) { /* 既に解放済み */ }
     window.removeEventListener('pointermove', onMove, true);
     window.removeEventListener('pointerup', onUp, true);
     window.removeEventListener('pointercancel', onUp, true);
   };
+  // ポインタを捕捉しておかないと、枠内のクロスオリジン iframe(映像)の上で指を離したとき
+  // 親に pointerup が届かず cleanup が走らない。右クリックのたびにリスナが積み上がる。
+  try { win.el.setPointerCapture(pid); } catch (_) { /* noop */ }
   window.addEventListener('pointermove', onMove, true);
   window.addEventListener('pointerup', onUp, true);
   window.addEventListener('pointercancel', onUp, true);
@@ -2334,6 +2343,10 @@ function openOriginal(win) {
 }
 
 function closeWindow(win) {
+  // 遅延読み込み待ちのまま閉じられた枠を、あとから loadWindowMedia が読み込んでしまうのを防ぐ。
+  // Kick 枠だと破棄できない Hls インスタンスが生まれ、タブを閉じるまでセグメント取得が続く
+  // (この枠は既に wins から外れるので closeWindow の destroy は二度と走らない)。
+  win.pendingLoad = false;
   clearStackMax(win); // 全画面のまま閉じても body の状態を残さない
   hideWinLoading(win); // 読み込み待ち中に閉じてもスピナー/保険タイマーを残さない
   selectedWins.delete(win); // 複数選択に残さない

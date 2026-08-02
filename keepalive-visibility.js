@@ -10,6 +10,15 @@
 (function keepaliveVisibility() {
   'use strict';
   if (window.top === window.self) return; // multiview のタイル(iframe)内のみ。通常タブの背面挙動は変えない。
+  // さらに「自分の枠か」まで確認する。iframe というだけで判定すると、無関係なサイトが配信ページを
+  // 埋め込んでいる場合にも可視性を偽装してしまい、そのサイトの省電力・自動停止を壊す。
+  try {
+    const a = location.ancestorOrigins;
+    const top = a && a.length ? a[a.length - 1] : '';
+    if (top !== 'https://kuronekorou39.github.io' && top.indexOf('chrome-extension://') !== 0) return;
+  } catch (e) {
+    return;
+  }
 
   // Page Visibility を常に「可視」へ固定する。サイトは document.hidden / visibilityState を見て
   // タブが裏になると video.pause()/スロットルするため、ここを偽装して停止トリガを断つ。
