@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.3.3" />
+  <link rel="stylesheet" href="multiview.css?v=0.4.0" />
 </head>
 <body>
   <div id="toolbar">
@@ -122,9 +122,10 @@
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
           <input type="text" id="layout-name" class="tb-input" placeholder="保存名(省略で日時)" />
-          <button id="layout-save" class="tb-btn tb-btn-primary" type="button">＋ 保存</button>
+          <button id="layout-save" class="tb-btn" type="button">＋ 保存</button>
         </div>
-        <div class="layout-sec">保存済み(タップでその配置に戻す)</div>
+        <!-- 保存が1件も無いうちは、この見出しごと隠して最初の見た目をすっきりさせる(renderLayoutList が出し分け)。 -->
+        <div id="layout-saved-sec" class="layout-sec">保存済み(タップでその配置に戻す)</div>
         <div id="layout-list" class="layout-list"></div>
       </div>
     </div>
@@ -193,7 +194,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.3.3"></script>
-  <script src="multiview.js?v=0.3.3"></script>
+  <script src="ext-bridge.js?v=0.4.0"></script>
+  <script src="multiview.js?v=0.4.0"></script>
 </body>
 </html>

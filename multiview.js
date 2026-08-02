@@ -43,26 +43,27 @@ const DMK_SPEED_MAX_FACTOR = 2.6; // 同上の速度上限倍率
 // 弾幕の共通(既定)設定。枠ごとに win.danmaku.overrides で部分上書きできる(上書きの無い枠は全体に追従)。
 const DMK_DEFAULTS = {
   fontSize: 22,            // 文字サイズ(px)
-  speed: 130,              // 流れる速さ(px/秒)
-  opacity: 100,            // 弾幕の不透明度(%)
+  speed: 180,              // 流れる速さ(px/秒)
+  opacity: 30,             // 弾幕の不透明度(%)。映像を邪魔しない程度に薄く
   useColor: true,          // チャットのユーザー色を使う
-  colorStrength: 70,       // 色の強さ(0=白 〜 100=原色。白とのブレンド率)
+  colorStrength: 25,       // 色の強さ(0=白 〜 100=原色。白とのブレンド率)
   longShrink: true,        // 長文を縮小(しきい値超で長いほど小さく)
   longShrinkThreshold: 30, // 縮小を始める文字数
   speedByLength: false     // 長さで速度変化(長いほど速く流す)
 };
 let dmkGlobal = Object.assign({}, DMK_DEFAULTS);
 // 設定パネルのコントロール定義(全体/この枠 共通)。
-// 種類ごと(group)にまとめて表示する。同じ group の項目が連続するよう並べること。
+// adv:true は「詳細」に畳む項目。まず出すのは普段いじる4つだけにして、最初の見た目を軽くする。
+// 詳細側は種類ごと(group)にまとめて表示するので、同じ group の項目が連続するよう並べること。
 const DMK_CONTROLS = [
   { key: 'fontSize', label: '文字サイズ', type: 'range', min: 12, max: 48, unit: 'px', group: 'サイズ' },
-  { key: 'longShrink', label: '長文を縮小', type: 'toggle', group: 'サイズ' },
-  { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字', group: 'サイズ' },
   { key: 'speed', label: '速さ', type: 'range', min: 40, max: 400, unit: '', group: '速度' },
-  { key: 'speedByLength', label: '長さで速度', type: 'toggle', group: '速度' },
+  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示' },
   { key: 'useColor', label: '色を使う', type: 'toggle', group: '色' },
-  { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色' },
-  { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示' }
+  { key: 'longShrink', label: '長文を縮小', type: 'toggle', group: 'サイズ', adv: true },
+  { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字', group: 'サイズ', adv: true },
+  { key: 'speedByLength', label: '長さで速度', type: 'toggle', group: '速度', adv: true },
+  { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色', adv: true }
 ];
 
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
@@ -379,7 +380,10 @@ async function renderLayoutList() {
   const list = document.getElementById('layout-list');
   if (!list) return;
   const layouts = await listLayouts();
+  const sec = document.getElementById('layout-saved-sec');
   list.textContent = '';
+  // 1件も無いうちは「保存済み」の見出しを出さない(空の見出しだけ残ると煩い)。
+  if (sec) sec.hidden = !layouts.length;
   if (!layouts.length) {
     const empty = document.createElement('div');
     empty.className = 'layout-empty';
@@ -1852,19 +1856,9 @@ function openDanmakuPanel(win) {
   centerPanel(panel);
   renderDanmakuPanel();
 }
-function setupDanmakuPanel() {
-  const panel = document.getElementById('danmaku-panel');
-  if (!panel) return;
-  const rows = panel.querySelector('.dmk-rows');
-  let curGroup = null;
-  DMK_CONTROLS.forEach((c) => {
-    if (c.group && c.group !== curGroup) { // 種類ごとの見出しを挿入(サイズ/速度/色/表示)
-      curGroup = c.group;
-      const h = document.createElement('div');
-      h.className = 'dmk-group';
-      h.textContent = c.group;
-      rows.appendChild(h);
-    }
+// 設定1行(ラベル + つまみ/トグル + ↺)を組み立てて返す。簡易と詳細の両方から使う。
+function buildDmkRow(c) {
+  {
     const row = document.createElement('div');
     row.className = 'dmk-row';
     const label = document.createElement('span');
@@ -1916,8 +1910,44 @@ function setupDanmakuPanel() {
     row.appendChild(rev);
     ctrl.revert = rev;
     dmkPanelControls[c.key] = ctrl;
-    rows.appendChild(row);
+    return row;
+  }
+}
+
+function setupDanmakuPanel() {
+  const panel = document.getElementById('danmaku-panel');
+  if (!panel) return;
+  const rows = panel.querySelector('.dmk-rows');
+
+  // 簡易: 普段いじる項目だけを、種類の見出しなしで並べる(最初の見た目を軽くする)。
+  DMK_CONTROLS.filter((c) => !c.adv).forEach((c) => rows.appendChild(buildDmkRow(c)));
+
+  // 詳細: 既定は畳んでおき、開いたときだけ種類ごとの見出し付きで出す。
+  const advWrap = document.createElement('div');
+  advWrap.className = 'dmk-adv';
+  const advBtn = document.createElement('button');
+  advBtn.type = 'button';
+  advBtn.className = 'dmk-adv-toggle';
+  const advBody = document.createElement('div');
+  advBody.className = 'dmk-adv-body';
+  advBody.hidden = true;
+  const syncAdvBtn = () => { advBtn.textContent = advBody.hidden ? '詳細設定 ▾' : '詳細設定 ▴'; };
+  syncAdvBtn();
+  advBtn.addEventListener('click', () => { advBody.hidden = !advBody.hidden; syncAdvBtn(); });
+  let curGroup = null;
+  DMK_CONTROLS.filter((c) => c.adv).forEach((c) => {
+    if (c.group && c.group !== curGroup) { // 種類ごとの見出し(サイズ/速度/色/表示)
+      curGroup = c.group;
+      const h = document.createElement('div');
+      h.className = 'dmk-group';
+      h.textContent = c.group;
+      advBody.appendChild(h);
+    }
+    advBody.appendChild(buildDmkRow(c));
   });
+  advWrap.append(advBtn, advBody);
+  rows.insertAdjacentElement('afterend', advWrap);
+
   const scope = document.getElementById('dmk-scope');
   if (scope) scope.addEventListener('change', () => {
     dmkPanelWin = scope.value === 'global' ? null : (wins.find((w) => String(w.id) === scope.value) || null);
