@@ -13,7 +13,15 @@
     },
     "condition": {
       "resourceTypes": ["sub_frame"],
-      "initiatorDomains": ["kuronekorou39.github.io"],
+      "initiatorDomains": [
+        "kuronekorou39.github.io",
+        "twitch.tv",
+        "youtube.com",
+        "youtube-nocookie.com",
+        "kick.com",
+        "openrec.tv",
+        "mellow-fan.com"
+      ],
       "requestDomains": [
         "twitch.tv",
         "youtube.com",
