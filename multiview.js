@@ -399,6 +399,7 @@ function openLayoutDialog() {
   if (stackMode) return; // スマホ(縦積み)では配置は使わない(メニューでも隠しているが念のため)
   const dlg = document.getElementById('layout-dialog');
   if (!dlg) return;
+  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
   const name = document.getElementById('layout-name');
   if (name) name.value = '';
   const panel = dlg.querySelector('.pos-dialog');
@@ -1787,7 +1788,7 @@ function renderDanmakuPanel() {
       // 保存値が段階とぴったり一致しないこと(旧設定・プリセット)もあるので、一番近い段階に寄せる。
       const i = nearestStepIndex(ui.steps, src[c.key]);
       ui.input.value = String(i);
-      ui.valEl.textContent = ui.stepNames[i];
+      ui.input.title = ui.stepNames[i];
     } else {
       ui.input.value = src[c.key];
       ui.valEl.textContent = src[c.key] + (c.unit || '');
@@ -1904,6 +1905,9 @@ function dmkPresetDelete() {
 function openDanmakuPanel(win) {
   const panel = document.getElementById('danmaku-panel');
   if (!panel) return;
+  // 全体対象で開く操作(ツールバー / ≡メニュー)は、表示中にもう一度押したら閉じる。
+  // 枠を指定して開くときは対象を切り替えたいので、開いたままにする。
+  if (!win && !panel.hidden) { panel.hidden = true; return; }
   dmkPanelWin = (win && !win.video) ? win : null; // Kick は弾幕対象外なので全体扱い
   if (win) focusWindow(win);
   panel.hidden = false;
@@ -1943,16 +1947,15 @@ function buildDmkRow(c) {
       ticks.id = 'dmk-ticks-' + c.key;
       c.steps.forEach((_, i) => { const o = document.createElement('option'); o.value = String(i); ticks.appendChild(o); });
       input.setAttribute('list', ticks.id);
-      const val = document.createElement('span');
-      val.className = 'dmk-val dmk-val-name';
+      // 段階名は表示しない(つまみの幅を削るため)。目盛りと位置で分かるので、名前はツールチップに回す。
       input.addEventListener('input', () => {
         const i = Number(input.value);
         dmkEditValue(c.key, c.steps[i]);
-        val.textContent = c.stepNames[i];
+        input.title = c.stepNames[i];
       });
       input.addEventListener('change', () => { saveLineup(); renderDanmakuPanel(); });
-      row.append(input, val, ticks);
-      ctrl = { input, valEl: val, steps: c.steps, stepNames: c.stepNames };
+      row.append(input, ticks);
+      ctrl = { input, steps: c.steps, stepNames: c.stepNames };
     } else {
       const input = document.createElement('input');
       input.type = 'range';
@@ -2336,6 +2339,7 @@ function tileAll() {
 function openCookieDialog() {
   const dlg = document.getElementById('cookie-dialog');
   if (!dlg) return;
+  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
   document.getElementById('cookie-relax').checked = cookieRelaxOn;
   document.getElementById('cookie-status').textContent = '';
   const panel = dlg.querySelector('.pos-dialog');
@@ -2952,7 +2956,12 @@ function wireToolbar() {
   const addPanel = addDialog.querySelector('.pos-dialog');
   const closeAdd = () => addDialog.classList.remove('open');
   // 開くたび中央へ置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば中央から始まる)。
-  const openAdd = (e) => { e.stopPropagation(); centerPanel(addPanel); raisePanel(addDialog); addDialog.classList.add('open'); };
+  // 表示中にもう一度押したら閉じる(≡メニューの項目どうしで挙動を揃える)。
+  const openAdd = (e) => {
+    if (e) e.stopPropagation();
+    if (addDialog.classList.contains('open')) { closeAdd(); return; }
+    centerPanel(addPanel); raisePanel(addDialog); addDialog.classList.add('open');
+  };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
   document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
