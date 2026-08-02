@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.6.5" />
+  <link rel="stylesheet" href="multiview.css?v=0.6.6" />
 </head>
 <body>
   <div id="toolbar">
@@ -148,7 +148,6 @@
       <button id="perf-close" type="button" title="閉じる">✕</button>
     </div>
     <div class="perf-rows"></div>
-    <div class="perf-note">CPU/メモリは PC 全体の値。枠ごと・GPU は Chrome の Shift+Esc で。</div>
   </div>
 
   <!-- 弾幕設定パネル: 「適用先」ドロップダウンで 全体の既定 / 個別の枠 を選ぶ。設定行は種類ごと(サイズ/速度/
@@ -205,7 +204,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.6.5"></script>
-  <script src="multiview.js?v=0.6.5"></script>
+  <script src="ext-bridge.js?v=0.6.6"></script>
+  <script src="multiview.js?v=0.6.6"></script>
 </body>
 </html>

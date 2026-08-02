@@ -109,8 +109,12 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 
 /* 追加ダイアログ(枠を追加): サイトボタン + URL入力。pos-dialog の見た目を流用。 */
 #add-dialog .pos-dialog { width: 380px; max-width: calc(100% - 32px); }
-.add-sites { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 14px; }
-.add-sites .site-chip { font-size: 15px; padding: 11px 18px; border-left-width: 5px; }
+/* サイトのボタンは 2×2 の等幅グリッド。flex の折り返しだと 3+1 に割れて不揃いに見える。 */
+.add-sites { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.add-sites .site-chip {
+  font-size: 15px; padding: 11px 12px; border-left-width: 5px;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .add-url-row { display: flex; gap: 8px; align-items: stretch; }
 /* min-width:0 で入力欄を縮めさせ、ボタンを押し出さない。ボタンは縮まず折り返さない(「追加」が縦組みになるのを防ぐ)。 */
 .add-url-row .tb-input { flex: 1 1 auto; width: auto; min-width: 0; font-size: 15px; padding: 10px 12px; }
@@ -118,6 +122,8 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 
 /* 配置ダイアログ(📐): 整列/整形 + レイアウト保存・一覧。pos-dialog を流用。 */
 #layout-dialog .pos-dialog { width: 340px; max-width: calc(100% - 32px); }
+/* 説明文が長いので幅を決め打ちする。指定しないと1行に伸びてダイアログが画面幅いっぱいになる。 */
+#cookie-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
 
 /* セクション見出し: 左のアクセントバーで「ここから別の段」と示し、操作ボタンや履歴と役割を区別する。 */
 .layout-sec {
@@ -149,7 +155,6 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 /* 保存済み履歴: 角丸ボックスの羅列をやめ、控えめな「行リスト」に。各行は[名前][🗑]を区切り線で
    つないだ1ユニット。ホバーは緑系(操作ボタン/保存の青と区別し『戻る対象』を表す)。 */
 .layout-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
-.layout-empty { color: #6e7681; font-size: 12px; text-align: center; padding: 14px 0; }
 .layout-item {
   display: flex; align-items: stretch; gap: 0;
   border: 1px solid transparent; border-radius: 6px; overflow: hidden;
@@ -562,7 +567,6 @@ body.panel-dragging iframe { pointer-events: none; }
 .perf-val { flex: 0 0 56px; color: #f0f6fc; font-size: 12px; font-variant-numeric: tabular-nums; }
 .perf-val.warn { color: #f85149; font-weight: bold; }
 .perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
-.perf-note { margin-top: 6px; color: #6e7681; font-size: 10px; line-height: 1.4; }
 
 /* ===== 弾幕設定パネル(💬。地・影・ヘッダは枠一覧/パフォーマンスに合わせる) ===== */
 .dmk-panel {
@@ -599,16 +603,17 @@ body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロー�
 /* 隠しても場所は確保する(display:none にすると隣のつまみ幅が変わって UI がずれるため visibility で消す)。 */
 .dmk-revert.is-hidden { visibility: hidden; }
 /* 適用先に応じた弾幕 ON/OFF(枠=トグル / 全体=すべてON/OFF)。 */
-.dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+.dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
 .dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
-.dmk-onoff .dmk-toggle { flex: 1 1 auto; }
+/* 一番よく押すので、設定行のトグルより大きく取る。 */
+.dmk-onoff .dmk-toggle { flex: 1 1 auto; padding: 12px 0; font-size: 15px; font-weight: bold; }
 .dmk-bulk {
   flex: 1 1 0; padding: 6px 0; font-family: inherit; font-size: 12px; cursor: pointer;
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
 }
 .dmk-bulk:hover { border-color: #58a6ff; color: #f0f6fc; }
 /* プリセット(現在の適用先の値を保存・適用・削除)。 */
-.dmk-presets { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 12px; border-top: 1px solid #21262d; }
+.dmk-presets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 4px; }
 .dmk-presets-head { font-size: 11px; color: #6e7681; }
 .dmk-presets-btns { display: flex; gap: 6px; }
 .dmk-rows { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 10px; }

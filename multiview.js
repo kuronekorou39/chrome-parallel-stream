@@ -67,10 +67,10 @@ const DMK_CONTROLS = [
   { key: 'fontSize', label: '文字サイズ', type: 'range', min: 12, max: 48, unit: 'px', group: 'サイズ' },
   { key: 'speed', label: '速さ', type: 'range', min: 40, max: 400, unit: '', group: '速度' },
   { key: 'opacity', label: '不透明度', type: 'range', min: 20, max: 100, unit: '%', group: '表示' },
-  { key: 'useColor', label: '色を使う', type: 'toggle', group: '色' },
   { key: 'longShrink', label: '長文を縮小', type: 'toggle', group: 'サイズ', adv: true },
   { key: 'longShrinkThreshold', label: '縮小しきい', type: 'range', min: 10, max: 80, unit: '字', group: 'サイズ', adv: true },
   { key: 'speedByLength', label: '長さで速度', type: 'toggle', group: '速度', adv: true },
+  { key: 'useColor', label: '色を使う', type: 'toggle', group: '色', adv: true },
   { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色', adv: true }
 ];
 
@@ -413,15 +413,9 @@ async function renderLayoutList() {
   const layouts = await listLayouts();
   const sec = document.getElementById('layout-saved-sec');
   list.textContent = '';
-  // 1件も無いうちは「保存済み」の見出しを出さない(空の見出しだけ残ると煩い)。
+  // 1件も無いうちは見出しごと出さない。空であることの説明も置かない(保存すれば現れるので不要)。
   if (sec) sec.hidden = !layouts.length;
-  if (!layouts.length) {
-    const empty = document.createElement('div');
-    empty.className = 'layout-empty';
-    empty.textContent = '保存したレイアウトはまだありません。';
-    list.appendChild(empty);
-    return;
-  }
+  if (!layouts.length) return;
   layouts.forEach((lo) => {
     const item = document.createElement('div');
     item.className = 'layout-item';
@@ -1985,6 +1979,9 @@ function setupDanmakuPanel() {
     }
     advBody.appendChild(buildDmkRow(c));
   });
+  // プリセットも詳細側へ移す。常時見えている必要は無く、簡易表示を軽くする。
+  const presets = panel.querySelector('.dmk-presets');
+  if (presets) advBody.appendChild(presets);
   advWrap.append(advBtn, advBody);
   rows.insertAdjacentElement('afterend', advWrap);
 
