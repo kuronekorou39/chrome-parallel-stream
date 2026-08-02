@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.6.0" />
+  <link rel="stylesheet" href="multiview.css?v=0.6.1" />
 </head>
 <body>
   <div id="toolbar">
@@ -97,8 +97,8 @@
           <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
           <button class="site-chip" data-site="openrec" type="button" title="mellow-fan(旧 OPENREC)を開く">mellow-fan</button>
           <button class="site-chip site-chip-off" data-site="kick" type="button"
-                  data-note="Kick は配信ページの URL を直接貼り付けてください(例: kick.com/チャンネル名)。サイトを埋め込まず映像だけを直接再生する仕組みのため、トップページからは開けません。"
-                  title="Kick は配信ページの URL を直接貼り付けてください">Kick</button>
+                  data-note="Kick は配信ページの URL を貼り付けてください。"
+                  title="Kick は配信ページの URL を貼り付けてください">Kick</button>
         </div>
         <div class="add-url-row">
           <input type="text" id="add-url" class="tb-input" placeholder="配信ページの URL を貼り付け" />
@@ -205,7 +205,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.6.0"></script>
-  <script src="multiview.js?v=0.6.0"></script>
+  <script src="ext-bridge.js?v=0.6.1"></script>
+  <script src="multiview.js?v=0.6.1"></script>
 </body>
 </html>
