@@ -7,6 +7,10 @@
 const MULTIVIEW_ACTIVE_KEY = 'multiviewActive';
 const MULTIVIEW_LAYOUTS_KEY = 'multiviewLayouts';
 const MAX_LAYOUTS = 30;
+// 枠内でログインを使うために Cookie の SameSite を緩めるか。既定は ON(緩める)。
+// OFF にすると枠は未ログイン表示になり、チャットへの書き込み等ができなくなる。
+const COOKIE_RELAX_KEY = 'cookieRelaxEnabled';
+let cookieRelaxOn = true; // 起動時に storage から読み直す
 const MAX_WINDOWS = 20;
 const MIN_W = 240; // 枠の最小幅(台形廃止で小さくできる。小さめの枠を並べられるように)
 const MIN_H = 135; // 枠の最小高さ(16:9 で 240×135。CSS の .win min-height と一致させること)
@@ -2201,7 +2205,62 @@ function tileAll() {
 
 // ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
 // src を読み込む。これでフレーム内でログイン状態になり、チャット投稿などができる。
+// 🍪 ログインCookie ダイアログ。切り替えと「元に戻す」を置く。
+// 枠内のログインは対象サイトの Cookie の SameSite 変更に依存し、その変更はブラウザ全体へ効く。
+// 黙って変えるのではなく、利用者が選べて戻せる状態にしておく。
+function openCookieDialog() {
+  const dlg = document.getElementById('cookie-dialog');
+  if (!dlg) return;
+  document.getElementById('cookie-relax').checked = cookieRelaxOn;
+  document.getElementById('cookie-status').textContent = '';
+  const panel = dlg.querySelector('.pos-dialog');
+  centerPanel(panel); // 他のダイアログと同じく、開くたび中央へ置き直す
+  raisePanel(dlg);
+  dlg.classList.add('open');
+}
+
+function setupCookieDialog() {
+  const dlg = document.getElementById('cookie-dialog');
+  if (!dlg) return;
+  const close = () => dlg.classList.remove('open');
+  document.getElementById('cookie-dialog-close').addEventListener('click', close);
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
+
+  const toggle = document.getElementById('cookie-relax');
+  toggle.addEventListener('change', () => {
+    cookieRelaxOn = toggle.checked;
+    MV.storage.local.set({ [COOKIE_RELAX_KEY]: cookieRelaxOn });
+    document.getElementById('cookie-status').textContent = cookieRelaxOn
+      ? 'ON にしました。次に枠を読み込むときから適用されます。'
+      : 'OFF にしました。以後は Cookie に触れません(既に変更したぶんは下のボタンで戻せます)。';
+  });
+
+  const status = document.getElementById('cookie-status');
+  const restoreBtn = document.getElementById('cookie-restore');
+  restoreBtn.addEventListener('click', async () => {
+    restoreBtn.disabled = true;
+    status.textContent = '戻しています…';
+    try {
+      const resp = await MV.runtime.sendMessage({ type: 'restore-cookies' });
+      status.textContent = resp && resp.ok
+        ? `${resp.restored} 件の Cookie を元の設定に戻しました。枠を読み込み直すと反映されます。`
+        : '戻せませんでした。';
+    } catch (e) {
+      status.textContent = '戻せませんでした: ' + e.message;
+    } finally {
+      restoreBtn.disabled = false;
+    }
+  });
+
+  MV.storage.local.get(COOKIE_RELAX_KEY, (d) => {
+    // 未設定なら既定 ON(これまでの挙動を変えない)。
+    cookieRelaxOn = d && d[COOKIE_RELAX_KEY] !== undefined ? d[COOKIE_RELAX_KEY] !== false : true;
+    toggle.checked = cookieRelaxOn;
+  });
+}
+
 function loadFrameWithLogin(frameEl, domain, src) {
+  if (!cookieRelaxOn) { frameEl.src = src; return; } // OFF なら Cookie に触れない(未ログイン表示になる)
   MV.runtime
     .sendMessage({ type: 'relax-cookies', domains: [domain] })
     .then(() => { frameEl.src = src; })
@@ -2817,6 +2876,7 @@ function wireToolbar() {
   setupPerfPanel();
   setupMixer();
   setupDanmakuPanel();
+  setupCookieDialog();
   MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));
@@ -2858,6 +2918,7 @@ function setupMainMenu() {
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
+  act('mm-cookie', openCookieDialog);
   // 透明バックドロップ: メニュー外のタップは「閉じる」だけで、下のタイルへは絶対に流さない。
   document.getElementById('main-menu-backdrop').addEventListener('pointerdown', (e) => {
     e.preventDefault();
