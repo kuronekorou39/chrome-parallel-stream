@@ -16,6 +16,10 @@ const MAX_WINDOWS = 20;
 // リサイズのつまみは右下の1点だけで場所を取らないため、小さめの枠も並べられるようにしてある。
 const MIN_W = 240;
 const MIN_H = 135; // 16:9
+// リサイズつまみを通常サイズで置ける枠の下限(CSS の --grip-inset-* + --grip-size に余白を足した値)。
+// これを下回る枠では .win-grip-sm を付けて小さいつまみに切り替える。
+const GRIP_FIT_W = 260;
+const GRIP_FIT_H = 260;
 const SNAP_GAP = 6; // 整形(グリッドスナップ)時の枠どうしの隙間
 const EDGE_KEEP = 100; // 枠/パネルがステージ外へはみ出しても、掴んで戻せるよう画面内に必ず残す可視量
 const TOP_OVERHANG = 30; // 上方向へのはみ出し上限。台形ヘッダ(高さ62px)の半分は掴めるよう残す
@@ -747,6 +751,9 @@ function setRect(win, x, y, w, h) {
   win.el.style.width = w + 'px';
   win.el.style.height = h + 'px';
   updateWinWidthClass(win, w);
+  // 小さい枠では、大きいままのリサイズつまみが枠外へ出て overflow:hidden で消え、
+  // リサイズ自体ができなくなる。収まらない大きさになったら縮小版へ切り替える。
+  win.el.classList.toggle('win-grip-sm', w < GRIP_FIT_W || h < GRIP_FIT_H);
   clampBarX(win);
 }
 

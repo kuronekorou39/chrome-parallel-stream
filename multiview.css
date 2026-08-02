@@ -431,18 +431,28 @@ body.panel-dragging iframe { pointer-events: none; }
    ポインタを iframe へ渡し直す手段も無いため、判定では解決できない。位置で避ける。
    --grip-inset-b は再生バー(おおむね 40〜56px)の上へ逃がすための距離。触ってみて調整する。 */
 .win-resize-grip {
-  --grip-inset-r: 10px;
-  --grip-inset-b: 52px;
+  /* 隅からの距離とつまみの大きさ。サイトの UI(下端の再生バー、右のチャット欄とその折りたたみ、
+     全画面/設定ボタン)を避けるため、隅からしっかり内側へ入れる。被るようならこの3つを変える。 */
+  --grip-inset-r: 88px;
+  --grip-inset-b: 88px;
+  --grip-size: 90px;
   position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
-  z-index: 7; width: 30px; height: 30px;
+  z-index: 7; width: var(--grip-size); height: var(--grip-size);
   display: flex; align-items: center; justify-content: center;
-  background: rgba(13,17,23,0.78); color: #8b949e;
-  border: 1px solid rgba(48,54,61,0.9); border-radius: 8px;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.5);
-  font-size: 15px; line-height: 1; user-select: none;
+  background: rgba(13,17,23,0.72); color: #8b949e;
+  border: 1px solid rgba(48,54,61,0.9); border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55);
+  font-size: 40px; line-height: 1; user-select: none;
   cursor: nwse-resize; touch-action: none;
   opacity: 0; pointer-events: none; /* 出ていないときは押せない */
   transition: opacity 0.15s ease;
+}
+/* 小さい枠用(JS の setRect が付け外し)。大きいままだと枠外へ出て消え、リサイズできなくなる。 */
+.win.win-grip-sm .win-resize-grip {
+  --grip-inset-r: 12px;
+  --grip-inset-b: 44px;
+  --grip-size: 40px;
+  font-size: 20px; border-radius: 10px;
 }
 .win:hover .win-resize-grip, .win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
 .win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
