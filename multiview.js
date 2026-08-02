@@ -78,10 +78,23 @@ const DMK_CONTROLS = [
 // 一致させること。ここに無いサイトは、サイト側の埋め込み拒否がそのまま効いて「接続拒否」になる。
 // 対象を増やすことは、そのドメインの埋め込み防御を利用者のブラウザで外すことを意味するので、
 // 安易に足さない(README の「この拡張がブラウザに与える影響」も合わせて更新すること)。
-const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv'];
+const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv', 'mellow-fan.com'];
 function isEmbeddableHost(host) {
   const h = String(host || '').toLowerCase();
   return EMBEDDABLE_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+}
+
+// 枠として読み込んでよい URL か(スキームとホストの両方を見る)。
+// http(s) 以外を弾くのは、UI ページを通常オリジンへ置いてページ側の CSP が無くなったため、
+// javascript: 等がこのページの文脈で実行されうるのを防ぐため。
+function isAllowedFrameUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    return isEmbeddableHost(u.hostname);
+  } catch (e) {
+    return false;
+  }
 }
 
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
@@ -89,7 +102,7 @@ const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
   youtube: { url: 'https://www.youtube.com/' },
   kick: { url: 'https://kick.com/' },
-  openrec: { url: 'https://www.openrec.tv/' }
+  openrec: { url: 'https://www.mellow-fan.com/' }
 };
 
 const stage = document.getElementById('stage');
@@ -442,6 +455,13 @@ async function renderLayoutList() {
 
 function createWindow(url, opts = {}) {
   if (wins.length >= MAX_WINDOWS) return null;
+  // 追加ダイアログ以外にも、保存レイアウトの復元やサイトボタンからここへ来る。対応外の URL で
+  // 枠を作っても、サイト側の X-Frame-Options により中身は「接続拒否」になるだけなので、
+  // どの経路から来ても作らない(空の枠が残るより、作られない方が原因が分かりやすい)。
+  if (!isAllowedFrameUrl(url)) {
+    console.warn('[multiview] 枠に表示できない URL のため追加しません:', url);
+    return null;
+  }
   const id = 'w' + ++idSeq;
 
   const el = document.createElement('div');
@@ -2338,6 +2358,7 @@ function loadFrameWithLogin(frameEl, domain, src) {
 // YouTube は埋め込みログインの仕組みが別で、緩和がむしろ逆効果になりうるため対象にしない。
 function loginDomainOf(host) {
   if (host.includes('twitch.tv')) return 'twitch.tv';
+  if (host.includes('mellow-fan.com')) return 'mellow-fan.com';
   if (host.includes('openrec.tv')) return 'openrec.tv';
   return null;
 }
@@ -2933,7 +2954,7 @@ function wireToolbar() {
     // 埋め込みを通すにはそのヘッダを剥がす必要があるが、対象を広げると無関係なサイトの
     // 埋め込み防御まで外すことになるため、ここで断る(rules.json の対象と一致させること)。
     if (!isEmbeddableHost(parsed.hostname)) {
-      note(parsed.hostname + ' は枠に表示できません。埋め込みを許可しているのは Twitch / YouTube / OPENREC / Kick だけです。');
+      note(parsed.hostname + ' は枠に表示できません。埋め込みを許可しているのは Twitch / YouTube / mellow-fan / Kick だけです。');
       return;
     }
     note('');
@@ -2949,6 +2970,10 @@ function wireToolbar() {
   // ダイアログ内: 主要サイトのワンクリック追加(閉じないので、続けて何枠でも追加できる)。
   document.querySelectorAll('.site-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
+      // data-note 付き(Kick)はトップページから開けないサイト。理由を出すだけで枠は作らない。
+      // disabled 属性にすると click が飛ばず理由を出せないので、見た目だけ非活性にしてある。
+      if (btn.dataset.note) { note(btn.dataset.note); document.getElementById('add-url').focus(); return; }
+      note('');
       const site = SITES[btn.dataset.site];
       if (site && wins.length < MAX_WINDOWS) createWindow(site.url);
     });
@@ -3294,9 +3319,10 @@ function toLightUrl(url) {
     return null;
   }
 
-  if (host.includes('openrec.tv')) {
+  // mellow-fan(旧 OPENREC)。URL 形式は改名後も /live/<id> ・ /movie/<id> のまま。
+  if (host.includes('mellow-fan.com') || host.includes('openrec.tv')) {
     if ((segs[0] === 'live' || segs[0] === 'movie') && segs[1]) {
-      return 'https://www.openrec.tv/embed/' + encodeURIComponent(segs[1]);
+      return 'https://www.mellow-fan.com/embed/' + encodeURIComponent(segs[1]);
     }
     return null;
   }
@@ -3332,7 +3358,7 @@ function channelParts(url) {
       else if (segs[0] === 'watch') name = u.searchParams.get('v') || 'watch';
       else if (['live', 'shorts', 'embed'].includes(segs[0])) name = segs[1] || segs[0];
       else name = segs[0] || '';
-    } else if (host.includes('openrec')) {
+    } else if (host.includes('openrec') || host.includes('mellow-fan')) {
       name = segs[segs.length - 1] || '';
     } else if (host.startsWith('player.twitch')) {
       name = u.searchParams.get('channel') || u.searchParams.get('video') || '';
@@ -3351,7 +3377,7 @@ function siteOf(url) {
   if (h.includes('twitch')) return { letter: 'T', color: '#9147ff', name: 'Twitch' };
   if (h.includes('youtube') || h === 'youtu.be') return { letter: 'Y', color: '#ff0033', name: 'YouTube' };
   if (h.includes('kick')) return { letter: 'K', color: '#53fc18', name: 'Kick' };
-  if (h.includes('openrec')) return { letter: 'O', color: '#ffd200', name: 'OPENREC' };
+  if (h.includes('mellow-fan') || h.includes('openrec')) return { letter: 'M', color: '#ffd200', name: 'mellow-fan' };
   return { letter: '•', color: '#6e7681', name: h || 'その他' };
 }
 

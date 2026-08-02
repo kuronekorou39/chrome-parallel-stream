@@ -425,6 +425,10 @@ body.panel-dragging iframe { pointer-events: none; }
 /* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
 /* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
    枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
+/* トップページからは開けないサイト(Kick)。押せることは押せるが、見た目で「別扱い」と分かるようにする。 */
+.site-chip-off { opacity: 0.5; border-style: dashed; }
+.site-chip-off:hover { opacity: 0.8; }
+
 /* 枠に追加できない URL を貼られたときの説明。 */
 .add-note {
   margin: 8px 0 0; font-size: 12px; line-height: 1.6;

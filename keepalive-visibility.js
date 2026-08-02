@@ -3,7 +3,7 @@
 // twitch-keepalive.js は player.twitch.tv(軽量埋め込み)専用で IntersectionObserver も差し替えるが、
 // multiview が実際に読むのは www.twitch.tv/<channel> や youtube.com/watch・live で、そこには
 // Page Visibility 偽装が効いていなかった。YouTube は特に未対策。
-// このスクリプトは youtube.com / twitch.tv / openrec.tv の各フレームに広く効かせる「visibility 偽装」だけを担う。
+// このスクリプトは youtube.com / twitch.tv / mellow-fan.com(旧 openrec.tv)の各フレームに広く効かせる「visibility 偽装」だけを担う。
 //
 // MAIN world・document_start で、サイトのスクリプトが Page Visibility を観測し始める前に差し替えること。
 // (ISOLATED world だと document.hidden の上書きがページ側に伝わらないため MAIN world 必須)

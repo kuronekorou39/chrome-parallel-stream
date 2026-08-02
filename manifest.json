@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Parallel Stream",
-  "version": "0.5.5",
-  "description": "Twitch / YouTube / OPENREC / Kick の配信を1画面に並べて見るマルチビュー。枠ごとの音量・コメント弾幕つき。",
+  "version": "0.6.0",
+  "description": "Twitch / YouTube / mellow-fan(旧OPENREC) / Kick の配信を1画面に並べて見るマルチビュー。枠ごとの音量・コメント弾幕つき。",
   "icons": {
     "16": "icon-16.png",
     "48": "icon-48.png",
@@ -37,7 +37,8 @@
       "matches": [
         "*://*.twitch.tv/*",
         "*://*.youtube.com/*",
-        "*://*.openrec.tv/*"
+        "*://*.openrec.tv/*",
+        "*://*.mellow-fan.com/*"
       ],
       "js": [
         "stream-control.js"
@@ -60,7 +61,8 @@
       "matches": [
         "*://*.youtube.com/*",
         "*://*.twitch.tv/*",
-        "*://*.openrec.tv/*"
+        "*://*.openrec.tv/*",
+        "*://*.mellow-fan.com/*"
       ],
       "js": [
         "keepalive-visibility.js"

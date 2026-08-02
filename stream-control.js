@@ -423,8 +423,10 @@ function mvInOwnFrame() {
       text: (n) => n.querySelector('#message'),
       color: () => ''
     } :
-    host.includes('openrec.tv') ? {
-      sel: '.chat-content, [class*="chat-content"]',
+    (host.includes('mellow-fan.com') || host.includes('openrec.tv')) ? {
+      // mellow-fan(旧 OPENREC)。改名後も URL 形式とチャットのコンテナ(.chat-list-content)は同じだが、
+      // 行のクラスは .or-chat-article なので、旧 .chat-content では1件も拾えない(実機で確認)。
+      sel: '.or-chat-article, [class*="ChatArticle__Wrapper"], .chat-content, [class*="chat-content"]',
       containers: ['.chat-list-content', '[class*="ChatList__Content"]', '.chat-list'],
       author: (n) => n.querySelector('[class*="user-name"], [class*="userName"]'),
       text: (n) => n.querySelector('[class*="message"], [class*="Message"], [class*="comment"]'),
@@ -570,7 +572,7 @@ function mvInOwnFrame() {
   // 入れ子フレーム連携: 子からの chat-message は親へ中継し、子の frame-hello には現在の弾幕状態を返す
   // (子の読込が遅れても取りこぼさない)。親からの下り(set-*)は上の本体リスナが処理する。
   // 中継を許可するのは対象サイト配下のフレームのみ(YouTube live_chat 等)。第三者/広告 iframe からの偽装を弾く。
-  const DMK_RELAY_HOSTS = ['twitch.tv', 'youtube.com', 'openrec.tv'];
+  const DMK_RELAY_HOSTS = ['twitch.tv', 'youtube.com', 'openrec.tv', 'mellow-fan.com'];
   function dmkOriginAllowed(origin) {
     try { const h = new URL(origin).hostname; return DMK_RELAY_HOSTS.some((d) => h === d || h.endsWith('.' + d)); }
     catch (e) { return false; }

@@ -1,6 +1,6 @@
 # Parallel Stream
 
-Twitch / YouTube / OPENREC / Kick の配信を、1画面にタイル表示して同時に見るための Chrome 拡張機能です。
+Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面にタイル表示して同時に見るための Chrome 拡張機能です。
 枠ごとの音量調整、コメント弾幕、レイアウト保存、スマホ向けの縦積み表示に対応しています。
 
 素の JavaScript のみで、ビルド不要・npm 依存なしです。Manifest V3。
@@ -11,7 +11,7 @@ Twitch / YouTube / OPENREC / Kick の配信を、1画面にタイル表示して
 
 - **マルチビュー** — 配信ページを枠(iframe)として並べ、自由配置またはタイル整列で同時視聴
 - **枠ごとの音量** — サイト側のプレイヤー UI に触らず、各枠の音量とミュートをまとめて制御
-- **コメント弾幕** — 枠のチャットを取得して映像の上に流す(Twitch ライブ/VOD・YouTube ライブ・OPENREC)
+- **コメント弾幕** — 枠のチャットを取得して映像の上に流す(Twitch ライブ/VOD・YouTube ライブ・mellow-fan)
 - **軽量プレイヤー切替(⚡)** — フルサイトではなく公式埋め込みプレイヤーだけを読み込み、負荷を下げる
 - **レイアウト保存** — 枠の URL・位置・サイズ・音量を名前付きで保存して呼び出す
 - **縦積みモード** — スマホ向けに全幅タイルを縦に並べ、長押しドラッグで並び替え
@@ -59,7 +59,7 @@ UI は [GitHub Pages](https://kuronekorou39.github.io/chrome-parallel-stream/mul
 
 ### 1. 対象サイトの CSP と X-Frame-Options を除去します
 
-`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / OPENREC への **サブフレーム
+`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / mellow-fan(旧 OPENREC)への **サブフレーム
 リクエスト**から `content-security-policy` と `x-frame-options` を削除します。
 
 各サイトは iframe への埋め込みを明示的に拒否しているため、これを外さないとマルチビューは成立しません。
@@ -71,7 +71,7 @@ declarativeNetRequest はヘッダ単位でしか操作できず「そのディ�
 
 ### 2. 対象サイトの Cookie を `SameSite=None` に書き換えます
 
-枠の中でログイン状態を保つ(チャットに書き込む等)ために、`twitch.tv` / `openrec.tv` / `kick.com` の
+枠の中でログイン状態を保つ(チャットに書き込む等)ために、`twitch.tv` / `mellow-fan.com`(旧 `openrec.tv`)/ `kick.com` の
 Cookie を `SameSite=None; Secure` へ再設定します。
 
 **副作用:** この変更は拡張のページ内だけでなく、**ブラウザ全体に永続します**。以後これらのサイトへの
