@@ -196,6 +196,10 @@ function onFrameState(e) {
     win.adblock = d.state || null;
     win.vaft = win.adblock ? win.adblock.vaft : null;
     updateWinTitle(win);
+  } else if (d.type === 'danmaku-state') {
+    // 'on'=チャット欄を監視中 / 'missing'=ONなのに見つからない(サイトのDOM変更の疑い) / 'off'
+    win.danmakuState = d.state;
+    updateWinTitle(win);
   } else if (d.type === 'theater-state') {
     win.theaterState = d.state; // 'on' | 'searching' | 'off'
     updateWinTitle(win); // バッジの 🎭/🔎 表示を更新
@@ -1932,7 +1936,14 @@ function setupDanmakuPanel() {
   try {
     MV.storage.local.get(DMK_PRESETS_KEY, (r) => {
       const arr = r && r[DMK_PRESETS_KEY];
-      if (Array.isArray(arr)) dmkPresets = arr.filter((p) => p && p.name).map((p) => ({ name: String(p.name).slice(0, 40), settings: dmkSanitize(p.settings) }));
+      if (!Array.isArray(arr)) { renderDmkPresets(); return; }
+      const loaded = arr.filter((p) => p && p.name)
+        .map((p) => ({ name: String(p.name).slice(0, 40), settings: dmkSanitize(p.settings) }));
+      // 読込を待たずにユーザーが保存していることがある。丸ごと代入すると、その追加分が
+      // 画面から消え(storage には残るので次回起動で復活し)挙動が不可解になる。
+      // 既にメモリ上にある名前を優先し、保存済みのうち未知のものだけを足す。
+      const known = new Set(dmkPresets.map((p) => p.name));
+      dmkPresets = dmkPresets.concat(loaded.filter((p) => !known.has(p.name)));
       renderDmkPresets();
     });
   } catch (e) { renderDmkPresets(); }
@@ -2698,7 +2709,13 @@ function setupMixer() {
   resize.title = '下端をドラッグして高さを変える';
   panel.appendChild(resize);
   makeMixerResizable(panel, resize);
-  try { MV.storage.local.get(MIXER_HEIGHT_KEY, (r) => { const h = r && r[MIXER_HEIGHT_KEY]; if (h) panel.style.height = h + 'px'; }); } catch (e) { /* noop */ }
+  // 読込前にユーザーが高さを変えていたら、その操作を保存値で巻き戻さない。
+  try {
+    MV.storage.local.get(MIXER_HEIGHT_KEY, (r) => {
+      const h = r && r[MIXER_HEIGHT_KEY];
+      if (h && !panel.dataset.userResized) panel.style.height = h + 'px';
+    });
+  } catch (e) { /* noop */ }
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('mixer-btn').addEventListener('click', () => {
     panel.hidden = !panel.hidden;
@@ -2800,6 +2817,7 @@ function makeMixerResizable(panel, handle) {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', end);
       handle.removeEventListener('pointercancel', end);
+      panel.dataset.userResized = '1'; // 起動時の復元が後から来ても、この操作を巻き戻さない
       try { MV.storage.local.set({ [MIXER_HEIGHT_KEY]: panel.offsetHeight }); } catch (_) { /* noop */ }
     };
     handle.addEventListener('pointermove', onMove);
@@ -2878,7 +2896,8 @@ function wireToolbar() {
   setupDanmakuPanel();
   setupCookieDialog();
   MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
-    applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
+    // 読込前にユーザーが位置を選んでいたら、その操作を保存値で巻き戻さない。
+    if (!toolbarPosTouched) applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
     requestAnimationFrame(() => document.body.classList.add('tb-ready'));
   });
 }
@@ -3013,7 +3032,10 @@ function setupIdleHide() {
 
 // ツールバーの配置(上/下/左/右)を適用。body のクラスで CSS が位置とレイアウト(横/縦バー)を切替える。
 // save=false は起動時の復元用(storage へ書き戻さない)。
+// save=true はユーザー操作由来。起動時の復元(save=false)が後から来ても巻き戻さないよう印を付ける。
+let toolbarPosTouched = false;
 function applyToolbarPos(pos, save = true) {
+  if (save) toolbarPosTouched = true;
   if (!TOOLBAR_POSITIONS.includes(pos)) pos = 'top';
   const vertical = pos === 'left' || pos === 'right';
   TOOLBAR_POSITIONS.forEach((p) => document.body.classList.toggle('tb-pos-' + p, p === pos));
@@ -3287,11 +3309,15 @@ function updateWinTitle(win) {
     // 🛡=この枠に広告ブロック(別拡張の vaft)が効いている / 🚫=Twitch枠なのに効いていない。
     // 未報告(undefined)のうちは何も出さない。Twitch 以外の枠では報告自体が来ない。
     const shield = win.vaft === undefined ? '' : win.vaft === null ? ' 🚫' : ' 🛡';
-    win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + mark + shield;
+    // 💬=弾幕がチャット欄を監視中 / 💬⚠=ONなのに見つからない(サイトのDOM変更の疑い)。
+    const dmk = win.danmakuState === 'on' ? ' 💬' : win.danmakuState === 'missing' ? ' 💬⚠' : '';
+    const status = mark + shield + dmk;
+    win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + status;
     win.badgeEl.classList.toggle('light', light);
-    // 通常モードのバッジは CSS で display:none にされているため、診断が乗るときだけ表示を戻す。
-    win.badgeEl.classList.toggle('diag', win.vaft !== undefined);
-    win.badgeEl.classList.toggle('diag-warn', win.vaft === null); // 未注入は常時赤で出す
+    // 通常モードのバッジは CSS で display:none にされているため、状態表示が乗るときだけ戻す。
+    win.badgeEl.classList.toggle('diag', status !== '');
+    // 異常(広告ブロック未注入 / 弾幕のチャット欄が見つからない)はホバー待ちにせず常時見せる。
+    win.badgeEl.classList.toggle('diag-warn', win.vaft === null || win.danmakuState === 'missing');
     // Kick は切替不可。通常⇄軽量できる枠だけタップのヒントを出す。
     const canToggle = !win.video && (win.light || !!toLightUrl(win.url));
     win.badgeEl.disabled = !canToggle;

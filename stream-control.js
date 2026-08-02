@@ -527,19 +527,37 @@ function mvInOwnFrame() {
       try { f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: dmkOn }, 'https://www.youtube.com'); } catch (e) { /* noop */ }
     }
   }
+  // チャット欄が見つかっているかを親へ知らせる。サイトの DOM が変わってセレクタが古くなると
+  // 弾幕は「ONにしたのに何も流れない」状態になるが、それが故障なのかチャットが過疎なだけなのかを
+  // 利用者もコードも区別できなかった。見つからない状態が続いたら報告して枠バッジに出す。
+  let dmkReported = null;
+  let dmkMissTicks = 0;
+  const DMK_MISS_LIMIT = 7; // 1.5秒 × 7 ≒ 10秒。読み込みの遅れでは鳴らないだけの余裕を取る
+  function reportDanmaku(state) {
+    if (dmkReported === state) return;
+    dmkReported = state;
+    try {
+      window.parent.postMessage({ [MAGIC]: true, type: 'danmaku-state', state }, '*');
+    } catch (e) { /* noop */ }
+  }
+
   function dmkTick() {
     if (!dmkSite) return;
     if (!dmkOn) {
       if (dmkObserver) { dmkObserver.disconnect(); dmkObserver = null; }
       dmkContainer = null;
+      dmkMissTicks = 0;
+      reportDanmaku('off');
       return;
     }
     dmkBroadcastChildren(); // ON中は毎周期、遅れて出てくる live_chat 子へも value:true を送り直す(取りこぼし対策)
-    if (dmkContainer && dmkContainer.isConnected) return; // 監視中なら何もしない
+    if (dmkContainer && dmkContainer.isConnected) { dmkMissTicks = 0; reportDanmaku('on'); return; } // 監視中
     for (const sel of dmkSite.containers) {
       const c = document.querySelector(sel);
       if (c) { dmkContainer = c; dmkAttach(c); break; } // SPA再生成にもこのポーリングで張り直す
     }
+    if (dmkContainer) { dmkMissTicks = 0; reportDanmaku('on'); }
+    else if (++dmkMissTicks >= DMK_MISS_LIMIT) reportDanmaku('missing');
   }
   // 親から呼ばれる(set-danmaku-enabled)。自分の監視を ON/OFF し、入れ子チャットの子へも伝播する。
   function danmakuSetEnabled(on) {
