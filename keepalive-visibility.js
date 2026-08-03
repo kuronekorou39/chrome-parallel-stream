@@ -10,11 +10,6 @@
 (function keepaliveVisibility() {
   'use strict';
   if (window.top === window.self) return; // multiview のタイル(iframe)内のみ。通常タブの背面挙動は変えない。
-  // ===== 切り分け用(0.7.9 限定・確認が終わったら消す) =====
-  // YouTube の枠でレンダラが落ちる件が、こちらのコードによるものかを確かめるため、
-  // YouTube に対してだけ可視性偽装を行わない。crash-probe.js は記録のため残す。
-  if (location.hostname.indexOf('youtube.com') !== -1) return;
-  // ===== ここまで =====
   // さらに「自分の枠か」まで確認する。iframe というだけで判定すると、無関係なサイトが配信ページを
   // 埋め込んでいる場合にも可視性を偽装してしまい、そのサイトの省電力・自動停止を壊す。
   try {
