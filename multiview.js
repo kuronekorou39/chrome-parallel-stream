@@ -277,7 +277,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.6';
+const EXPECTED_EXT_VERSION = '0.9.7';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -291,6 +291,15 @@ function cmpVersion(a, b) {
 
 function checkExtVersion() {
   const v = MV.extVersion;
+  // メニューには常に版を出す(古いときだけでなく、最新であることも分かるように)。
+  const sub = document.getElementById('mm-update-ver');
+  const item = document.getElementById('mm-update');
+  if (sub && item) {
+    const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
+    sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
+    item.classList.toggle('is-old', !!old);
+    item.title = old ? '拡張機能が古いままです。押すと最新の ZIP を落とします' : '最新の ZIP を落とします';
+  }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
   const el = document.createElement('div');
