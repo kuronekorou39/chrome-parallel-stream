@@ -226,6 +226,25 @@ function onFrameUrl(e) {
   if (youtubeVideoIdOf(win.url)) switchToEmbed(win);
 }
 
+// live_chat 枠からの「チャットが使えるか」。使えない動画(ライブでない等)では列ごと畳む。
+// 中身は別オリジンで覗けないので、枠の中の content script が判定して送ってくる。
+function onChatAvailability(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true || d.type !== 'chat-availability') return;
+  const win = wins.find((w) => w.chatFrame && w.chatFrame.contentWindow === e.source);
+  if (!win) return;
+  win.chatUnavailable = !d.ok;
+  if (d.ok) return;
+  win.body.classList.remove('chat-on');
+  if (win.chatBtn) {
+    win.chatBtn.classList.remove('active');
+    win.chatBtn.disabled = true;
+    win.chatBtn.title = 'この動画にはチャットがありません';
+  }
+  if (stackMode) relayoutStack(); // チャット分のタイル高が要らなくなる
+}
+window.addEventListener('message', onChatAvailability);
+
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
   if (win.light || win.video || !toLightUrl(win.url)) return;
@@ -824,7 +843,14 @@ function setRect(win, x, y, w, h) {
   win.el.style.width = w + 'px';
   win.el.style.height = h + 'px';
   updateWinWidthClass(win, w);
+  updateWinShapeClass(win, w, h);
   clampBarX(win);
+}
+
+// チャットを横に並べるか下に置くかは、枠の形で決める。縦長の枠で横に並べると映像が細くなりすぎ、
+// 横長の枠で下に置くと映像が潰れる。w/h を直接見るのでレイアウト読み取り(reflow)は起こさない。
+function updateWinShapeClass(win, w, h) {
+  win.el.classList.toggle('portrait', h > w);
 }
 
 // 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
@@ -982,6 +1008,7 @@ function placeTile(win, x, y, w, h) {
   win.el.style.width = w + 'px';
   win.el.style.height = h + 'px';
   updateWinWidthClass(win, w);
+  updateWinShapeClass(win, w, h);
   clampBarX(win);
 }
 
@@ -2515,8 +2542,11 @@ function mountChatFrame(win) {
   if (chat.getAttribute('src') !== url) {
     // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
     chat.addEventListener('load', () => syncFrameDanmaku(win));
+    win.chatUnavailable = false; // 別の動画になったので判定はやり直し
+    if (win.chatBtn) { win.chatBtn.disabled = false; win.chatBtn.title = 'チャットの表示/非表示'; }
     chat.src = url;
   }
+  if (win.chatUnavailable) return; // チャットの無い動画では畳んだままにする
   win.body.classList.add('chat-on');
   if (win.chatBtn) win.chatBtn.classList.add('active');
 }

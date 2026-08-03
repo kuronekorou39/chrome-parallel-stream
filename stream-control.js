@@ -442,6 +442,25 @@ function mvInOwnFrame() {
     }, 500);
   }
 
+  // ---- YouTube の live_chat 枠: チャットが使えるかを親へ知らせる ----
+  // ライブでない動画では live_chat が「このライブ ストリームではチャットは無効です。」だけを出す。
+  // そのとき DOM は一覧(yt-live-chat-item-list-renderer)を持たず、単独の
+  // yt-live-chat-message-renderer だけになる。親は別オリジンで中を見られないので、ここで判定して送る。
+  // 判定できるまで少し待つ(読み込み直後はどちらの要素も無い)。
+  if (isDirectTile && location.pathname.indexOf('/live_chat') === 0) {
+    let tries = 0;
+    const timer = setInterval(() => {
+      const usable = !!document.querySelector('yt-live-chat-item-list-renderer');
+      const dead = !usable && !!document.querySelector('yt-live-chat-message-renderer');
+      if (usable || dead) {
+        clearInterval(timer);
+        post('chat-availability', { ok: usable });
+      } else if (++tries > 24) {
+        clearInterval(timer); // 12秒待っても判別できない = 触らない(誤って畳まない)
+      }
+    }, 500);
+  }
+
   // ---- コメント弾幕: チャットDOMを監視して新着コメントを親(multiview)へ送る ----
   // 親からの set-danmaku-enabled で ON/OFF。ON の間だけ MutationObserver でチャットの新着行を拾い、
   // { type:'chat-message', text, author, color } を window.parent へ送る(描画は親=multiview)。

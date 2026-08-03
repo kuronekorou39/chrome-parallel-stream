@@ -418,6 +418,11 @@ body.panel-dragging iframe { pointer-events: none; }
   border: 0; display: none; background: #0d1117;
 }
 .win-body.split-chat.chat-on .win-chat { display: block; }
+/* 縦長の枠ではチャットを映像の下へ回す(横に並べたままだと映像が細くなりすぎる)。
+   高さは割合で取る。固定 px にすると、小さい枠ではチャットが枠を食い潰す。
+   縦積み(スマホ)は下の専用ルールが STACK_CHAT_H と対で高さを決めるので、ここでは触らない。 */
+body:not(.stack-mode) .win.portrait .win-body.split-chat { flex-direction: column; }
+body:not(.stack-mode) .win.portrait .win-body .win-chat { flex: 0 0 42%; width: 100%; height: auto; min-height: 0; }
 
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
