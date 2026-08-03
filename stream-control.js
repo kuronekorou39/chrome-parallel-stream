@@ -442,6 +442,16 @@ function mvInOwnFrame() {
     }, 500);
   }
 
+  // ---- 埋め込みプレイヤーの再生位置を親へ送る ----
+  // 過去のライブのチャット再生(live_chat_replay)は、親から再生位置を受け取って進む仕組み。
+  // その材料になるのはプレイヤーの currentTime だけなので、ここから 1 秒ごとに送る。
+  if (isDirectTile && location.pathname.indexOf('/embed/') === 0) {
+    setInterval(() => {
+      const v = document.querySelector('video');
+      if (v && isFinite(v.currentTime)) post('player-progress', { t: v.currentTime });
+    }, 1000);
+  }
+
   // ---- YouTube の live_chat 枠: チャットが使えるかを親へ知らせる ----
   // ライブでない動画では live_chat が「このライブ ストリームではチャットは無効です。」だけを出す。
   // そのとき DOM は一覧(yt-live-chat-item-list-renderer)を持たず、単独の

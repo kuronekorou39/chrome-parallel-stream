@@ -233,8 +233,21 @@ function onChatAvailability(e) {
   if (!d || d[MAGIC] !== true || d.type !== 'chat-availability') return;
   const win = wins.find((w) => w.chatFrame && w.chatFrame.contentWindow === e.source);
   if (!win) return;
-  win.chatUnavailable = !d.ok;
-  if (d.ok) return;
+  if (d.ok) { win.chatUnavailable = false; return; }
+  // live_chat が使えないのは「チャットの無い動画」か「過去のライブ」のどちらか。
+  // 後者はチャット再生(live_chat_replay)で読めるので、まずそちらを試してから畳む。
+  const id = youtubeVideoIdOf(win.url);
+  if (id && !win.chatReplayTried) {
+    win.chatReplayTried = true;
+    tryChatReplay(win, id);
+    return;
+  }
+  collapseChat(win);
+}
+window.addEventListener('message', onChatAvailability);
+
+function collapseChat(win) {
+  win.chatUnavailable = true;
   win.body.classList.remove('chat-on');
   if (win.chatBtn) {
     win.chatBtn.classList.remove('active');
@@ -243,7 +256,38 @@ function onChatAvailability(e) {
   }
   if (stackMode) relayoutStack(); // チャット分のタイル高が要らなくなる
 }
-window.addEventListener('message', onChatAvailability);
+
+// 過去のライブのチャット再生へ切り替える。continuation トークンは視聴ページの中にあり、
+// ページからは CORS で読めないので service worker に取ってきてもらう。
+async function tryChatReplay(win, videoId) {
+  let continuation = null;
+  try {
+    const r = await MV.runtime.sendMessage({ type: 'get-youtube-chat-replay', videoId });
+    continuation = r && r.ok ? r.continuation : null;
+  } catch (e) {
+    continuation = null;
+  }
+  if (!win.chatFrame || !wins.includes(win)) return; // 待っている間に閉じられた
+  if (!continuation) { collapseChat(win); return; }
+  win.chatReplay = true;
+  win.chatUnavailable = false;
+  win.chatFrame.src =
+    'https://www.youtube.com/live_chat_replay?continuation=' + encodeURIComponent(continuation) +
+    '&embed_domain=' + encodeURIComponent(location.hostname);
+}
+
+// チャット再生は親から再生位置をもらって進む。埋め込みプレイヤーの枠が送ってくる
+// currentTime を、そのままチャット枠へ中継する(YouTube が期待する形の postMessage)。
+function onPlayerProgress(e) {
+  const d = e.data;
+  if (!d || d[MAGIC] !== true || d.type !== 'player-progress') return;
+  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  if (!win || !win.chatReplay || !win.chatFrame) return;
+  try {
+    win.chatFrame.contentWindow.postMessage({ 'yt-player-video-progress': d.t }, 'https://www.youtube.com');
+  } catch (err) { /* noop */ }
+}
+window.addEventListener('message', onPlayerProgress);
 
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
@@ -2542,7 +2586,10 @@ function mountChatFrame(win) {
   if (chat.getAttribute('src') !== url) {
     // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
     chat.addEventListener('load', () => syncFrameDanmaku(win));
-    win.chatUnavailable = false; // 別の動画になったので判定はやり直し
+    // 別の動画になったので、チャットの有無もチャット再生の判定もやり直す。
+    win.chatUnavailable = false;
+    win.chatReplay = false;
+    win.chatReplayTried = false;
     if (win.chatBtn) { win.chatBtn.disabled = false; win.chatBtn.title = 'チャットの表示/非表示'; }
     chat.src = url;
   }
