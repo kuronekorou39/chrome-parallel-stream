@@ -240,7 +240,10 @@ window.addEventListener('message', onProbe);
 
 // 心拍が途切れた枠を「落ちた」として記録する。落ちた瞬間はログの最終行で分かるが、
 // それが「落ちた」のか「単に静かになった」のかを区別するために明示する。
+// タブが裏に回っている間は Chrome がタイマーを絞るため心拍も遅れる。可視性は偽装していても
+// 絞りはブラウザ側の実際の可視状態で決まるので、裏の間は判定しない(誤検出を出さない)。
 setInterval(() => {
+  if (document.hidden) return;
   const now = Date.now();
   for (const [tag, at] of probeBeat) {
     if (now - at > PROBE_DEAD_MS) {
@@ -249,6 +252,12 @@ setInterval(() => {
     }
   }
 }, 1000);
+// 表に戻った直後は、絞られていた間の遅れをそのまま「途切れ」と読まないよう時計を入れ直す。
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const now = Date.now();
+  for (const tag of probeBeat.keys()) probeBeat.set(tag, now);
+});
 
 // 調査用の入口。multiview のページで DevTools を開いて mvProbe.dump() などを呼ぶ。
 window.mvProbe = {
