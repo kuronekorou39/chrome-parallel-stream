@@ -228,53 +228,15 @@ function onFrameUrl(e) {
 
 // live_chat 枠からの「チャットが使えるか」。使えない動画(ライブでない等)では列ごと畳む。
 // 中身は別オリジンで覗けないので、枠の中の content script が判定して送ってくる。
+// 出したあとで枠の中が「チャットは無効」だった場合の保険。出す判断は先の問い合わせで
+// 済んでいるので、ここは畳む方向にしか働かせない(出し直すと画面がガタつく)。
 function onChatAvailability(e) {
   const d = e.data;
-  if (!d || d[MAGIC] !== true || d.type !== 'chat-availability') return;
+  if (!d || d[MAGIC] !== true || d.type !== 'chat-availability' || d.ok) return;
   const win = wins.find((w) => w.chatFrame && w.chatFrame.contentWindow === e.source);
-  if (!win) return;
-  if (d.ok) { win.chatUnavailable = false; return; }
-  // live_chat が使えないのは「チャットの無い動画」か「過去のライブ」のどちらか。
-  // 後者はチャット再生(live_chat_replay)で読めるので、まずそちらを試してから畳む。
-  const id = youtubeVideoIdOf(win.url);
-  if (id && !win.chatReplayTried) {
-    win.chatReplayTried = true;
-    tryChatReplay(win, id);
-    return;
-  }
-  collapseChat(win);
+  if (win) hideChat(win, 'なし');
 }
 window.addEventListener('message', onChatAvailability);
-
-function collapseChat(win) {
-  win.chatUnavailable = true;
-  win.body.classList.remove('chat-on');
-  if (win.chatBtn) {
-    win.chatBtn.classList.remove('active');
-    win.chatBtn.disabled = true;
-    win.chatBtn.title = 'この動画にはチャットがありません';
-  }
-  if (stackMode) relayoutStack(); // チャット分のタイル高が要らなくなる
-}
-
-// 過去のライブのチャット再生へ切り替える。continuation トークンは視聴ページの中にあり、
-// ページからは CORS で読めないので service worker に取ってきてもらう。
-async function tryChatReplay(win, videoId) {
-  let continuation = null;
-  try {
-    const r = await MV.runtime.sendMessage({ type: 'get-youtube-chat-replay', videoId });
-    continuation = r && r.ok ? r.continuation : null;
-  } catch (e) {
-    continuation = null;
-  }
-  if (!win.chatFrame || !wins.includes(win)) return; // 待っている間に閉じられた
-  if (!continuation) { collapseChat(win); return; }
-  win.chatReplay = true;
-  win.chatUnavailable = false;
-  win.chatFrame.src =
-    'https://www.youtube.com/live_chat_replay?continuation=' + encodeURIComponent(continuation) +
-    '&embed_domain=' + encodeURIComponent(location.hostname);
-}
 
 // チャット再生は親から再生位置をもらって進む。位置は YouTube の埋め込み API から直接受け取る
 // (content script を挟むと拡張の再読み込みが要るうえ、部品が増えて壊れやすい)。
@@ -661,7 +623,8 @@ function createWindow(url, opts = {}) {
   } else if (isYouTube) {
     // 映像(埋め込みプレイヤー)は mountSiteFrame() が .win-media の中へ作る。
     // チャットはここで枠だけ用意し、読み込みは mountChatFrame() に任せる(URL 変更・再読込と共用)。
-    body.classList.add('split-chat', 'chat-on');
+    // chat-on は付けない。チャットがあると分かってから出す(先に出して畳むと画面がガタつく)。
+    body.classList.add('split-chat');
     const media = document.createElement('div');
     media.className = 'win-media';
     body.appendChild(media);
@@ -2592,29 +2555,66 @@ function mountSiteFrame(win) {
 
 // YouTube の枠に並べる公式チャット(live_chat)を今の URL に合わせて読み込む。
 // 通常表示(視聴ページ)のときはページ自身がチャットを持つので、こちらの枠は畳んでおく。
+// チャットは「あると分かってから」出す。先に出して畳むと画面がガタつくので、
+// 読み込む前に service worker へ問い合わせ、ライブ / 過去のライブ / 無し を確定させる。
 function mountChatFrame(win) {
   const chat = win.chatFrame;
   if (!chat || win.video) return; // Kick のチャットは生成時に読み込み済み
-  const url = win.light ? toYouTubeChatUrl(win.url) : null;
-  if (!url) {
+  const id = win.light ? youtubeVideoIdOf(win.url) : null;
+  if (!id) {
     chat.src = 'about:blank';
-    win.body.classList.remove('chat-on');
-    if (win.chatBtn) win.chatBtn.classList.remove('active');
+    win.chatVideoId = null; // 通常表示へ戻したとき。次に軽量へ戻したら読み直せるようにする
+    hideChat(win, 'なし');
     return;
   }
-  if (chat.getAttribute('src') !== url) {
-    // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
-    chat.addEventListener('load', () => syncFrameDanmaku(win));
-    // 別の動画になったので、チャットの有無もチャット再生の判定もやり直す。
-    win.chatUnavailable = false;
-    win.chatReplay = false;
-    win.chatReplayTried = false;
-    if (win.chatBtn) { win.chatBtn.disabled = false; win.chatBtn.title = 'チャットの表示/非表示'; }
-    chat.src = url;
-  }
-  if (win.chatUnavailable) return; // チャットの無い動画では畳んだままにする
+  if (win.chatVideoId === id) return; // 同じ動画。読み直さない
+  win.chatVideoId = id;
+  win.chatReplay = false;
+  hideChat(win, '確認中'); // 分かるまでは出さない
+  chat.src = 'about:blank';
+
+  MV.runtime
+    .sendMessage({ type: 'get-youtube-chat-info', videoId: id })
+    .then((r) => {
+      if (!wins.includes(win) || win.chatVideoId !== id) return; // 待つ間に閉じた/別の動画になった
+      const info = (r && r.ok && r.info) || { kind: 'none' };
+      if (info.kind === 'none') { hideChat(win, 'なし'); return; }
+      // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
+      chat.addEventListener('load', () => syncFrameDanmaku(win), { once: true });
+      if (info.kind === 'replay') {
+        win.chatReplay = true;
+        chat.src =
+          'https://www.youtube.com/live_chat_replay?continuation=' + encodeURIComponent(info.continuation) +
+          '&embed_domain=' + encodeURIComponent(location.hostname);
+      } else {
+        chat.src = toYouTubeChatUrl(win.url);
+      }
+      showChat(win);
+    })
+    .catch(() => hideChat(win, 'なし'));
+}
+
+// チャット列の出し入れ。💬 は「チャットがある枠」でだけ押せるようにする。
+function showChat(win) {
+  win.chatUnavailable = false;
   win.body.classList.add('chat-on');
-  if (win.chatBtn) win.chatBtn.classList.add('active');
+  if (win.chatBtn) {
+    win.chatBtn.disabled = false;
+    win.chatBtn.classList.add('active');
+    win.chatBtn.title = 'チャットの表示/非表示';
+  }
+  if (stackMode) relayoutStack();
+}
+
+function hideChat(win, why) {
+  win.chatUnavailable = why === 'なし';
+  win.body.classList.remove('chat-on');
+  if (win.chatBtn) {
+    win.chatBtn.classList.remove('active');
+    win.chatBtn.disabled = true;
+    win.chatBtn.title = why === 'なし' ? 'この動画にはチャットがありません' : 'チャットを確認しています';
+  }
+  if (stackMode) relayoutStack();
 }
 
 // 枠の iframe を作り直す(軽量⇄通常の切替・再読込用)。休止中なら次の表示時に反映される。
