@@ -418,6 +418,7 @@ body.panel-dragging iframe { pointer-events: none; }
 }
 #mv-ext-old b { flex: 0 0 100%; font-size: 14px; }
 #mv-ext-old span { flex: 1 1 260px; }
+#mv-ext-old a { color: #ffd479; font-weight: bold; text-decoration: underline; }
 #mv-ext-old button {
   padding: 6px 14px; border-radius: 6px; border: 1px solid #6b5a2a; background: #3a3120; color: #f0e6c8; cursor: pointer;
 }

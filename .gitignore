@@ -16,3 +16,6 @@ Screenshot_*.png
 
 # 調査用に持ち込んだコンソールログ(リポジトリには入れない)
 *.log
+
+# リリースの作業フォルダ(zip だけをリポジトリに置く)
+dist/parallel-stream/

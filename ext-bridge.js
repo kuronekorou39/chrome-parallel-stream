@@ -11,7 +11,10 @@
 
   const HOSTED_URL = 'https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html';
   const REPO_URL = 'https://github.com/kuronekorou39/chrome-parallel-stream';
-  const ZIP_URL = REPO_URL + '/archive/refs/heads/main.zip';
+  // リポジトリ全体ではなく、拡張機能のファイルだけを詰めた配布物を指す。
+  // 展開したフォルダがそのまま拡張機能になるので、入れ子を掘る必要がない
+  // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
+  const ZIP_URL = 'dist/parallel-stream-latest.zip';
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
   // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが
@@ -140,7 +143,7 @@
     zip.href = ZIP_URL;
     zip.textContent = 'ZIP をダウンロード';
     zip.style.cssText = 'color:#ff9c94;font-weight:bold';
-    li('リポジトリを取得して展開する(', zip, ' / または git clone)');
+    li(zip, ' して展開する(展開したフォルダがそのまま拡張機能です)');
     li('Chrome のアドレスバーに ', code('chrome://extensions'), ' を貼って開き、「デベロッパーモード」を ON');
     li('「パッケージ化されていない拡張機能を読み込む」を押し、展開したフォルダ(', code('manifest.json'), ' がある場所)を選ぶ');
     li('このページを再読み込みする');

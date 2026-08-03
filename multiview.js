@@ -277,7 +277,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.5';
+const EXPECTED_EXT_VERSION = '0.9.6';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -298,7 +298,11 @@ function checkExtVersion() {
   el.innerHTML =
     '<b>拡張機能が古いままです</b>' +
     '<span>入っているのは ' + v + ' 、このページが想定しているのは ' + EXPECTED_EXT_VERSION + ' です。' +
-    'chrome://extensions で更新してください。</span>';
+    'ソースを更新して chrome://extensions で再読み込みするか、下の ZIP を入れ直してください。</span>';
+  const dl = document.createElement('a');
+  dl.href = 'dist/parallel-stream-latest.zip';
+  dl.textContent = 'ZIP をダウンロード';
+  el.appendChild(dl);
   const close = document.createElement('button');
   close.type = 'button';
   close.textContent = '閉じる';
