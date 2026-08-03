@@ -409,15 +409,15 @@ body.panel-dragging iframe { pointer-events: none; }
 @keyframes win-spin { to { transform: rotate(360deg); } }
 .win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
 
-/* Kick: 映像(左)+ チャット(右)の2分割 */
-.win-body.kick-split { display: flex; }
+/* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
+.win-body.split-chat { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
 .win-body .win-chat {
   position: static; inset: auto;
   flex: 0 0 300px; width: 300px; height: 100%;
   border: 0; display: none; background: #0d1117;
 }
-.win-body.kick-split.chat-on .win-chat { display: block; }
+.win-body.split-chat.chat-on .win-chat { display: block; }
 
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
@@ -744,7 +744,7 @@ body.stack-mode .win-controls button.max { display: none; }
 .win .win-bar { display: none; }
 .win-adjust { top: 56px; } /* 台形が無いぶん 🎨 パネルは上へ */
 /* Kick: 縦積みでは映像の下にチャットを置く(高さは JS の STACK_CHAT_H と一致させること) */
-body.stack-mode .win-body.kick-split { flex-direction: column; }
+body.stack-mode .win-body.split-chat { flex-direction: column; }
 body.stack-mode .win-body .win-chat { flex: 0 0 280px; width: 100%; height: 280px; }
 body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */
 

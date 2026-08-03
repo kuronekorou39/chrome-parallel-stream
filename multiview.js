@@ -207,67 +207,6 @@ let stackMode = false;
   await loadDeferred(deferred);
 })();
 
-// ====== 枠のクラッシュ調査ログ ======
-// 枠(iframe)のレンダラが落ちると、その文書のコンソールも一緒に消える。crash-probe.js が
-// 枠の中の出来事を top(このページ。別プロセスなので生き残る)へ送ってくるので、ここで受けて
-// 記録する。最後に届いた行の直後が落ちた瞬間。心拍(beat)が途切れた枠は落ちたとみなす。
-const PROBE_MAX = 1200; // 保持する行数(古いものから捨てる)
-const PROBE_DEAD_MS = 4000; // 心拍がこれだけ来なければ落ちたと判断
-const probeLog = [];
-const probeBeat = new Map(); // frame名 → 最後に心拍が来た時刻
-let probeSaveTimer = null;
-
-function probePush(line) {
-  probeLog.push(line);
-  if (probeLog.length > PROBE_MAX) probeLog.splice(0, probeLog.length - PROBE_MAX);
-  console.log('[probe] ' + line);
-  clearTimeout(probeSaveTimer);
-  probeSaveTimer = setTimeout(() => {
-    // タブごと落ちても残るように保存する(次回起動時に mvProbe.dump() で読める)。
-    try { MV.storage.local.set({ probeLog: probeLog.slice(-PROBE_MAX) }); } catch (e) { /* noop */ }
-  }, 1500);
-}
-
-function onProbe(e) {
-  const d = e.data;
-  if (!d || d.__multiviewProbe !== true) return;
-  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
-  const tag = (win ? '枠' + (wins.indexOf(win) + 1) : '入れ子') + d.frame;
-  if (d.ev === 'beat') probeBeat.set(tag, Date.now());
-  probePush(`${String(d.ms).padStart(6)}ms ${tag} ${d.ev}${d.detail !== undefined ? ' ' + d.detail : ''}`);
-}
-window.addEventListener('message', onProbe);
-
-// 心拍が途切れた枠を「落ちた」として記録する。落ちた瞬間はログの最終行で分かるが、
-// それが「落ちた」のか「単に静かになった」のかを区別するために明示する。
-// タブが裏に回っている間は Chrome がタイマーを絞るため心拍も遅れる。可視性は偽装していても
-// 絞りはブラウザ側の実際の可視状態で決まるので、裏の間は判定しない(誤検出を出さない)。
-setInterval(() => {
-  if (document.hidden) return;
-  const now = Date.now();
-  for (const [tag, at] of probeBeat) {
-    if (now - at > PROBE_DEAD_MS) {
-      probeBeat.delete(tag);
-      probePush(`------ ${tag} の心拍が ${now - at}ms 途切れた = このフレームは落ちた ------`);
-    }
-  }
-}, 1000);
-// 表に戻った直後は、絞られていた間の遅れをそのまま「途切れ」と読まないよう時計を入れ直す。
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) return;
-  const now = Date.now();
-  for (const tag of probeBeat.keys()) probeBeat.set(tag, now);
-});
-
-// 調査用の入口。multiview のページで DevTools を開いて mvProbe.dump() などを呼ぶ。
-window.mvProbe = {
-  dump() { console.log(probeLog.join('\n')); return probeLog.length + ' 行'; },
-  text() { return probeLog.join('\n'); },
-  async copy() { await navigator.clipboard.writeText(probeLog.join('\n')); return 'コピーした'; },
-  clear() { probeLog.length = 0; MV.storage.local.set({ probeLog: [] }); return 'クリアした'; },
-  async last() { const v = await MV.storage.local.get('probeLog'); console.log((v.probeLog || []).join('\n')); return '前回分'; },
-};
-
 // content script(stream-control.js)から「この枠が今開いている URL」を受け取り、
 // 枠内で別の配信ページへ移動したら、その URL を保存して次回復元できるようにする。
 function onFrameUrl(e) {
@@ -281,6 +220,25 @@ function onFrameUrl(e) {
   syncLightBtn(win); // 配信ページへ移動したら⚡が押せるようになる
   saveLineup();
   renderMixer(); // 一覧のラベルも更新
+  // YouTube のトップや一覧を枠で見て動画を選ぶと、そのまま視聴ページになりレンダラが落ちる。
+  // 動画ページへ移った時点で、映像は埋め込み・チャットは live_chat の構成へ切り替える。
+  // 「落ちる表示のまま放置する」以外の選択肢が無いため、ここは自動で切り替える。
+  if (youtubeVideoIdOf(win.url)) switchToEmbed(win);
+}
+
+// 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
+function switchToEmbed(win) {
+  if (win.light || win.video || !toLightUrl(win.url)) return;
+  win.light = true;
+  win.tall = null;
+  if (win.lightBtn) win.lightBtn.classList.add('active');
+  updateWinTitle(win);
+  syncLightBtn(win);
+  syncMenuLabels(win);
+  remountFrame(win);
+  relayoutStack();
+  saveLineup();
+  renderMixer();
 }
 
 // content script(stream-control.js)からの状態通知。
@@ -557,6 +515,12 @@ function createWindow(url, opts = {}) {
   volWrap.append(volIcon, volSlider);
 
   const isKick = hostOf(url).includes('kick.com');
+  // YouTube は視聴ページを枠に入れると Chromium が落ちるため、埋め込みプレイヤーで映像を出し、
+  // チャットは公式の live_chat 枠を横に並べる(Kick と同じ2分割)。
+  // 2分割の器は枠の生成時にしか作れないので、トップページ等でも YouTube なら先に用意しておく
+  // (枠の中で動画を選んだ時点で埋め込みへ切り替わり、そのままチャットも出せるように)。
+  const ytHost = hostOf(url);
+  const isYouTube = ytHost.includes('youtube.com') || ytHost === 'youtu.be';
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
@@ -564,7 +528,7 @@ function createWindow(url, opts = {}) {
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn('🔄', '', 'この枠を再読込');
-  const chatBtn = isKick ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
+  const chatBtn = isKick || isYouTube ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   const lightBtn = isKick ? null : mkBtn('⚡', '', ''); // 軽量プレイヤー切替(タイトルは syncLightBtn が設定)
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
@@ -582,12 +546,13 @@ function createWindow(url, opts = {}) {
   let frame = null;
   let video = null;
   let chatFrame = null;
+  let mediaEl = null; // チャットと2分割するとき、映像側を入れる箱(無ければ body 直下)
   if (isKick) {
     // Kick は拡張ページの iframe 内だとプレイヤーの内部リクエスト(IVS)が origin で弾かれ、
     // 最大化など再描画の契機で 404 になる。そこで映像は HLS を <video> で直接再生し
     // (リサイズ/再ペアレントの影響を受けない)、チャットだけ本物の kick.com の popout を
     // 横に並べる(プレイヤーが無いので 404 にならず、拡張ページ配下ならログインも通る想定)。
-    body.classList.add('kick-split', 'chat-on');
+    body.classList.add('split-chat', 'chat-on');
     const media = document.createElement('div');
     media.className = 'win-media';
     video = document.createElement('video');
@@ -612,6 +577,18 @@ function createWindow(url, opts = {}) {
         loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
       }
     }
+  } else if (isYouTube) {
+    // 映像(埋め込みプレイヤー)は mountSiteFrame() が .win-media の中へ作る。
+    // チャットはここで枠だけ用意し、読み込みは mountChatFrame() に任せる(URL 変更・再読込と共用)。
+    body.classList.add('split-chat', 'chat-on');
+    const media = document.createElement('div');
+    media.className = 'win-media';
+    body.appendChild(media);
+    mediaEl = media;
+    const chat = document.createElement('iframe');
+    chat.className = 'win-chat';
+    body.appendChild(chat);
+    chatFrame = chat;
   } else {
     // iframe は win 確定後に mountSiteFrame() で生成する。
     // ※ iframe は生成後 DOM 上で move しないこと(再ペアレントすると埋め込みが壊れる)。
@@ -634,7 +611,7 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatFrame, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider,
+    id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider,
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
     prevRect: null, freeRect: null,
     opacity: 100, vol: 1,
@@ -655,7 +632,9 @@ function createWindow(url, opts = {}) {
   win.badgeEl = badge;
 
   // 軽量モードの復元(保存後に URL が変換できない形へ変わっていたら通常表示に落とす)。
-  win.light = !!opts.light && !!toLightUrl(url);
+  // YouTube は通常表示だとレンダラが落ちるので、保存内容にかかわらず埋め込みで開く。
+  // 通常表示は ⚡ で明示的に選んだときだけにする(選べば落ちる、と分かった上での操作)。
+  win.light = (isYouTube || !!opts.light) && !!toLightUrl(url);
   if (win.light && lightBtn) lightBtn.classList.add('active');
   updateWinTitle(win);
   syncLightBtn(win);
@@ -989,7 +968,7 @@ function relayoutStack() {
 // 縦長(手動指定)は全幅時のみ反映。half(横並び)は小さく出す枠なので常に 16:9。
 function stackTileH(win, w, tallH) {
   let h = Math.round((w * 9) / 16);
-  if (win.body && win.body.classList.contains('kick-split') && win.body.classList.contains('chat-on')) {
+  if (win.body && win.body.classList.contains('split-chat') && win.body.classList.contains('chat-on')) {
     h += STACK_CHAT_H;
   }
   if (tallH && win.span !== 'half' && isTall(win)) h = Math.max(h, tallH);
@@ -2487,8 +2466,11 @@ function toggleChat(win) {
 function mountSiteFrame(win) {
   const frame = document.createElement('iframe');
   frame.allow = IFRAME_ALLOW;
-  win.body.appendChild(frame);
+  // チャットと2分割する枠では、映像は .win-media の中へ入れる(iframe は絶対配置なので
+  // body 直下に置くと flex の並びから外れてチャットと重なる)。
+  (win.mediaEl || win.body).appendChild(frame);
   win.frame = frame;
+  mountChatFrame(win);
   applyFrameZoom(win); // 縮小表示(🔍)の倍率を反映
   frame.addEventListener('load', () => {
     applyVolume(win, masterVolume);
@@ -2505,6 +2487,23 @@ function mountSiteFrame(win) {
     frame.src = src;
   }
   applyVolume(win, masterVolume);
+}
+
+// YouTube の枠に並べる公式チャット(live_chat)を今の URL に合わせて読み込む。
+// 通常表示(視聴ページ)のときはページ自身がチャットを持つので、こちらの枠は畳んでおく。
+function mountChatFrame(win) {
+  const chat = win.chatFrame;
+  if (!chat || win.video) return; // Kick のチャットは生成時に読み込み済み
+  const url = win.light ? toYouTubeChatUrl(win.url) : null;
+  if (!url) {
+    chat.src = 'about:blank';
+    win.body.classList.remove('chat-on');
+    if (win.chatBtn) win.chatBtn.classList.remove('active');
+    return;
+  }
+  if (chat.getAttribute('src') !== url) chat.src = url;
+  win.body.classList.add('chat-on');
+  if (win.chatBtn) win.chatBtn.classList.add('active');
 }
 
 // 枠の iframe を作り直す(軽量⇄通常の切替・再読込用)。休止中なら次の表示時に反映される。
@@ -2554,21 +2553,22 @@ function toggleAllLight() {
 // ⚡ボタン(台形ヘッダ/⋮メニュー両方)の活性・文言を現在の状態・URLに合わせる。
 function syncLightBtn(win) {
   const ok = win.light || !!toLightUrl(win.url);
+  // YouTube の通常表示(視聴ページ)は枠に入れるとレンダラが落ちる。切替は残すが、
+  // 押せば落ちると分かるようにしておく(黙って戻せてしまうと事故になる)。
+  const yt = !!youtubeVideoIdOf(win.url);
+  const toNormal = yt ? '通常表示に戻す(YouTubeは枠が落ちます)' : '通常表示に戻す(サイト内回遊・チャットが使える)';
+  const toLight = yt
+    ? '埋め込みプレイヤー+チャットに切替(YouTubeはこちらが正常)'
+    : '軽量プレイヤーに切替(負荷を大きく削減。回遊・チャット不可)';
   if (win.lightBtn) {
     win.lightBtn.disabled = !ok;
-    win.lightBtn.title = win.light
-      ? '通常表示に戻す(サイト内回遊・チャットが使える)'
-      : ok
-        ? '軽量プレイヤーに切替(負荷を大きく削減。回遊・チャット不可)'
-        : '軽量プレイヤーは配信/動画ページを開くと使えます';
+    win.lightBtn.title = win.light ? toNormal : ok ? toLight : '軽量プレイヤーは配信/動画ページを開くと使えます';
   }
   if (win.menuLight) {
     win.menuLight.btn.disabled = !ok;
-    win.menuLight.name.textContent = win.light ? '🌐 通常' : '⚡ 軽量';
+    win.menuLight.name.textContent = win.light ? (yt ? '🌐 通常(落ちます)' : '🌐 通常') : '⚡ 軽量';
     win.menuLight.val.textContent = '';
-    win.menuLight.btn.title = win.light
-      ? '通常表示に戻す(サイト内回遊・チャットが使える)'
-      : ok ? '軽量プレイヤーに切替(負荷を大きく削減・回遊不可)' : '軽量は配信/動画ページで使えます';
+    win.menuLight.btn.title = win.light ? toNormal : ok ? toLight : '軽量は配信/動画ページで使えます';
   }
 }
 
@@ -3399,6 +3399,37 @@ function toEmbedUrl(rawUrl) {
 // 軽量プレイヤー(⚡)用: 視聴ページの URL を各サイトの公式埋め込みプレイヤー URL に変換する。
 // フルサイトの SPA を丸ごと読まずプレイヤーだけになるので、1枠あたりの負荷が大きく下がる。
 // 変換先が無い URL(サイトのトップ・一覧ページ等)は null(=切替不可)。
+// YouTube の視聴ページ(www.youtube.com/watch)は、別オリジンの iframe に入れて再生すると
+// Chromium のレンダラが落ちる。枠 1 つ・iframe の属性も無しの最小構成で 6/6 再現し、
+// 例外もクラッシュ位置も毎回同一だった(2026-08-03 実測)。こちらの JS では触れない層なので、
+// YouTube は公式に埋め込みが認められている 2 つの口だけで組む。
+//   映像   : youtube.com/embed/<ID>
+//   チャット: youtube.com/live_chat?v=<ID>&embed_domain=<このページのホスト>
+function youtubeVideoIdOf(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    if (!host.includes('youtube.com') && host !== 'youtu.be') return null;
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (host === 'youtu.be') return segs[0] || null;
+    if (segs[0] === 'watch') return u.searchParams.get('v');
+    if (segs[0] === 'live' || segs[0] === 'shorts' || segs[0] === 'embed') return segs[1] || null;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ライブ/プレミアの公式チャット枠。アーカイブは live_chat_replay へ転送され、
+// チャットの無い動画では「利用できない」旨がその枠に出る(💬 で畳める)。
+function toYouTubeChatUrl(url) {
+  const id = youtubeVideoIdOf(url);
+  if (!id) return null;
+  return (
+    'https://www.youtube.com/live_chat?v=' + encodeURIComponent(id) + '&embed_domain=' + encodeURIComponent(location.hostname)
+  );
+}
+
 function toLightUrl(url) {
   let u;
   try {
@@ -3412,10 +3443,7 @@ function toLightUrl(url) {
   // 自動再生は「ミュート付き」で要求する。モバイルは音あり自動再生が禁止のため、ミュート無しだと
   // 一時停止で止まったまま開く。本アプリは元々「起動時は全ミュート」方針なので挙動も一致する。
   if (host.includes('youtube.com') || host === 'youtu.be') {
-    let id = null;
-    if (host === 'youtu.be') id = segs[0];
-    else if (segs[0] === 'watch') id = u.searchParams.get('v');
-    else if (segs[0] === 'live' || segs[0] === 'shorts' || segs[0] === 'embed') id = segs[1];
+    const id = youtubeVideoIdOf(url);
     if (!id) return null;
     return 'https://www.youtube.com/embed/' + encodeURIComponent(id) + '?autoplay=1&playsinline=1&mute=1';
   }
