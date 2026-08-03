@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>youtube.com/watch in an iframe — renderer crash repro</title>
+    <style>
+      body { margin: 0; font: 14px/1.6 system-ui, sans-serif; background: #111; color: #ddd; }
+      header { padding: 10px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      input { flex: 1 1 380px; min-width: 240px; padding: 6px 8px; background: #1c1c1c; color: #eee; border: 1px solid #444; border-radius: 4px; }
+      button { padding: 6px 12px; background: #2a2a2a; color: #eee; border: 1px solid #555; border-radius: 4px; cursor: pointer; }
+      p { margin: 0 12px 10px; color: #999; }
+      #stage { position: relative; width: 960px; height: 540px; max-width: 100%; background: #000; margin: 0 12px; }
+      #stage iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <input id="url" value="https://www.youtube.com/watch?v=" />
+      <button id="go">Open in iframe</button>
+      <button id="clear">Close</button>
+    </header>
+    <p>
+      Load <code>extension/</code> as an unpacked extension first — it only removes
+      <code>X-Frame-Options</code> from sub-frame responses. The frame plays for a moment, then the
+      renderer dies (~3 s after playback starts). Reproduced 6/6, with and without the
+      <code>allow</code> attribute.
+    </p>
+    <div id="stage"></div>
+
+    <script>
+      const stage = document.getElementById('stage');
+      document.getElementById('go').onclick = () => {
+        stage.textContent = '';
+        const f = document.createElement('iframe');
+        f.src = document.getElementById('url').value.trim();
+        stage.appendChild(f);
+      };
+      document.getElementById('clear').onclick = () => { stage.textContent = ''; };
+    </script>
+  </body>
+</html>

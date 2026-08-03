@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "XFO stripper (crash repro)",
+  "version": "1.0",
+  "description": "Removes X-Frame-Options from sub-frame responses so youtube.com/watch can be framed. Nothing else.",
+  "permissions": ["declarativeNetRequest"],
+  "host_permissions": ["<all_urls>"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  }
+}
