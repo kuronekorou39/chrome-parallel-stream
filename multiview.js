@@ -276,18 +276,36 @@ async function tryChatReplay(win, videoId) {
     '&embed_domain=' + encodeURIComponent(location.hostname);
 }
 
-// チャット再生は親から再生位置をもらって進む。埋め込みプレイヤーの枠が送ってくる
-// currentTime を、そのままチャット枠へ中継する(YouTube が期待する形の postMessage)。
-function onPlayerProgress(e) {
-  const d = e.data;
-  if (!d || d[MAGIC] !== true || d.type !== 'player-progress') return;
+// チャット再生は親から再生位置をもらって進む。位置は YouTube の埋め込み API から直接受け取る
+// (content script を挟むと拡張の再読み込みが要るうえ、部品が増えて壊れやすい)。
+// 埋め込み枠へ listening を送ると、以後 infoDelivery で currentTime が流れてくる。
+function startPlayerTimeFeed(win) {
+  if (!win.frame) return;
+  try {
+    win.frame.contentWindow.postMessage(
+      JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }),
+      'https://www.youtube.com'
+    );
+  } catch (e) { /* noop */ }
+}
+
+function onPlayerInfo(e) {
+  if (typeof e.data !== 'string' || e.data.indexOf('infoDelivery') === -1) return;
+  let d;
+  try {
+    d = JSON.parse(e.data);
+  } catch (err) {
+    return;
+  }
+  const t = d && d.info && d.info.currentTime;
+  if (typeof t !== 'number') return;
   const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
   if (!win || !win.chatReplay || !win.chatFrame) return;
   try {
-    win.chatFrame.contentWindow.postMessage({ 'yt-player-video-progress': d.t }, 'https://www.youtube.com');
+    win.chatFrame.contentWindow.postMessage({ 'yt-player-video-progress': t }, 'https://www.youtube.com');
   } catch (err) { /* noop */ }
 }
-window.addEventListener('message', onPlayerProgress);
+window.addEventListener('message', onPlayerInfo);
 
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
@@ -2555,6 +2573,7 @@ function mountSiteFrame(win) {
   mountChatFrame(win);
   applyFrameZoom(win); // 縮小表示(🔍)の倍率を反映
   frame.addEventListener('load', () => {
+    startPlayerTimeFeed(win); // 埋め込みプレイヤーなら再生位置が流れてくるようになる
     applyVolume(win, masterVolume);
     syncFrameTheater(win);  // シアター有効化(+全画面中なら一時停止)を伝える
     syncFrameDanmaku(win);  // 弾幕 ON 中なら再読込後も監視を再開させる
@@ -3537,7 +3556,14 @@ function toLightUrl(url) {
   if (host.includes('youtube.com') || host === 'youtu.be') {
     const id = youtubeVideoIdOf(url);
     if (!id) return null;
-    return 'https://www.youtube.com/embed/' + encodeURIComponent(id) + '?autoplay=1&playsinline=1&mute=1';
+    // enablejsapi: 親が再生位置を受け取るため(アーカイブのチャット再生の同期に使う)。
+    // start: 元の URL に ?t=6916s のような指定があれば引き継ぐ(その位置を見たくて貼るため)。
+    const t = String(u.searchParams.get('t') || u.searchParams.get('start') || '').match(/^(\d+)/);
+    return (
+      'https://www.youtube.com/embed/' + encodeURIComponent(id) +
+      '?autoplay=1&playsinline=1&mute=1&enablejsapi=1&widgetid=1' +
+      (t ? '&start=' + t[1] : '')
+    );
   }
 
   if (host.includes('twitch.tv')) {
