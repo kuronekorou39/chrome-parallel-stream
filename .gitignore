@@ -13,3 +13,6 @@ chrome-parallel-stream.zip
 # 動作確認のために置いた一時スクリーンショット(実機キャプチャ等)。ソースではないので追跡しない。
 image.png
 Screenshot_*.png
+
+# 調査用に持ち込んだコンソールログ(リポジトリには入れない)
+*.log
