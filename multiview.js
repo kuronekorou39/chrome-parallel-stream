@@ -218,6 +218,7 @@ function onFrameUrl(e) {
   if (!win || win.url === d.href) return;
   if (win.light) return; // 軽量プレイヤー表示中はその URL で元ページ(win.url)を上書きしない
   win.url = d.href;
+  pushWinHistory(win, d.href); // ⋮メニューの「戻る」用
   updateWinTitle(win);
   syncLightBtn(win); // 配信ページへ移動したら⚡が押せるようになる
   saveLineup();
@@ -270,6 +271,44 @@ function onPlayerInfo(e) {
   } catch (err) { /* noop */ }
 }
 window.addEventListener('message', onPlayerInfo);
+
+// ====== 枠の中の「戻る」 ======
+// iframe の履歴は別オリジンだと親から操作できない(contentWindow.history は覗けない)。
+// また YouTube は動画ページで埋め込みへ切り替えるので、そもそも枠の履歴とはずれる。
+// そこで枠が辿った URL を自前で覚え、1つ前へ戻す。
+const WIN_HISTORY_MAX = 20;
+
+function pushWinHistory(win, url) {
+  if (!url) return;
+  if (!win.history) win.history = [];
+  if (win.history[win.history.length - 1] === url) return;
+  win.history.push(url);
+  if (win.history.length > WIN_HISTORY_MAX) win.history.shift();
+  syncMenuLabels(win); // 「戻る」の押せる/押せないを更新(メニュー生成前は何もしない)
+}
+
+function canGoBack(win) {
+  return !!(win.history && win.history.length > 1);
+}
+
+// 1つ前のページへ戻す。戻り先が埋め込みに変換できるページ(YouTubeの動画・Twitchのチャンネル)
+// なら埋め込み構成、そうでなければ(一覧・トップ)サイト全体で開く。
+function goBackWindow(win) {
+  if (!canGoBack(win)) return;
+  win.history.pop();
+  const prev = win.history[win.history.length - 1];
+  win.url = prev;
+  win.light = !!toLightUrl(prev);
+  win.tall = null;
+  if (win.lightBtn) win.lightBtn.classList.toggle('active', win.light);
+  updateWinTitle(win);
+  syncLightBtn(win);
+  syncMenuLabels(win);
+  remountFrame(win);
+  relayoutStack();
+  saveLineup();
+  renderMixer();
+}
 
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
@@ -578,7 +617,9 @@ function createWindow(url, opts = {}) {
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn('🔄', '', 'この枠を再読込');
   const chatBtn = isKick || hasChatPane ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
-  const lightBtn = isKick ? null : mkBtn('⚡', '', ''); // 軽量プレイヤー切替(タイトルは syncLightBtn が設定)
+  // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
+  // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
+  const lightBtn = isKick || isYouTube ? null : mkBtn('⚡', '', '');
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
   const closeBtn = mkBtn('✕', 'close', '閉じる');
@@ -663,6 +704,10 @@ function createWindow(url, opts = {}) {
   const win = {
     id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider,
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
+    // YouTube の通常表示は Chromium が落ちるので、この枠には切替先を出さない。
+    // ⋮メニューの生成(buildQuickControls)より前に決まっている必要がある。
+    noNormalMode: isYouTube,
+    history: [],
     prevRect: null, freeRect: null,
     opacity: 100, vol: 1,
     filter: { bright: 100, contrast: 100, sat: 100 },
@@ -687,6 +732,7 @@ function createWindow(url, opts = {}) {
   // 出ず、縦長でコメントも入力欄も使えないため。復元時は保存された選択(opts.light)を尊重する。
   const defaultLight = isYouTube || (isTwitch && opts.light === undefined);
   win.light = (defaultLight || !!opts.light) && !!toLightUrl(url);
+  pushWinHistory(win, url); // ⋮メニューの「戻る」用。最初のページを起点にする
   if (win.light && lightBtn) lightBtn.classList.add('active');
   updateWinTitle(win);
   syncLightBtn(win);
@@ -1497,7 +1543,7 @@ function buildQuickControls(win) {
 
   // 表示・サイズ系(軽量 / 縮小 / 幅 / 高さ)。文言は syncMenuLabels が状態で更新。縮小/幅/高さは縦積み専用の
   // 効果しか持たないため、PC(自由配置)では syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
-  if (!win.video) win.menuLight = mkToggle(() => toggleLight(win));
+  if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
   if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
   win.menuSpan = mkToggle(() => toggleSpan(win));
   win.menuTall = mkToggle(() => toggleTall(win));
@@ -1505,6 +1551,9 @@ function buildQuickControls(win) {
   if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   mkSep();
   // 操作系。
+  // 「戻る」は枠の中で一覧→動画と辿ったあと、見終わって一覧へ帰るための導線。
+  // 履歴が無い間は押せないようにする(押しても何も起きないボタンは置かない)。
+  if (!win.video) win.menuBack = mkItem('← 戻る', () => goBackWindow(win));
   mkItem('⛶ 全画面で操作', () => toggleStackMax(win));
   if (win.chatFrame) mkItem('💬 チャット表示切替', () => toggleChat(win));
   mkItem('🎨 映像調整', () => toggleAdjust(win));
@@ -1571,6 +1620,11 @@ function syncMenuModeVisibility(win) {
   }
 }
 function syncMenuLabels(win) {
+  if (win.menuBack) {
+    const ok = canGoBack(win);
+    win.menuBack.disabled = !ok;
+    win.menuBack.title = ok ? '枠の中で1つ前のページへ戻る' : '戻れるページがありません';
+  }
   if (win.menuTall) {
     win.menuTall.name.textContent = '⬍ 高さ';
     win.menuTall.val.textContent = isTall(win) ? '縦長' : '16:9';
@@ -2655,6 +2709,7 @@ function remountFrame(win) {
 // ⚡ 軽量プレイヤー切替。サイト内回遊・チャットは使えなくなる(戻すのも⚡)。
 function toggleLight(win) {
   if (win.video) return; // Kick は元から HLS 直再生(常時軽量)
+  if (win.noNormalMode && win.light) return; // YouTube の通常表示は落ちるので戻さない
   if (!win.light && !toLightUrl(win.url)) return; // 変換先が無いURL(トップ等)では何もしない
   win.light = !win.light;
   win.tall = null; // 高さの手動指定はリセット(既定の16:9へ)
@@ -2673,6 +2728,7 @@ function toggleAllLight() {
   const on = wins.some((w) => !w.video && !w.light && toLightUrl(w.url));
   wins.forEach((w) => {
     if (w.video || w.light === on) return;
+    if (w.noNormalMode && w.light) return; // YouTube を通常表示へ戻すと落ちる
     if (on && !toLightUrl(w.url)) return; // 変換できない枠(トップページ等)はそのまま
     w.light = on;
     w.tall = null; // 高さの手動指定はリセット(既定の16:9へ)
