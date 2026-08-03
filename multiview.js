@@ -937,10 +937,13 @@ function setRect(win, x, y, w, h) {
   clampBarX(win);
 }
 
-// チャットを横に並べるか下に置くかは、枠の形で決める。縦長の枠で横に並べると映像が細くなりすぎ、
-// 横長の枠で下に置くと映像が潰れる。w/h を直接見るのでレイアウト読み取り(reflow)は起こさない。
+// チャットを横に並べるか下に置くかを決める。横に並べるとチャット列が固定幅(300px)を取るので、
+// 枠が狭いと映像がその残りまで潰れる(幅 560px で映像 258px まで痩せていた)。
+// 映像に十分な幅が残らないなら下に回す。縦長の枠も同様。
+// w/h を直接見るのでレイアウト読み取り(reflow)は起こさない。
+const CHAT_SIDE_MIN_W = 680; // これ未満の幅ではチャットを下に置く(チャット300 + 映像360 相当)
 function updateWinShapeClass(win, w, h) {
-  win.el.classList.toggle('portrait', h > w);
+  win.el.classList.toggle('chat-below', h > w || w < CHAT_SIDE_MIN_W);
 }
 
 // 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
