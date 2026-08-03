@@ -1575,8 +1575,13 @@ function syncFrameTheater(win) {
 function onChatMessage(e) {
   const d = e.data;
   if (!d || d[MAGIC] !== true || d.type !== 'chat-message') return;
-  // 入れ子フレーム(YouTube live_chat)のコメントは枠フレームが中継するので、e.source は枠フレーム本体。
-  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  // コメントの出どころは、サイトを丸ごと出している枠か、横に並べたチャット枠のどちらか。
+  // YouTube は埋め込みプレイヤー+ live_chat の2枚組なので、映像側だけを見ると取りこぼす。
+  const win = wins.find(
+    (w) =>
+      (w.frame && w.frame.contentWindow === e.source) ||
+      (w.chatFrame && w.chatFrame.contentWindow === e.source)
+  );
   if (!win || !win.danmaku.on || win.hidden) return;
   // parts(テキスト/絵文字画像のセグメント配列)。旧 text 形式が来ても一応扱える。
   const parts = Array.isArray(d.parts) ? d.parts : (d.text ? [{ text: String(d.text) }] : []);
@@ -1586,7 +1591,8 @@ function onChatMessage(e) {
 // 枠に弾幕オーバーレイ層を用意(無ければ作る)。映像と同座標で、CSS filter の影響を受けない位置に置く。
 function ensureDanmakuLayer(win) {
   if (win.danmaku.layer && win.danmaku.layer.isConnected) return win.danmaku.layer;
-  const parentEl = win.video ? (win.body.querySelector('.win-media') || win.body) : win.body;
+  // 2分割の枠(Kick / YouTube)は映像側にだけ重ねる。body に重ねるとチャット列の上も覆ってしまう。
+  const parentEl = win.body.querySelector('.win-media') || win.body;
   const layer = document.createElement('div');
   layer.className = 'win-danmaku';
   parentEl.appendChild(layer);
