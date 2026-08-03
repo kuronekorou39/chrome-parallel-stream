@@ -207,6 +207,58 @@ let stackMode = false;
   await loadDeferred(deferred);
 })();
 
+// ====== 枠のクラッシュ調査ログ ======
+// 枠(iframe)のレンダラが落ちると、その文書のコンソールも一緒に消える。crash-probe.js が
+// 枠の中の出来事を top(このページ。別プロセスなので生き残る)へ送ってくるので、ここで受けて
+// 記録する。最後に届いた行の直後が落ちた瞬間。心拍(beat)が途切れた枠は落ちたとみなす。
+const PROBE_MAX = 1200; // 保持する行数(古いものから捨てる)
+const PROBE_DEAD_MS = 4000; // 心拍がこれだけ来なければ落ちたと判断
+const probeLog = [];
+const probeBeat = new Map(); // frame名 → 最後に心拍が来た時刻
+let probeSaveTimer = null;
+
+function probePush(line) {
+  probeLog.push(line);
+  if (probeLog.length > PROBE_MAX) probeLog.splice(0, probeLog.length - PROBE_MAX);
+  console.log('[probe] ' + line);
+  clearTimeout(probeSaveTimer);
+  probeSaveTimer = setTimeout(() => {
+    // タブごと落ちても残るように保存する(次回起動時に mvProbe.dump() で読める)。
+    try { MV.storage.local.set({ probeLog: probeLog.slice(-PROBE_MAX) }); } catch (e) { /* noop */ }
+  }, 1500);
+}
+
+function onProbe(e) {
+  const d = e.data;
+  if (!d || d.__multiviewProbe !== true) return;
+  const win = wins.find((w) => w.frame && w.frame.contentWindow === e.source);
+  const tag = (win ? '枠' + (wins.indexOf(win) + 1) : '入れ子') + d.frame;
+  if (d.ev === 'beat') probeBeat.set(tag, Date.now());
+  probePush(`${String(d.ms).padStart(6)}ms ${tag} ${d.ev}${d.detail !== undefined ? ' ' + d.detail : ''}`);
+}
+window.addEventListener('message', onProbe);
+
+// 心拍が途切れた枠を「落ちた」として記録する。落ちた瞬間はログの最終行で分かるが、
+// それが「落ちた」のか「単に静かになった」のかを区別するために明示する。
+setInterval(() => {
+  const now = Date.now();
+  for (const [tag, at] of probeBeat) {
+    if (now - at > PROBE_DEAD_MS) {
+      probeBeat.delete(tag);
+      probePush(`------ ${tag} の心拍が ${now - at}ms 途切れた = このフレームは落ちた ------`);
+    }
+  }
+}, 1000);
+
+// 調査用の入口。multiview のページで DevTools を開いて mvProbe.dump() などを呼ぶ。
+window.mvProbe = {
+  dump() { console.log(probeLog.join('\n')); return probeLog.length + ' 行'; },
+  text() { return probeLog.join('\n'); },
+  async copy() { await navigator.clipboard.writeText(probeLog.join('\n')); return 'コピーした'; },
+  clear() { probeLog.length = 0; MV.storage.local.set({ probeLog: [] }); return 'クリアした'; },
+  async last() { const v = await MV.storage.local.get('probeLog'); console.log((v.probeLog || []).join('\n')); return '前回分'; },
+};
+
 // content script(stream-control.js)から「この枠が今開いている URL」を受け取り、
 // 枠内で別の配信ページへ移動したら、その URL を保存して次回復元できるようにする。
 function onFrameUrl(e) {
