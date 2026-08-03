@@ -683,8 +683,10 @@ function createWindow(url, opts = {}) {
 
   // 軽量モードの復元(保存後に URL が変換できない形へ変わっていたら通常表示に落とす)。
   // YouTube は通常表示だとレンダラが落ちるので、保存内容にかかわらず埋め込みで開く。
-  // 通常表示は ⚡ で明示的に選んだときだけにする(選べば落ちる、と分かった上での操作)。
-  win.light = (isYouTube || !!opts.light) && !!toLightUrl(url);
+  // Twitch は新規の枠だけ既定を2枚組(プレイヤー+チャット)にする。サイト全体だとチャット列が
+  // 出ず、縦長でコメントも入力欄も使えないため。復元時は保存された選択(opts.light)を尊重する。
+  const defaultLight = isYouTube || (isTwitch && opts.light === undefined);
+  win.light = (defaultLight || !!opts.light) && !!toLightUrl(url);
   if (win.light && lightBtn) lightBtn.classList.add('active');
   updateWinTitle(win);
   syncLightBtn(win);
