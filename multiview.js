@@ -31,7 +31,9 @@ const IS_COARSE = window.matchMedia('(pointer: coarse)').matches; // 主ポイ�
 const ZOOM_DEFAULT_FULL = 75; // 枠内サイト縮小率(🔍)の既定(全幅タイル)。一覧しやすいよう少し縮める
 const ZOOM_DEFAULT_HALF = 50; // 同(50%幅タイル)。横に2つ並ぶ小さい枠なのでより縮める
 const BAR_HIDE_MS = IS_COARSE ? 12000 : 4000; // 枠ヘッダ/ボタンの一時表示の自動消去。操作が無ければ完全に消す(映像に重ねない)。短いと押す前に消えるので長め
-const STACK_CHAT_H = 280; // 縦積みモードで Kick チャットに足すタイル高(CSS の .win-chat と一致させること)
+// 縦積みでチャットに足すタイル高(CSS の .win-chat と一致させること)。
+// 280 では YouTube のチャットで入力欄が枠の外に出てしまい、書き込めなかった(実測)。340 で収まる。
+const STACK_CHAT_H = 340;
 const RESTORE_STAGGER_MS = 1000; // 起動(更新)時、複数枠を一気に読まず順次読み込む間隔。同時読込による 429/初期化ピークを避ける
 const LOAD_SPINNER_FALLBACK_MS = 8000; // 読み込みスピナーを必ず消す保険(load イベントが来ないサイト/エラー対策)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
