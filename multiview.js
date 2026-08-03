@@ -272,6 +272,42 @@ function onPlayerInfo(e) {
 }
 window.addEventListener('message', onPlayerInfo);
 
+// ====== 拡張機能のバージョン確認 ======
+// ページ(GitHub Pages)は開き直せば最新になるが、拡張機能は手動で更新しないと古いまま残る。
+// ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
+// ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
+// この値はリリース手順で manifest.json と一緒に更新すること。
+const EXPECTED_EXT_VERSION = '0.9.5';
+
+function cmpVersion(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+function checkExtVersion() {
+  const v = MV.extVersion;
+  if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
+  if (document.getElementById('mv-ext-old')) return;
+  const el = document.createElement('div');
+  el.id = 'mv-ext-old';
+  el.innerHTML =
+    '<b>拡張機能が古いままです</b>' +
+    '<span>入っているのは ' + v + ' 、このページが想定しているのは ' + EXPECTED_EXT_VERSION + ' です。' +
+    'chrome://extensions で更新してください。</span>';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '閉じる';
+  close.addEventListener('click', () => el.remove());
+  el.appendChild(close);
+  (document.body || document.documentElement).appendChild(el);
+}
+window.addEventListener('mv-ext-ready', checkExtVersion);
+
 // 右クリックは枠の移動に割り当てているので、このページではブラウザのメニューを出さない。
 // 枠の上だけ抑止していたが、枠の外・余白・パネルの上では出てしまい、操作の途中で邪魔になっていた。
 // 入力欄の上だけは残す(貼り付けメニューが使えなくなるため)。

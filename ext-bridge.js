@@ -162,7 +162,11 @@
   }
 
   // 短めの ping で在否を判定する(実処理の待ち時間とは分ける)。
-  call('ping', {}, 2500).catch(() => {
+  // 応答に入っている拡張のバージョンは MV.extVersion に置き、ページ側が新旧の比較に使う。
+  call('ping', {}, 2500).then((r) => {
+    MV.extVersion = (r && r.version) || null;
+    window.dispatchEvent(new CustomEvent('mv-ext-ready'));
+  }).catch(() => {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', showMissingExtensionNotice, { once: true });
     } else {

@@ -21,8 +21,10 @@
   async function handle(op, payload) {
     switch (op) {
       // 拡張機能が入っているかの確認用。応答があれば繋がっている。
+      // バージョンも返す。ページ側(GitHub Pages)は勝手に新しくなるが拡張は手動更新なので、
+      // ずれたままだと「直したはずの不具合が直らない」状態になる。ページ側で気づけるようにする。
       case 'ping':
-        return { ok: true };
+        return { ok: true, version: chrome.runtime.getManifest().version };
       case 'storage.get':
         return chrome.storage.local.get(payload.keys);
       case 'storage.set':

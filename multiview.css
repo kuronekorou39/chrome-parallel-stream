@@ -409,6 +409,20 @@ body.panel-dragging iframe { pointer-events: none; }
 @keyframes win-spin { to { transform: rotate(360deg); } }
 .win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
 
+/* 拡張機能が古いときの注意。操作の邪魔をしないよう下端に出し、閉じられるようにする。 */
+#mv-ext-old {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483000;
+  max-width: min(92vw, 560px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 12px 16px; border-radius: 10px; border: 1px solid #8a6d1f; background: #2a2313; color: #f0e6c8;
+  font-size: 13px; line-height: 1.6; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+#mv-ext-old b { flex: 0 0 100%; font-size: 14px; }
+#mv-ext-old span { flex: 1 1 260px; }
+#mv-ext-old button {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid #6b5a2a; background: #3a3120; color: #f0e6c8; cursor: pointer;
+}
+#mv-ext-old button:hover { background: #4a3f28; }
+
 /* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
 .win-body.split-chat { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
