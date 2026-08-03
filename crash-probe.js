@@ -73,12 +73,31 @@
   // クラスは new 無しで呼べず、ラップした時点でそのページの Worker 生成が全部失敗する
   // (Twitch のプレイヤーが起動しなくなる実害を出した)。必要になったら Proxy の construct で行うこと。
 
-  // canvas のコンテキスト取得は種類だけ記録(webgl/webgpu は落ち方に絡みやすい)
+  // canvas のコンテキスト取得。落ちる直前の心拍に必ず getContext:2d が出ていたので、
+  // 2d のときだけは「どの canvas か」まで記録する(要素の id/class/大きさ)。
+  // 種類の数え上げだけでは、映像を描いている canvas なのか別物なのか区別できない。
+  var canvasLeft = 6;
   try {
     var gc = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (type) {
       bump('getContext:' + type);
+      if (type === '2d' && canvasLeft-- > 0) {
+        try {
+          send('canvas2d', 'id=' + (this.id || '-') + ' class=' + (this.className || '-').slice(0, 60) +
+            ' ' + this.width + 'x' + this.height + ' 親=' + (this.parentElement ? this.parentElement.className || this.parentElement.tagName : '-').slice(0, 60));
+        } catch (e2) { /* noop */ }
+      }
       return gc.apply(this, arguments);
+    };
+  } catch (e) { /* noop */ }
+
+  // canvas へ <video> を描いているか(アンビエントモードのように毎フレーム描く機能の検出)。
+  // 毎フレーム来るので数えるだけにする。心拍に drawImage(video)=N として出る。
+  try {
+    var di = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function (src) {
+      try { if (src && src.tagName === 'VIDEO') bump('drawImage(video)'); } catch (e2) { /* noop */ }
+      return di.apply(this, arguments);
     };
   } catch (e) { /* noop */ }
 
