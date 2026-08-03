@@ -69,7 +69,9 @@
   if (navigator.gpu) hook(navigator.gpu, 'requestAdapter', 'WebGPU.requestAdapter');
   if (navigator.mediaSession) hook(navigator.mediaSession, 'setActionHandler', 'mediaSession.setActionHandler', function (k) { return String(k); });
   hook(E, 'requestPointerLock', 'requestPointerLock');
-  hook(window, 'Worker', 'new Worker'); // コンストラクタも関数なので同じ形でよい
+  // 注意: hook() は関数を関数でラップして apply で呼ぶ形なので、クラス(Worker など)には使えない。
+  // クラスは new 無しで呼べず、ラップした時点でそのページの Worker 生成が全部失敗する
+  // (Twitch のプレイヤーが起動しなくなる実害を出した)。必要になったら Proxy の construct で行うこと。
 
   // canvas のコンテキスト取得は種類だけ記録(webgl/webgpu は落ち方に絡みやすい)
   try {
@@ -89,17 +91,6 @@
         try { counts.appendBytes = (counts.appendBytes || 0) + (buf && buf.byteLength ? buf.byteLength : 0); } catch (e) { /* noop */ }
         return ab.apply(this, arguments);
       };
-    }
-  } catch (e) { /* noop */ }
-
-  // 可視性の読み取り回数(偽装が実際に効いているかの確認も兼ねる)
-  try {
-    var d = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
-    if (d && d.get) {
-      Object.defineProperty(document, 'visibilityState', {
-        configurable: true,
-        get: function () { bump('read:visibilityState'); return d.get.call(document); },
-      });
     }
   } catch (e) { /* noop */ }
 
@@ -131,7 +122,9 @@
     counts = Object.create(null);
     var parts = [];
     for (var k in acc) parts.push(k + '=' + acc[k]);
-    send('beat', (v ? 'video rs=' + v.readyState + ' t=' + v.currentTime.toFixed(1) + (v.paused ? ' paused' : '') : 'video無し') +
-      (parts.length ? ' | ' + parts.join(' ') : ''));
+    var vs = '';
+    try { vs = ' vis=' + document.visibilityState; } catch (e) { /* noop */ }
+    send('beat', (v ? 'video×' + document.querySelectorAll('video').length + ' rs=' + v.readyState + ' t=' + v.currentTime.toFixed(1) + (v.paused ? ' paused' : '') : 'video無し') +
+      vs + (parts.length ? ' | ' + parts.join(' ') : ''));
   }, 1000);
 })();
