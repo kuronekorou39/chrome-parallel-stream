@@ -272,6 +272,18 @@ function onPlayerInfo(e) {
 }
 window.addEventListener('message', onPlayerInfo);
 
+// 右クリックは枠の移動に割り当てているので、このページではブラウザのメニューを出さない。
+// 枠の上だけ抑止していたが、枠の外・余白・パネルの上では出てしまい、操作の途中で邪魔になっていた。
+// 入力欄の上だけは残す(貼り付けメニューが使えなくなるため)。
+// ※ 枠の中(iframe)は別オリジンなのでここでは届かない。あちらは stream-control.js が同じことをする。
+function suppressContextMenu(e) {
+  try {
+    if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+  } catch (err) { /* noop */ }
+  e.preventDefault();
+}
+document.addEventListener('contextmenu', suppressContextMenu);
+
 // ====== 枠の中の「戻る」 ======
 // iframe の履歴は別オリジンだと親から操作できない(contentWindow.history は覗けない)。
 // また YouTube は動画ページで埋め込みへ切り替えるので、そもそも枠の履歴とはずれる。
@@ -773,9 +785,8 @@ function createWindow(url, opts = {}) {
     if (e.button === 2 && e.pointerType === 'mouse') { armRightDrag(win, e); return; }
     if (!(e.shiftKey && e.button === 0)) maybeStartLongPress(win, e);
   });
-  // 右クリックは枠の移動に割り当てたため、枠の上ではブラウザのコンテキストメニューを出さない
-  // (Android の長押しメニュー誤爆防止も兼ねる)。
-  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  // 右クリックの抑止はページ全体で行う(下の suppressContextMenu)。枠の上だけでは、
+  // 枠の外や余白で出てしまう。
   makeBarHandle(win, bar);
   resizeGrip.addEventListener('pointerdown', (e) => beginResize(win, resizeGrip.dataset.dir, e));
   // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
