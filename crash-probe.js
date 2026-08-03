@@ -64,7 +64,33 @@
   hook(M, 'play', 'media.play', function () { return this.tagName + ' rs=' + this.readyState; });
   hook(M, 'load', 'media.load');
   hook(navigator, 'requestMediaKeySystemAccess', 'EME.requestMediaKeySystemAccess', function (ks) { return String(ks); });
-  hook(window.MediaSource && window.MediaSource.prototype, 'addSourceBuffer', 'MSE.addSourceBuffer', function (t) { return String(t).slice(0, 60); });
+  // 実際に選ばれた映像コーデックを覚えておき、再生が始まった時点で
+  // 「この構成はハードウェアデコードされるのか」を問い合わせて記録する。
+  // 2本目の映像が再生を始めた瞬間に落ちているため、デコード経路がハードウェアかどうかで
+  // 原因の層(GPU のデコードセッションか、ソフトウェア側か)が分かれる。
+  var lastVideoCodec = null;
+  var decodeAsked = false;
+  hook(window.MediaSource && window.MediaSource.prototype, 'addSourceBuffer', 'MSE.addSourceBuffer', function (t) {
+    var s = String(t).slice(0, 80);
+    if (s.indexOf('video/') === 0) lastVideoCodec = s;
+    return s;
+  });
+  var askDecodeInfo = function () {
+    if (decodeAsked || !lastVideoCodec || !navigator.mediaCapabilities) return;
+    decodeAsked = true;
+    var v = document.querySelector('video');
+    var w = (v && v.videoWidth) || 1280;
+    var h = (v && v.videoHeight) || 720;
+    try {
+      navigator.mediaCapabilities
+        .decodingInfo({ type: 'media-source', video: { contentType: lastVideoCodec, width: w, height: h, bitrate: 2000000, framerate: 30 } })
+        .then(function (r) {
+          send('decodeInfo', lastVideoCodec + ' ' + w + 'x' + h +
+            ' supported=' + r.supported + ' smooth=' + r.smooth + ' powerEfficient=' + r.powerEfficient +
+            '(true ならハードウェアデコード)');
+        }, function (e) { send('decodeInfo失敗', String(e && e.message).slice(0, 100)); });
+    } catch (e) { /* noop */ }
+  };
   if (window.documentPictureInPicture) hook(window.documentPictureInPicture, 'requestWindow', 'documentPiP.requestWindow');
   if (navigator.gpu) hook(navigator.gpu, 'requestAdapter', 'WebGPU.requestAdapter');
   if (navigator.mediaSession) hook(navigator.mediaSession, 'setActionHandler', 'mediaSession.setActionHandler', function (k) { return String(k); });
@@ -203,6 +229,7 @@
       var t = e.target;
       if (!t || (t.tagName !== 'VIDEO' && t.tagName !== 'AUDIO')) return;
       send('media.' + ev, 'rs=' + t.readyState + ' ns=' + t.networkState + (t.error ? ' err=' + t.error.code : ''));
+      if (ev === 'playing' && t.tagName === 'VIDEO') askDecodeInfo();
     }, true);
   });
 
