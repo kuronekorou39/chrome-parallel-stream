@@ -564,8 +564,12 @@ function createWindow(url, opts = {}) {
   // チャットは公式の live_chat 枠を横に並べる(Kick と同じ2分割)。
   // 2分割の器は枠の生成時にしか作れないので、トップページ等でも YouTube なら先に用意しておく
   // (枠の中で動画を選んだ時点で埋め込みへ切り替わり、そのままチャットも出せるように)。
-  const ytHost = hostOf(url);
-  const isYouTube = ytHost.includes('youtube.com') || ytHost === 'youtu.be';
+  const siteHost = hostOf(url);
+  const isYouTube = siteHost.includes('youtube.com') || siteHost === 'youtu.be';
+  // Twitch も軽量表示では「プレイヤー + 埋め込みチャット」の2枚組にする。サイト全体を出すと
+  // レイアウトも書き込みもサイト側の都合に左右され、縦長のときに使い物にならないため。
+  const isTwitch = siteHost.includes('twitch.tv') && !siteHost.startsWith('player.');
+  const hasChatPane = isYouTube || isTwitch;
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
@@ -573,7 +577,7 @@ function createWindow(url, opts = {}) {
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn('🔄', '', 'この枠を再読込');
-  const chatBtn = isKick || isYouTube ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
+  const chatBtn = isKick || hasChatPane ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   const lightBtn = isKick ? null : mkBtn('⚡', '', ''); // 軽量プレイヤー切替(タイトルは syncLightBtn が設定)
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
@@ -622,7 +626,7 @@ function createWindow(url, opts = {}) {
         loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
       }
     }
-  } else if (isYouTube) {
+  } else if (hasChatPane) {
     // 映像(埋め込みプレイヤー)は mountSiteFrame() が .win-media の中へ作る。
     // チャットはここで枠だけ用意し、読み込みは mountChatFrame() に任せる(URL 変更・再読込と共用)。
     // chat-on は付けない。チャットがあると分かってから出す(先に出して畳むと画面がガタつく)。
@@ -2562,15 +2566,33 @@ function mountSiteFrame(win) {
 function mountChatFrame(win) {
   const chat = win.chatFrame;
   if (!chat || win.video) return; // Kick のチャットは生成時に読み込み済み
-  const id = win.light ? youtubeVideoIdOf(win.url) : null;
-  if (!id) {
+  if (!win.light) {
+    // 通常表示(サイト全体)はページ自身がチャットを持つので、こちらの列は使わない。
     chat.src = 'about:blank';
-    win.chatVideoId = null; // 通常表示へ戻したとき。次に軽量へ戻したら読み直せるようにする
+    win.chatKey = null; // 次に軽量へ戻したら読み直せるようにする
     hideChat(win, 'なし');
     return;
   }
-  if (win.chatVideoId === id) return; // 同じ動画。読み直さない
-  win.chatVideoId = id;
+  // Twitch は全チャンネルにチャットがあるので、有無の問い合わせは要らない。
+  const twitchUrl = toTwitchChatUrl(win.url);
+  if (twitchUrl) {
+    if (win.chatKey === twitchUrl) return;
+    win.chatKey = twitchUrl;
+    win.chatReplay = false;
+    chat.addEventListener('load', () => syncFrameDanmaku(win), { once: true });
+    loadFrameWithLogin(chat, 'twitch.tv', twitchUrl); // 書き込めるようログインCookieを通す
+    showChat(win);
+    return;
+  }
+  const id = youtubeVideoIdOf(win.url);
+  if (!id) {
+    chat.src = 'about:blank';
+    win.chatKey = null;
+    hideChat(win, 'なし');
+    return;
+  }
+  if (win.chatKey === id) return; // 同じ動画。読み直さない
+  win.chatKey = id;
   win.chatReplay = false;
   hideChat(win, '確認中'); // 分かるまでは出さない
   chat.src = 'about:blank';
@@ -2578,7 +2600,7 @@ function mountChatFrame(win) {
   MV.runtime
     .sendMessage({ type: 'get-youtube-chat-info', videoId: id })
     .then((r) => {
-      if (!wins.includes(win) || win.chatVideoId !== id) return; // 待つ間に閉じた/別の動画になった
+      if (!wins.includes(win) || win.chatKey !== id) return; // 待つ間に閉じた/別の動画になった
       const info = (r && r.ok && r.info) || { kind: 'none' };
       if (info.kind === 'none') { hideChat(win, 'なし'); return; }
       // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
@@ -2669,10 +2691,14 @@ function syncLightBtn(win) {
   // YouTube の通常表示(視聴ページ)は枠に入れるとレンダラが落ちる。切替は残すが、
   // 押せば落ちると分かるようにしておく(黙って戻せてしまうと事故になる)。
   const yt = !!youtubeVideoIdOf(win.url);
-  const toNormal = yt ? '通常表示に戻す(YouTubeは枠が落ちます)' : '通常表示に戻す(サイト内回遊・チャットが使える)';
+  // 軽量でもチャット列を持つ枠(YouTube / Twitch)は「チャット不可」ではないので文言を分ける。
+  const withChat = !!win.chatFrame;
+  const toNormal = yt ? '通常表示に戻す(YouTubeは枠が落ちます)' : '通常表示に戻す(サイト内を回遊できる)';
   const toLight = yt
     ? '埋め込みプレイヤー+チャットに切替(YouTubeはこちらが正常)'
-    : '軽量プレイヤーに切替(負荷を大きく削減。回遊・チャット不可)';
+    : withChat
+      ? '埋め込みプレイヤー+チャットに切替(負荷を大きく削減。回遊は不可)'
+      : '軽量プレイヤーに切替(負荷を大きく削減。回遊・チャット不可)';
   if (win.lightBtn) {
     win.lightBtn.disabled = !ok;
     win.lightBtn.title = win.light ? toNormal : ok ? toLight : '軽量プレイヤーは配信/動画ページを開くと使えます';
@@ -3540,6 +3566,31 @@ function toYouTubeChatUrl(url) {
   if (!id) return null;
   return (
     'https://www.youtube.com/live_chat?v=' + encodeURIComponent(id) + '&embed_domain=' + encodeURIComponent(location.hostname)
+  );
+}
+
+// Twitch のチャンネル名(配信ページのときだけ)。VOD や一覧ページでは null。
+const TWITCH_NON_CHANNEL = ['directory', 'search', 'settings', 'subscriptions', 'inventory', 'drops', 'wallet', 'turbo', 'jobs', 'p', 'videos', 'embed', 'popout'];
+function twitchChannelOf(url) {
+  try {
+    const u = new URL(url);
+    if (!u.hostname.includes('twitch.tv') || u.hostname.startsWith('player.')) return null;
+    const segs = u.pathname.split('/').filter(Boolean);
+    if (!segs.length || TWITCH_NON_CHANNEL.includes(segs[0])) return null;
+    return segs[0];
+  } catch (e) {
+    return null;
+  }
+}
+
+// Twitch が埋め込み用に用意しているチャット。parent は埋め込み元のホスト名。
+// サイト全体を出すとレイアウトも書き込みもサイト側の都合に振り回されるので、こちらを使う。
+function toTwitchChatUrl(url) {
+  const ch = twitchChannelOf(url);
+  if (!ch) return null;
+  return (
+    'https://www.twitch.tv/embed/' + encodeURIComponent(ch) + '/chat?darkpopout&parent=' +
+    encodeURIComponent(location.hostname)
   );
 }
 
