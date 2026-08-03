@@ -1745,10 +1745,15 @@ function toggleDanmaku(win) {
   syncMenuLabels(win);
 }
 function sendDanmakuEnabled(win, on) {
-  if (!win.frame) return; // Kick(<video>)はチャット取得対象外
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: !!on }, '*');
-  } catch (e) { /* noop */ }
+  // コメントを持っているのは、サイトを丸ごと出している枠か、横に並べたチャット枠のどちらか。
+  // YouTube は埋め込みプレイヤー+ live_chat の2枚組なので、映像側だけに送ると届かない。
+  // Kick の映像は <video> 直再生で frame を持たないが、チャット枠はあるのでそちらへ送る。
+  const targets = [win.frame, win.chatFrame].filter(Boolean);
+  for (const f of targets) {
+    try {
+      f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: !!on }, '*');
+    } catch (e) { /* noop */ }
+  }
 }
 // frame の読込/挨拶のすれ違い対策。現在の弾幕状態を frame へ送り直す(theater と同型)。
 function syncFrameDanmaku(win) {
@@ -2501,7 +2506,11 @@ function mountChatFrame(win) {
     if (win.chatBtn) win.chatBtn.classList.remove('active');
     return;
   }
-  if (chat.getAttribute('src') !== url) chat.src = url;
+  if (chat.getAttribute('src') !== url) {
+    // 読み直しのたびに弾幕の監視を掛け直す(映像側の frame と同じ扱い)。
+    chat.addEventListener('load', () => syncFrameDanmaku(win));
+    chat.src = url;
+  }
   win.body.classList.add('chat-on');
   if (win.chatBtn) win.chatBtn.classList.add('active');
 }
