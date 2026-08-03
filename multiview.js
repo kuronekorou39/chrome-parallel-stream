@@ -1567,7 +1567,8 @@ function buildQuickControls(win) {
 
   // ② 見え方。縮小/幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
   // syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
-  if (win.chatFrame) mkItem('💬 チャットの表示', () => toggleChat(win));
+  // トグル表示にして、いま出ているのか隠れているのかが分かるようにする。
+  if (win.chatFrame) win.menuChat = mkToggle(() => toggleChat(win));
   mkItem('🎨 映像調整', () => toggleAdjust(win));
   if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
   if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
@@ -1646,6 +1647,19 @@ function syncMenuLabels(win) {
     const ok = canGoBack(win);
     win.menuBack.disabled = !ok;
     win.menuBack.title = ok ? '枠の中で1つ前のページへ戻る' : '戻れるページがありません';
+  }
+  if (win.menuChat) {
+    const usable = hasChatContent(win);
+    const on = win.body.classList.contains('chat-on');
+    win.menuChat.name.textContent = '💬 チャット';
+    win.menuChat.btn.disabled = !usable;
+    win.menuChat.val.textContent = !usable ? 'なし' : on ? '表示' : '非表示';
+    win.menuChat.btn.classList.toggle('on', usable && on);
+    win.menuChat.btn.title = !usable
+      ? win.light === false
+        ? '通常表示ではサイト側のチャットを使います'
+        : 'この配信にはチャットがありません'
+      : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
   }
   if (win.menuTall) {
     win.menuTall.name.textContent = '⬍ 高さ';
@@ -2602,10 +2616,20 @@ function loginDomainOf(host) {
 }
 
 // Kick 枠のチャット表示/非表示を切り替える。
+// チャット列に中身があるか。通常表示(サイト全体)はサイト自身がチャットを持つのでこちらは使わず、
+// チャットの無い動画では読み込んでもいない。どちらの場合も開いても真っ黒な列が出るだけなので、
+// 開けないようにする(押しても意味のない操作を残さない)。
+function hasChatContent(win) {
+  if (!win.chatFrame) return false;
+  if (win.video) return true; // Kick は生成時にチャットを読み込んでいる
+  return !!win.light && !win.chatUnavailable;
+}
+
 function toggleChat(win) {
-  if (!win.body) return;
+  if (!win.body || !hasChatContent(win)) return;
   const on = win.body.classList.toggle('chat-on');
   if (win.chatBtn) win.chatBtn.classList.toggle('active', on);
+  syncMenuLabels(win);
   if (stackMode) relayoutStack(); // チャット分のタイル高が変わる
 }
 
@@ -2706,6 +2730,7 @@ function showChat(win) {
     win.chatBtn.classList.add('active');
     win.chatBtn.title = 'チャットの表示/非表示';
   }
+  syncMenuLabels(win);
   if (stackMode) relayoutStack();
 }
 
@@ -2717,6 +2742,7 @@ function hideChat(win, why) {
     win.chatBtn.disabled = true;
     win.chatBtn.title = why === 'なし' ? 'この動画にはチャットがありません' : 'チャットを確認しています';
   }
+  syncMenuLabels(win);
   if (stackMode) relayoutStack();
 }
 
