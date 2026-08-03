@@ -42,7 +42,12 @@ const TOOLBAR_POS_KEY = 'toolbarPos'; // ツールバーの配置(top/bottom/lef
 const TOOLBAR_POSITIONS = ['top', 'bottom', 'left', 'right'];
 const PERF_HISTORY = 60; // パフォーマンスパネルのスパークラインに保持するサンプル数(≒直近60秒)
 const MAGIC = '__multiviewControl';
-const IFRAME_ALLOW = 'autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write';
+// accelerometer / gyroscope は YouTube の公式埋め込みコードが要求する。渡さないと、枠の中の
+// プレイヤーがセンサーを使おうとして弾かれ、Permissions policy 違反として記録される
+// (スマホで実際に発生。360度動画の傾き操作が効かないだけで再生自体には影響しないが、
+//  拡張機能のエラー欄に残り続けるので許可する)。
+const IFRAME_ALLOW =
+  'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture';
 
 // コメント弾幕(チャットを右→左へ流す)。
 const DMK_GAP = 44;          // 同じレーンで前の弾幕の後ろに空ける最小間隔(px)
@@ -277,7 +282,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.7';
+const EXPECTED_EXT_VERSION = '0.9.8';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
