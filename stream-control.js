@@ -27,6 +27,11 @@ function mvInOwnFrame() {
 (function streamControl() {
   if (window.top === window.self) return; // iframe 内のみ動作
   if (!mvInOwnFrame()) return; // multiview の枠でないなら何もしない
+  // ===== 切り分け用(0.7.9 限定・確認が終わったら消す) =====
+  // YouTube の枠でレンダラが落ちる件が、こちらのコードによるものかを確かめるため、
+  // YouTube に対してだけ枠の制御(ミュート/音量/シアター/長押し/弾幕/URL通知)を行わない。
+  if (location.hostname.indexOf('youtube.com') !== -1) return;
+  // ===== ここまで =====
   const MAGIC = '__multiviewControl';
   const host = location.hostname;
 
