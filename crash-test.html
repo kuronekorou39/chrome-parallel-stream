@@ -23,6 +23,7 @@
       <button id="bare">素の iframe で開く</button>
       <button id="same">multiview と同じ属性で開く</button>
       <button id="clear">枠を閉じる</button>
+      <button id="auto">自動で比較(各3回)</button>
       <button id="copy">ログをコピー</button>
     </header>
     <p id="note">
@@ -67,6 +68,42 @@
         push('(ログをコピーしました)');
       };
 
+      // ---- 自動比較 ----
+      // 1回ずつの結果では運不運が判別できないので、素の iframe と allow 付きを 3 回ずつ、
+      // 同じ待ち時間で試して落ちた回数を数える。判定は心拍が途切れたかどうかで行う。
+      let died = false;
+      const TRIAL_MS = 25000;
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      async function trial(allow) {
+        died = false;
+        open(document.getElementById('url').value.trim(), allow);
+        await sleep(TRIAL_MS);
+        const result = died;
+        stage.textContent = '';
+        beat.clear();
+        await sleep(1500); // 次の試行へ影響を残さないよう間を空ける
+        return result;
+      }
+
+      document.getElementById('auto').onclick = async () => {
+        const btn = document.getElementById('auto');
+        btn.disabled = true;
+        const score = { bare: 0, allow: 0 };
+        for (let i = 0; i < 3; i++) {
+          push(`===== 素の iframe ${i + 1}/3 =====`);
+          if (await trial(false)) score.bare++;
+          push(`===== allow 付き ${i + 1}/3 =====`);
+          if (await trial(true)) score.allow++;
+        }
+        push('');
+        push('===== 結果 =====');
+        push(`素の iframe   : 3 回中 ${score.bare} 回 落ちた`);
+        push(`allow 付き    : 3 回中 ${score.allow} 回 落ちた`);
+        push('(各回 ' + TRIAL_MS / 1000 + ' 秒ずつ)');
+        btn.disabled = false;
+      };
+
       window.addEventListener('message', (e) => {
         const d = e.data;
         if (!d || d.__multiviewProbe !== true) return;
@@ -82,6 +119,7 @@
         for (const [tag, at] of beat) {
           if (now - at > DEAD_MS) {
             beat.delete(tag);
+            died = true;
             push('------ ' + tag + ' の心拍が ' + (now - at) + 'ms 途切れた = このフレームは落ちた ------');
           }
         }
