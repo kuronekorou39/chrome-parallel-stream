@@ -94,6 +94,80 @@
     }
   } catch (e) { /* noop */ }
 
+  // ---- メディア取得(googlevideo)の失敗理由を捕まえる ----
+  // 枠が落ちる直前、プレイヤーは MediaSource を作り直して再試行し続けていた。その引き金は
+  // 映像データの 403。なぜ断られているのかを知るため、リクエストの素性(クライアント種別・
+  // PoToken の有無)と、断り文句の本文を記録する。
+  // 注意: 落ちるまでの数秒で何十回も飛ぶので、失敗の記録は上限を設ける。
+  var failLeft = 6;
+  var bodyLeft = 2;
+  var mediaInfo = function (u) {
+    try {
+      var url = new URL(String(u), location.href);
+      if (url.hostname.indexOf('googlevideo.com') === -1) return null;
+      var q = url.searchParams;
+      var pot = q.get('pot');
+      return (
+        'path=' + url.pathname +
+        ' itag=' + (q.get('itag') || '-') +
+        ' c=' + (q.get('c') || '-') +
+        ' pot=' + (pot ? pot.length + '文字' : 'なし') +
+        (q.get('sabr') ? ' sabr=' + q.get('sabr') : '')
+      );
+    } catch (e) {
+      return null;
+    }
+  };
+  var reportMedia = function (info, status, getBody) {
+    if (status >= 200 && status < 300) { bump('media要求OK'); return; }
+    if (failLeft-- <= 0) { bump('media要求NG(記録上限)'); return; }
+    send('media要求NG', 'status=' + status + ' ' + info);
+    if (bodyLeft-- > 0 && getBody) {
+      try { getBody(function (t) { send('media要求NG本文', String(t).replace(/\s+/g, ' ').slice(0, 200)); }); } catch (e) { /* noop */ }
+    }
+  };
+
+  try {
+    var origFetch = window.fetch;
+    if (typeof origFetch === 'function') {
+      window.fetch = function (input) {
+        var u = typeof input === 'string' ? input : (input && input.url) || '';
+        var info = mediaInfo(u);
+        var p = origFetch.apply(this, arguments);
+        if (info && p && typeof p.then === 'function') {
+          // 元の Promise はそのまま返す。監視用に枝を生やすだけで、呼び出し側の流れは変えない。
+          p.then(
+            function (r) {
+              reportMedia(info, r.status, function (cb) { r.clone().text().then(cb, function () {}); });
+            },
+            function (e) { send('media要求例外', info + ' / ' + String(e && e.message).slice(0, 120)); }
+          );
+        }
+        return p;
+      };
+    }
+  } catch (e) { /* noop */ }
+
+  try {
+    var xo = XMLHttpRequest.prototype.open;
+    var xs = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (m, u) {
+      try { this.__mvInfo = mediaInfo(u); } catch (e) { /* noop */ }
+      return xo.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function () {
+      var xhr = this;
+      if (xhr.__mvInfo) {
+        xhr.addEventListener('loadend', function () {
+          reportMedia(xhr.__mvInfo, xhr.status, function (cb) {
+            try { cb(xhr.responseType === '' || xhr.responseType === 'text' ? xhr.responseText : '(本文は非テキスト)'); } catch (e) { /* noop */ }
+          });
+        });
+      }
+      return xs.apply(this, arguments);
+    };
+  } catch (e) { /* noop */ }
+
   // ---- ページ自身のエラーも拾う ----
   window.addEventListener('error', function (e) {
     send('window.error', String(e.message || '').slice(0, 160));
@@ -116,7 +190,19 @@
   send('probe.boot', 'top=' + TOP);
 
   // ---- 心拍。これが途切れた時刻が、そのフレームが落ちた時刻になる ----
+  // あわせて、そのフレームがどのプレイヤーとして動いているか(視聴ページ=WEB /
+  // 埋め込み=WEB_EMBEDDED_PLAYER)を一度だけ報告する。403 の出方がこれで変わるため。
+  var clientReported = false;
   setInterval(function () {
+    if (!clientReported) {
+      try {
+        var c = window.yt && yt.config_ && yt.config_.INNERTUBE_CONTEXT && yt.config_.INNERTUBE_CONTEXT.client;
+        if (c && c.clientName) {
+          clientReported = true;
+          send('client', c.clientName + ' ' + (c.clientVersion || ''));
+        }
+      } catch (e) { /* noop */ }
+    }
     var v = document.querySelector('video');
     var acc = counts;
     counts = Object.create(null);
