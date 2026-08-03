@@ -1541,23 +1541,31 @@ function buildQuickControls(win) {
     menu.appendChild(d);
   };
 
-  // 表示・サイズ系(軽量 / 縮小 / 幅 / 高さ)。文言は syncMenuLabels が状態で更新。縮小/幅/高さは縦積み専用の
-  // 効果しか持たないため、PC(自由配置)では syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
+  // 使う頻度と目的で3つに束ねる。上から「見ている最中に触るもの」「見え方の設定」「弾幕」。
+  // 最後に、枠から出る操作を置く。
+
+  // ① 視聴操作。「戻る」は一覧→動画と辿ったあと、見終わって一覧へ帰るための導線。
+  // 履歴が無い間は押せないようにする(押しても何も起きないボタンは置かない)。
+  if (!win.video) win.menuBack = mkItem('← 戻る', () => goBackWindow(win));
+  mkItem('🔄 再読込', () => reloadWindow(win));
+  mkItem('⛶ 全画面で操作', () => toggleStackMax(win));
+  mkSep();
+
+  // ② 見え方。縮小/幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
+  // syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
+  if (win.chatFrame) mkItem('💬 チャットの表示', () => toggleChat(win));
+  mkItem('🎨 映像調整', () => toggleAdjust(win));
   if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
   if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
   win.menuSpan = mkToggle(() => toggleSpan(win));
   win.menuTall = mkToggle(() => toggleTall(win));
-  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); }); // 💬 弾幕。on は永続なので保存(Kickは対象外)
-  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   mkSep();
-  // 操作系。
-  // 「戻る」は枠の中で一覧→動画と辿ったあと、見終わって一覧へ帰るための導線。
-  // 履歴が無い間は押せないようにする(押しても何も起きないボタンは置かない)。
-  if (!win.video) win.menuBack = mkItem('← 戻る', () => goBackWindow(win));
-  mkItem('⛶ 全画面で操作', () => toggleStackMax(win));
-  if (win.chatFrame) mkItem('💬 チャット表示切替', () => toggleChat(win));
-  mkItem('🎨 映像調整', () => toggleAdjust(win));
-  mkItem('🔄 再読込', () => reloadWindow(win));
+
+  // ③ 弾幕。on は永続なので保存(Kickは対象外)。
+  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
+  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
+  if (!win.video) mkSep();
+
   mkItem('↗ 元サイトを新タブ', () => openOriginal(win));
   syncMenuLabels(win);
   syncMenuModeVisibility(win); // PC(自由配置)では幅/高さ/縮小を隠す(縦積みでのみ効くため)
@@ -1649,7 +1657,8 @@ function syncMenuLabels(win) {
     }
   }
   if (win.menuDanmaku) {
-    win.menuDanmaku.name.textContent = '💬 弾幕';
+    // 💬 はチャット列の表示に使っているので、弾幕は別の絵文字にする(同じ記号だと取り違える)。
+    win.menuDanmaku.name.textContent = '🌠 弾幕';
     win.menuDanmaku.val.textContent = win.danmaku.on ? 'ON' : 'OFF';
     win.menuDanmaku.btn.classList.toggle('on', win.danmaku.on);
     win.menuDanmaku.btn.title = 'チャットのコメントを画面に流す(タップで ' + (win.danmaku.on ? 'OFF' : 'ON') + ')';
