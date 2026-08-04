@@ -235,10 +235,10 @@ function onFrameUrl(e) {
   syncLightBtn(win); // 配信ページへ移動したら⚡が押せるようになる
   saveLineup();
   renderMixer(); // 一覧のラベルも更新
-  // YouTube のトップや一覧を枠で見て動画を選ぶと、そのまま視聴ページになりレンダラが落ちる。
-  // 動画ページへ移った時点で、映像は埋め込み・チャットは live_chat の構成へ切り替える。
-  // 「落ちる表示のまま放置する」以外の選択肢が無いため、ここは自動で切り替える。
-  if (youtubeVideoIdOf(win.url)) switchToEmbed(win);
+  // 枠の中で一覧から配信・動画を選んだら、その時点で「プレイヤー + チャット」の構成へ移る。
+  // 利用者に軽量/通常を選ばせない方針(見ている対象で決まる話でしかない)。
+  // YouTube は視聴ページを枠に入れるとレンダラが落ちるので、そもそも他に選択肢が無い。
+  if (toLightUrl(win.url)) switchToEmbed(win);
 }
 
 // live_chat 枠からの「チャットが使えるか」。使えない動画(ライブでない等)では列ごと畳む。
@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.21';
+const EXPECTED_EXT_VERSION = '0.9.22';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -700,7 +700,8 @@ function createWindow(url, opts = {}) {
   const chatBtn = isKick || hasChatPane ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
   // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
   // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
-  const lightBtn = isKick || isYouTube ? null : mkBtn('⚡', '', '');
+  // ⚡ は置かない(モードは映しているもので決まるので、選ばせる場面が無い)。
+  const lightBtn = null;
   const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn('⛶', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
   const closeBtn = mkBtn('✕', 'close', '閉じる');
@@ -811,7 +812,8 @@ function createWindow(url, opts = {}) {
   const badge = document.createElement('button');
   badge.type = 'button';
   badge.className = 'win-badge';
-  badge.addEventListener('click', (e) => { e.stopPropagation(); revealHeader(win); toggleLight(win); });
+  // バッジは状態表示だけ。押しても切り替えない(切替そのものを利用者に見せない方針)。
+  badge.addEventListener('click', (e) => { e.stopPropagation(); revealHeader(win); });
   el.appendChild(badge);
   win.badgeEl = badge;
 
@@ -877,7 +879,6 @@ function createWindow(url, opts = {}) {
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); reloadWindow(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
-  if (lightBtn) lightBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleLight(win); });
   adjustBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleAdjust(win); });
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
@@ -1678,7 +1679,9 @@ function buildQuickControls(win) {
   // 映像調整はスマホでは出さない(小さい画面でそこまで詰める場面が無く、行数だけ増える)。
   win.menuAdjust = mkItem('🎨 映像調整', () => toggleAdjust(win));
   win.menuAdjust.classList.add('pc-only');
-  if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
+  // 軽量/通常の切替はメニューに置かない。何を映しているか(一覧か、配信そのものか)で
+  // 決まる話で、利用者が選ぶ場面が無いため。一覧から配信を選べば自動で切り替わり、
+  // 「← 戻る」で一覧へ帰れば自動で戻る。
   // 幅と高さは2択ずつなので、値を出さずボタンだけを左右に並べる。押せば切り替わる。
   // メニューは開いたままにする(並べ方を決めるのに何度か押して見比べるため)。
   win.menuSizeRow = mkRow('stack-only');
@@ -2849,67 +2852,12 @@ function remountFrame(win) {
   if (!win.hidden) mountSiteFrame(win);
 }
 
-// ⚡ 軽量プレイヤー切替。サイト内回遊・チャットは使えなくなる(戻すのも⚡)。
-function toggleLight(win) {
-  if (win.video) return; // Kick は元から HLS 直再生(常時軽量)
-  if (win.noNormalMode && win.light) return; // YouTube の通常表示は落ちるので戻さない
-  if (!win.light && !toLightUrl(win.url)) return; // 変換先が無いURL(トップ等)では何もしない
-  win.light = !win.light;
-  win.tall = null; // 高さの手動指定はリセット(既定の16:9へ)
-  if (win.lightBtn) win.lightBtn.classList.toggle('active', win.light);
-  updateWinTitle(win);
-  syncLightBtn(win);
-  syncMenuLabels(win);
-  remountFrame(win);
-  relayoutStack(); // 高さの既定が変わる(縦積み中のみ動作)
-  saveLineup();
-  renderMixer();
-}
 
-// ツールバーの「⚡ 軽量」: 切替できる通常枠が1つでもあれば全部軽量へ、無ければ全部通常へ戻す。
-function toggleAllLight() {
-  const on = wins.some((w) => !w.video && !w.light && toLightUrl(w.url));
-  wins.forEach((w) => {
-    if (w.video || w.light === on) return;
-    if (w.noNormalMode && w.light) return; // YouTube を通常表示へ戻すと落ちる
-    if (on && !toLightUrl(w.url)) return; // 変換できない枠(トップページ等)はそのまま
-    w.light = on;
-    w.tall = null; // 高さの手動指定はリセット(既定の16:9へ)
-    if (w.lightBtn) w.lightBtn.classList.toggle('active', on);
-    updateWinTitle(w);
-    syncLightBtn(w);
-    syncMenuLabels(w);
-    remountFrame(w);
-  });
-  relayoutStack(); // 高さの既定が変わる(縦積み中のみ動作)
-  saveLineup();
-  renderMixer();
-}
 
 // ⚡ボタン(台形ヘッダ/⋮メニュー両方)の活性・文言を現在の状態・URLに合わせる。
 function syncLightBtn(win) {
-  const ok = win.light || !!toLightUrl(win.url);
-  // YouTube の通常表示(視聴ページ)は枠に入れるとレンダラが落ちる。切替は残すが、
-  // 押せば落ちると分かるようにしておく(黙って戻せてしまうと事故になる)。
-  const yt = !!youtubeVideoIdOf(win.url);
-  // 軽量でもチャット列を持つ枠(YouTube / Twitch)は「チャット不可」ではないので文言を分ける。
-  const withChat = !!win.chatFrame;
-  const toNormal = yt ? '通常表示に戻す(YouTubeは枠が落ちます)' : '通常表示に戻す(サイト内を回遊できる)';
-  const toLight = yt
-    ? '埋め込みプレイヤー+チャットに切替(YouTubeはこちらが正常)'
-    : withChat
-      ? '埋め込みプレイヤー+チャットに切替(負荷を大きく削減。回遊は不可)'
-      : '軽量プレイヤーに切替(負荷を大きく削減。回遊・チャット不可)';
-  if (win.lightBtn) {
-    win.lightBtn.disabled = !ok;
-    win.lightBtn.title = win.light ? toNormal : ok ? toLight : '軽量プレイヤーは配信/動画ページを開くと使えます';
-  }
-  if (win.menuLight) {
-    win.menuLight.btn.disabled = !ok;
-    win.menuLight.name.textContent = win.light ? (yt ? '🌐 通常(落ちます)' : '🌐 通常') : '⚡ 軽量';
-    win.menuLight.val.textContent = '';
-    win.menuLight.btn.title = win.light ? toNormal : ok ? toLight : '軽量は配信/動画ページで使えます';
-  }
+  // 切替の UI は置いていないので、ここでやることは無い。左上のバッジの文言だけ
+  // updateWinTitle が現在の状態から作る。
 }
 
 // 枠をその場で再読込する(🔄)。iframe は作り直し、Kick は HLS を貼り直す。
@@ -3347,7 +3295,6 @@ function wireToolbar() {
   document.getElementById('tile-btn').addEventListener('click', tileAll);
 
   // ⚡ 軽量プレイヤー一括切替(押すたびに 全部軽量 ⇄ 全部通常。枠ごとの個別切替はヘッダの⚡)。
-  document.getElementById('light-btn').addEventListener('click', toggleAllLight);
   // 縦積みの「全画面」からの復帰ボタン(全画面中だけ画面下に出る)。
   document.getElementById('stack-restore').addEventListener('click', () => {
     const w = wins.find((x) => x.el.classList.contains('stack-max'));
