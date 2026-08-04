@@ -14,7 +14,7 @@
   // リポジトリ全体ではなく、拡張機能のファイルだけを詰めた配布物を指す。
   // 展開したフォルダがそのまま拡張機能になるので、入れ子を掘る必要がない
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
-  const ZIP_URL = 'dist/parallel-stream-0.9.12.zip';
+  const ZIP_URL = 'dist/parallel-stream-0.9.13.zip';
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
   // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが

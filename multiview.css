@@ -434,9 +434,12 @@ body.panel-dragging iframe { pointer-events: none; }
   border: 0; display: none; background: #0d1117;
 }
 .win-body.split-chat.chat-on .win-chat-slot { display: block; }
-/* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。 */
-.win-chat-wrap { position: relative; overflow: hidden; }
-.win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border: 0; }
+/* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。
+   セレクタは .win-body から書くこと。上の .win-body .win-chat-slot が position:static を
+   当てており、.win-chat-wrap 単独だと詳細度で負けて static のままになる。そうなると中の
+   iframe がタイル基準で配置され、420px の高さで映像の上に覆いかぶさる(実測)。 */
+.win-body .win-chat-wrap { position: relative; overflow: hidden; }
+.win-body .win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border: 0; }
 /* 枠が狭い/縦長のときはチャットを映像の下へ回す(横に並べたままだと映像が潰れる)。
    付け外しは JS の updateWinShapeClass が幅と高さから決める。
    高さは割合で取る。固定 px にすると、小さい枠ではチャットが枠を食い潰す。

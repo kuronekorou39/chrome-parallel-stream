@@ -284,7 +284,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.12';
+const EXPECTED_EXT_VERSION = '0.9.13';
 // 版入りのファイル名を配る。latest のような固定名だと、落とすたびにブラウザが
 // 「(1)」「(2)」を付けてしまい、どれが最新か分からなくなる。
 const EXT_ZIP_URL = 'dist/parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
