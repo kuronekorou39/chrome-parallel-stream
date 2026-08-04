@@ -815,15 +815,16 @@ body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロー
 .win.show-bar .win-quick,
 .win.menu-open .win-quick { opacity: 1; pointer-events: auto; }
 .win-quick > button {
-  width: 44px; height: 44px; border-radius: 10px; border: 1px solid #30363d;
-  background: rgba(13,17,23,0.85); color: #c9d1d9; font-size: 20px; cursor: pointer;
+  /* ✕ と ⋮ は枠の上に重なる小さな的なので、指で外さない大きさにする。 */
+  width: 54px; height: 54px; border-radius: 12px; border: 1px solid #30363d;
+  background: rgba(13,17,23,0.85); color: #c9d1d9; font-size: 24px; cursor: pointer;
   font-family: inherit; line-height: 1;
 }
 .win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
 .win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
 /* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。 */
 .win.cq-narrow .win-quick { flex-direction: row; top: 6px; left: 4px; gap: 4px; }
-.win.cq-narrow .win-quick > button { width: 38px; height: 38px; font-size: 16px; border-radius: 8px; }
+.win.cq-narrow .win-quick > button { width: 46px; height: 46px; font-size: 19px; border-radius: 10px; }
 
 /* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
    席をスルッと空ける(自由配置=free では他枠は動かないので reordering は付かない)。 */
@@ -868,30 +869,6 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 .win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
 .win-menu-row > button:disabled { opacity: 0.35; cursor: default; }
 .win-menu-row > button.on { color: #3fb950; } /* いま選ばれている側 */
-
-/* 左上バッジ: ⚡軽量(緑)/ 通常(グレー)。状態表示 兼 タップで軽量⇄通常トグル。
-   ヘッダ等と同様、ホバー/タップ(show-bar)中だけ出して、操作が無ければ時間で消える。 */
-.win-badge {
-  position: absolute; top: 8px; left: 8px; z-index: 8;
-  font-size: 12px; padding: 5px 10px; border-radius: 7px;
-  background: rgba(13,17,23,0.85); color: #8b949e; border: 1px solid rgba(48,54,61,0.9);
-  font-family: inherit; cursor: pointer;
-  opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
-}
-.win-badge.light { color: #3fb950; border-color: rgba(63,185,80,0.5); }
-.win-badge:disabled { cursor: default; }
-.win:hover .win-badge,
-.win.show-bar .win-badge,
-.win.menu-open .win-badge { opacity: 1; pointer-events: auto; }
-/* 通常モードのバッジは出さない(軽量=⚡ のときだけ出す。light クラスは updateWinTitle が付与)。 */
-.win-badge:not(.light) { display: none; }
-/* 広告ブロッカーの診断表示(🛡/🚫)が乗っているときは、通常モードでも隠さない。 */
-.win-badge.diag { display: inline-block; }
-/* 未注入(🚫)は問題状態なので、ホバー待ちにせず常時見せる。 */
-.win-badge.diag-warn {
-  opacity: 1; pointer-events: auto;
-  color: #f85149; border-color: rgba(248,81,73,0.6);
-}
 
 /* 「全画面」(PC含む): 枠を一時的に画面いっぱいへ(枠内のサイト操作・配信選び・ログイン用)。
    inline の left/top/width/height に勝つため !important。解除は #stack-restore か同メニュー。 */

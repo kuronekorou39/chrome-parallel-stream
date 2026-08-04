@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.22';
+const EXPECTED_EXT_VERSION = '0.9.23';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -807,16 +807,6 @@ function createWindow(url, opts = {}) {
 
   // 縦積みモード用の簡易UI([⋮][✕]+メニュー。通常モードでは CSS で非表示)。
   el.appendChild(buildQuickControls(win));
-  // 左上のモードバッジ。状態表示かつタップで 軽量⇄通常 を切替(枠ごとの軽量トグル)。
-  // ヘッダ等と同様、操作が無ければ時間で消える(show-bar 連動)。
-  const badge = document.createElement('button');
-  badge.type = 'button';
-  badge.className = 'win-badge';
-  // バッジは状態表示だけ。押しても切り替えない(切替そのものを利用者に見せない方針)。
-  badge.addEventListener('click', (e) => { e.stopPropagation(); revealHeader(win); });
-  el.appendChild(badge);
-  win.badgeEl = badge;
-
   // 軽量モードの復元(保存後に URL が変換できない形へ変わっていたら通常表示に落とす)。
   // YouTube は通常表示だとレンダラが落ちるので、保存内容にかかわらず埋め込みで開く。
   // Twitch は新規の枠だけ既定を2枚組(プレイヤー+チャット)にする。サイト全体だとチャット列が
@@ -3857,28 +3847,7 @@ function pulseWindow(win) {
 
 function updateWinTitle(win) {
   if (win.titleEl) win.titleEl.textContent = winLabel(win);
-  // 左上バッジを更新(どのモードかひと目でわかるように。Kick は常時 HLS 直再生=軽量)。
-  if (win.badgeEl) {
-    const light = !!win.light || !!win.video;
-    // 🎭=シアター動作中 / 🔎=有効だが主映像を探索中(診断用。frame 内 stream-control からの通知)。
-    const mark = win.theaterState === 'on' ? ' 🎭' : win.theaterState === 'searching' ? ' 🔎' : '';
-    // 🛡=この枠に広告ブロック(別拡張の vaft)が効いている / 🚫=Twitch枠なのに効いていない。
-    // 未報告(undefined)のうちは何も出さない。Twitch 以外の枠では報告自体が来ない。
-    const shield = win.vaft === undefined ? '' : win.vaft === null ? ' 🚫' : ' 🛡';
-    // 💬=弾幕がチャット欄を監視中 / 💬⚠=ONなのに見つからない(サイトのDOM変更の疑い)。
-    const dmk = win.danmakuState === 'on' ? ' 💬' : win.danmakuState === 'missing' ? ' 💬⚠' : '';
-    const status = mark + shield + dmk;
-    win.badgeEl.textContent = (light ? '⚡ 軽量' : '通常') + status;
-    win.badgeEl.classList.toggle('light', light);
-    // 通常モードのバッジは CSS で display:none にされているため、状態表示が乗るときだけ戻す。
-    win.badgeEl.classList.toggle('diag', status !== '');
-    // 異常(広告ブロック未注入 / 弾幕のチャット欄が見つからない)はホバー待ちにせず常時見せる。
-    win.badgeEl.classList.toggle('diag-warn', win.vaft === null || win.danmakuState === 'missing');
-    // Kick は切替不可。通常⇄軽量できる枠だけタップのヒントを出す。
-    const canToggle = !win.video && (win.light || !!toLightUrl(win.url));
-    win.badgeEl.disabled = !canToggle;
-    win.badgeEl.title = canToggle
-      ? (win.light ? 'タップで通常表示に戻す' : 'タップで軽量プレイヤーに切替')
-      : '';
-  }
+  // 左上バッジは廃止。軽量/通常・シアター・広告ブロック・弾幕の状態を出していたが、
+  // どれも作っている最中の確認用で、使う側には意味が無い(モードは自動で決まるようになり、
+  // 残りは動いているかどうかの内部状態)。映像の上に文字が乗るぶん邪魔でもあった。
 }
