@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.26';
+const EXPECTED_EXT_VERSION = '0.9.27';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1625,7 +1625,9 @@ function buildQuickControls(win) {
       if (b.disabled) return;
       e.preventDefault();
       e.stopPropagation();
-      closeMenu();
+      // その場で切り替わる項目はメニューを開いたままにする。閉じてしまうと、結果を見て
+      // 戻したいときに開き直す手間がかかる(幅・高さと挙動を揃える)。
+      // 別のパネルを開く項目(弾幕の設定など)は mkItem 側で閉じる。
       fn();
     });
     menu.appendChild(b);

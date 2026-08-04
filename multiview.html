@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.26" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.27" />
 </head>
 <body>
   <div id="toolbar">
@@ -44,7 +44,7 @@
     <!-- 拡張機能の版。古ければここに出るので、探しに行かなくても気づける。押すと最新の ZIP を落とす。 -->
     <!-- リンク先は常に存在する固定名。版入りの URL を直接指すと、古いページを開いたままだと
          既に消えた版を掴んで 404 になる。保存名だけ download 属性で版入りにする。 -->
-    <a id="mm-update" href="dist/parallel-stream-latest.zip" download="parallel-stream-0.9.26.zip"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能の更新</span><span class="mm-sub" id="mm-update-ver"></span></a>
+    <a id="mm-update" href="dist/parallel-stream-latest.zip" download="parallel-stream-0.9.27.zip"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能の更新</span><span class="mm-sub" id="mm-update-ver"></span></a>
   </div>
 
   <!-- 枠内でログイン状態を使うと、対象サイトの Cookie の SameSite を変更する。
@@ -209,7 +209,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.26"></script>
-  <script src="multiview.js?v=0.9.26"></script>
+  <script src="ext-bridge.js?v=0.9.27"></script>
+  <script src="multiview.js?v=0.9.27"></script>
 </body>
 </html>
