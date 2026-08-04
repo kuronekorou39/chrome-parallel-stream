@@ -48,8 +48,10 @@ const MAGIC = '__multiviewControl';
 // プレイヤーがセンサーを使おうとして弾かれ、Permissions policy 違反として記録される
 // (スマホで実際に発生。360度動画の傾き操作が効かないだけで再生自体には影響しないが、
 //  拡張機能のエラー欄に残り続けるので許可する)。
+// magnetometer は deviceorientation を使うために要る(accelerometer と gyroscope だけでは
+// 「deviceorientation events are blocked」になる。スマホの実機で発生)。
 const IFRAME_ALLOW =
-  'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; picture-in-picture';
+  'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; magnetometer; picture-in-picture';
 
 // コメント弾幕(チャットを右→左へ流す)。
 const DMK_GAP = 44;          // 同じレーンで前の弾幕の後ろに空ける最小間隔(px)
@@ -284,7 +286,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.17';
+const EXPECTED_EXT_VERSION = '0.9.18';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -736,6 +738,7 @@ function createWindow(url, opts = {}) {
     if (channel) {
       const chat = document.createElement('iframe');
       chat.className = 'win-chat win-chat-slot'; // Kick は一覧ごと出すので入れ物は要らない
+      chat.allow = IFRAME_ALLOW;
       body.appendChild(chat);
       chatFrame = chat;
       // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
@@ -759,6 +762,7 @@ function createWindow(url, opts = {}) {
     wrap.className = 'win-chat-slot win-chat-wrap';
     const chat = document.createElement('iframe');
     chat.className = 'win-chat';
+    chat.allow = IFRAME_ALLOW; // 映像側と同じ許可。無いとスマホでセンサーが弾かれて記録が残る
     wrap.appendChild(chat);
     body.appendChild(wrap);
     chatFrame = chat;

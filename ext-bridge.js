@@ -18,7 +18,7 @@
   // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
   // 保存されるファイル名だけ download 属性で版入りにする。
   const ZIP_URL = 'dist/parallel-stream-latest.zip';
-  const ZIP_NAME = 'parallel-stream-0.9.17.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.18.zip'; // release.mjs が版に合わせて書き換える
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
   // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが
