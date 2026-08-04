@@ -1,0 +1,49 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "x-frame-options", "operation": "remove" },
+        { "header": "frame-options", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "resourceTypes": ["sub_frame"],
+      "initiatorDomains": [
+        "kuronekorou39.github.io",
+        "twitch.tv",
+        "youtube.com",
+        "youtube-nocookie.com",
+        "kick.com",
+        "openrec.tv",
+        "mellow-fan.com"
+      ],
+      "requestDomains": [
+        "twitch.tv",
+        "youtube.com",
+        "youtube-nocookie.com",
+        "kick.com",
+        "openrec.tv",
+        "mellow-fan.com"
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        { "header": "content-security-policy", "operation": "remove" },
+        { "header": "content-security-policy-report-only", "operation": "remove" }
+      ]
+    },
+    "condition": {
+      "resourceTypes": ["sub_frame"],
+      "initiatorDomains": ["kuronekorou39.github.io", "kick.com"],
+      "requestDomains": ["kick.com"]
+    }
+  }
+]

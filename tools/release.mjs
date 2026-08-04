@@ -91,7 +91,10 @@ if (!report(readVersions())) {
 }
 
 // ---- 配布物 ----
-const stage = p('dist', 'parallel-stream');
+// フォルダ名に版を入れる。展開したフォルダを読み込む運用なので、名前を見れば
+// どの版を入れたのか分かるようにするため(同じ名前だと入れ替えたかも分からない)。
+const stageName = `parallel-stream-${next}`;
+const stage = p('dist', stageName);
 rmSync(p('dist'), { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 for (const f of PACK) {
@@ -103,17 +106,18 @@ for (const f of PACK) {
 }
 
 // zip は PowerShell の Compress-Archive で作る(依存を増やさないため)。
-const zipName = `parallel-stream-${next}.zip`;
+// フォルダごと固めるので、展開すると parallel-stream-<版>/ が出てくる。
+const zipName = `${stageName}.zip`;
 const zipPath = p('dist', zipName);
 execFileSync(
   'powershell.exe',
-  ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\\*' -DestinationPath '${zipPath}' -Force`],
+  ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}' -DestinationPath '${zipPath}' -Force`],
   { stdio: 'inherit' }
 );
 cpSync(zipPath, p('dist', 'parallel-stream-latest.zip'));
 
 console.log(`\n配布物:`);
-console.log(`  dist/${zipName}`);
-console.log(`  dist/parallel-stream-latest.zip  (常に最新を指す URL 用)`);
-console.log(`  同梱 ${PACK.length} ファイル。展開したフォルダをそのまま拡張機能として読み込めます。`);
+console.log(`  dist/${zipName}                (ページからはこちらを配る。ファイル名で版が分かる)`);
+console.log(`  dist/parallel-stream-latest.zip (版を知らない相手向けの固定 URL)`);
+console.log(`  展開すると ${stageName}/ が出てきます。そのフォルダを拡張機能として読み込みます。`);
 console.log(`\n次: git add -A && git commit && git push`);

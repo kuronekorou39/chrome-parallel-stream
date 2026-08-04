@@ -31,9 +31,11 @@ const IS_COARSE = window.matchMedia('(pointer: coarse)').matches; // 主ポイ�
 const ZOOM_DEFAULT_FULL = 75; // 枠内サイト縮小率(🔍)の既定(全幅タイル)。一覧しやすいよう少し縮める
 const ZOOM_DEFAULT_HALF = 50; // 同(50%幅タイル)。横に2つ並ぶ小さい枠なのでより縮める
 const BAR_HIDE_MS = IS_COARSE ? 12000 : 4000; // 枠ヘッダ/ボタンの一時表示の自動消去。操作が無ければ完全に消す(映像に重ねない)。短いと押す前に消えるので長め
-// 縦積みでチャットに足すタイル高(CSS の .win-chat と一致させること)。
-// 280 では YouTube のチャットで入力欄が枠の外に出てしまい、書き込めなかった(実測)。340 で収まる。
+// 縦積みでチャットに足すタイル高(CSS の .win-chat-slot と一致させること)。
+// Kick は一覧ごと出すので 340(280 では入力欄が枠外に出て書き込めなかった)。
+// Twitch / YouTube は入力欄だけを残すので、その高さぶんで足りる。
 const STACK_CHAT_H = 340;
+const STACK_CHAT_INPUT_H = 132;
 const RESTORE_STAGGER_MS = 1000; // 起動(更新)時、複数枠を一気に読まず順次読み込む間隔。同時読込による 429/初期化ピークを避ける
 const LOAD_SPINNER_FALLBACK_MS = 8000; // 読み込みスピナーを必ず消す保険(load イベントが来ないサイト/エラー対策)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -282,7 +284,10 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.9';
+const EXPECTED_EXT_VERSION = '0.9.10';
+// 版入りのファイル名を配る。latest のような固定名だと、落とすたびにブラウザが
+// 「(1)」「(2)」を付けてしまい、どれが最新か分からなくなる。
+const EXT_ZIP_URL = 'dist/parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -300,6 +305,7 @@ function checkExtVersion() {
   const sub = document.getElementById('mm-update-ver');
   const item = document.getElementById('mm-update');
   if (sub && item) {
+    item.href = EXT_ZIP_URL; // 版入りのファイル名で落とす
     const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
     sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
     item.classList.toggle('is-old', !!old);
@@ -314,7 +320,7 @@ function checkExtVersion() {
     '<span>入っているのは ' + v + ' 、このページが想定しているのは ' + EXPECTED_EXT_VERSION + ' です。' +
     'ソースを更新して chrome://extensions で再読み込みするか、下の ZIP を入れ直してください。</span>';
   const dl = document.createElement('a');
-  dl.href = 'dist/parallel-stream-latest.zip';
+  dl.href = EXT_ZIP_URL;
   dl.textContent = 'ZIP をダウンロード';
   el.appendChild(dl);
   const close = document.createElement('button');
@@ -725,7 +731,7 @@ function createWindow(url, opts = {}) {
     const channel = kickChannelOf(url);
     if (channel) {
       const chat = document.createElement('iframe');
-      chat.className = 'win-chat';
+      chat.className = 'win-chat win-chat-slot'; // Kick は一覧ごと出すので入れ物は要らない
       body.appendChild(chat);
       chatFrame = chat;
       // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
@@ -742,9 +748,15 @@ function createWindow(url, opts = {}) {
     media.className = 'win-media';
     body.appendChild(media);
     mediaEl = media;
+    // チャットは入れ物(.win-chat-wrap)に入れる。縦積みでは入れ物を入力欄の高さまで縮め、
+    // 中の iframe は下端を合わせたまま高いままにして、入力欄だけが見えるようにする
+    // (別オリジンなので中の要素を取り出せない。切り出しでしか実現できない)。
+    const wrap = document.createElement('div');
+    wrap.className = 'win-chat-slot win-chat-wrap';
     const chat = document.createElement('iframe');
     chat.className = 'win-chat';
-    body.appendChild(chat);
+    wrap.appendChild(chat);
+    body.appendChild(wrap);
     chatFrame = chat;
   } else {
     // iframe は win 確定後に mountSiteFrame() で生成する。
@@ -998,6 +1010,7 @@ function setRect(win, x, y, w, h) {
 const CHAT_SIDE_MIN_W = 680; // これ未満の幅ではチャットを下に置く(チャット300 + 映像360 相当)
 function updateWinShapeClass(win, w, h) {
   win.el.classList.toggle('chat-below', h > w || w < CHAT_SIDE_MIN_W);
+  win.el.classList.toggle('span-half', win.span === 'half'); // 半幅ではチャットを出さない(CSS 側)
 }
 
 // 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
@@ -1137,13 +1150,22 @@ function relayoutStack() {
   pad.style.top = (y + Math.max(72, cs.contains('tb-pos-bottom') ? tb.offsetHeight : 0)) + 'px';
 }
 
+// 縦積みでチャットに足す高さ。
+// Twitch / YouTube は弾幕でコメントが読めるので、一覧まで出す必要がない。入力欄だけを残す
+// (CSS 側で枠の下端に合わせて切り出す)。Kick は弾幕の対象外なので一覧が要る。
+// 半幅(横に2つ)のときは、そもそも入力欄が使える大きさにならないので出さない。
+function stackChatH(win) {
+  if (!win.body) return 0;
+  if (!win.body.classList.contains('split-chat') || !win.body.classList.contains('chat-on')) return 0;
+  if (win.span === 'half') return 0;
+  return win.video ? STACK_CHAT_H : STACK_CHAT_INPUT_H;
+}
+
 // 縦積みタイルの高さを幅から算出。既定は 16:9(Kickはチャット分を加算)。
 // 縦長(手動指定)は全幅時のみ反映。half(横並び)は小さく出す枠なので常に 16:9。
 function stackTileH(win, w, tallH) {
   let h = Math.round((w * 9) / 16);
-  if (win.body && win.body.classList.contains('split-chat') && win.body.classList.contains('chat-on')) {
-    h += STACK_CHAT_H;
-  }
+  h += stackChatH(win);
   if (tallH && win.span !== 'half' && isTall(win)) h = Math.max(h, tallH);
   return h;
 }

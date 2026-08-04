@@ -1,0 +1,371 @@
+/* ダーク基調＋等幅で「ログを見ている」雰囲気にする */
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0d1117;
+  color: #c9d1d9;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas',
+    'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  /* 固定幅。min/max + メディアクエリにすると、ポップアップ幅が縮む→メディアが効く→さらに縮む、の
+     ループで縦長に潰れていた。380px に固定して横に広げる(この幅はスマホのタブ表示にも収まる)。 */
+  width: 380px;
+  padding: 12px 14px 16px;
+}
+
+header {
+  position: sticky;
+  top: 0;
+  background: #0d1117;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #21262d;
+  z-index: 10;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ===== タブ ===== */
+.tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.tab {
+  background: transparent;
+  color: #8b949e;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.tab:hover {
+  color: #c9d1d9;
+}
+
+.tab.active {
+  color: #f0f6fc;
+  border-bottom-color: #58a6ff;
+}
+
+.panel.hidden {
+  display: none;
+}
+
+h2 {
+  font-size: 12px;
+  color: #f0f6fc;
+  margin: 16px 0 6px;
+  padding: 0;
+  border-left: 3px solid #58a6ff;
+  padding-left: 8px;
+}
+
+.hint {
+  font-weight: normal;
+  font-size: 11px;
+  color: #8b949e;
+  margin-left: 6px;
+}
+
+.status {
+  color: #8b949e;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 360px;
+}
+
+.status.error {
+  color: #f85149;
+}
+
+.status.success {
+  color: #3fb950;
+}
+
+.status.info {
+  color: #58a6ff;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+button:hover:not(:disabled) {
+  background: #30363d;
+  border-color: #58a6ff;
+}
+
+button:active {
+  background: #1f2937;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ===== マルチビュー入口のヒーローボタン ===== */
+/* 「ただのボタン」ではなく入口パネルとして見せる: グラデーション地 + 2×2 グリッドの
+   アイコン(各セルが配信のように順に明滅) + タイトル/説明の2段組。 */
+.hero-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #14305c 0%, #102347 55%, #2a1a55 100%);
+  border: 1px solid rgba(88, 166, 255, 0.5);
+  border-radius: 12px;
+  color: #f0f6fc;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgba(9, 30, 66, 0.5);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+/* 角の柔らかい光彩(押せる面の広さを演出。クリックは透過) */
+.hero-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(420px 130px at 15% -40%, rgba(88, 166, 255, 0.3), transparent 65%),
+    radial-gradient(380px 150px at 100% 140%, rgba(137, 87, 229, 0.28), transparent 65%);
+}
+.hero-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #17396e 0%, #132a56 55%, #321f66 100%);
+  border-color: #58a6ff;
+  box-shadow: 0 6px 26px rgba(31, 111, 235, 0.45);
+  transform: translateY(-1px);
+}
+.hero-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(31, 111, 235, 0.35);
+}
+.hero-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.hero-icon {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  width: 48px;
+  height: 48px;
+  padding: 6px;
+  background: rgba(13, 17, 23, 0.6);
+  border: 1px solid rgba(88, 166, 255, 0.4);
+  border-radius: 10px;
+}
+.hero-icon span {
+  background: rgba(121, 192, 255, 0.85);
+  border-radius: 3px;
+  animation: hero-live 2.8s ease-in-out infinite;
+}
+.hero-icon span:nth-child(2) { animation-delay: 0.7s; }
+.hero-icon span:nth-child(3) { animation-delay: 1.4s; }
+.hero-icon span:nth-child(4) { animation-delay: 2.1s; }
+@keyframes hero-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.hero-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero-title {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 0.02em;
+}
+.hero-sub {
+  font-size: 11.5px;
+  color: #9db3d8;
+}
+.hero-arrow {
+  flex: 0 0 auto;
+  font-size: 20px;
+  color: #79c0ff;
+  transition: transform 0.15s ease;
+}
+.hero-btn:hover:not(:disabled) .hero-arrow {
+  transform: translateX(4px);
+}
+
+section {
+  margin-bottom: 10px;
+}
+
+.block {
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 4px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11.5px;
+}
+
+.empty {
+  color: #6e7681;
+  font-style: italic;
+}
+
+/* 「保存中の配信」の見出し行: 見出し + クリアを横並びにして縦を詰める。 */
+.saved-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 6px;
+}
+.saved-head h2 {
+  margin: 0;
+}
+#clear-saved {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+/* ===== Probe 表示 ===== */
+.custom-marker {
+  color: #f0883e;
+  font-weight: bold;
+}
+
+.api-block {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #21262d;
+}
+
+.api-block:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.api-name {
+  color: #f0883e;
+  font-weight: bold;
+}
+
+.api-name.standard {
+  color: #79c0ff;
+  font-weight: normal;
+}
+
+.api-typeof {
+  color: #8b949e;
+}
+
+.member {
+  margin-left: 14px;
+}
+
+.member .name {
+  color: #d2a8ff;
+}
+
+.sub-member {
+  margin-left: 28px;
+  color: #8b949e;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 4px 12px;
+}
+
+.kv .k {
+  color: #8b949e;
+}
+
+.kv .v {
+  color: #c9d1d9;
+  word-break: break-all;
+}
+
+pre.json {
+  margin: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: #c9d1d9;
+  white-space: pre-wrap;
+}
+
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  margin-right: 4px;
+}
+
+.tag-ok {
+  background: #033a16;
+  color: #3fb950;
+}
+
+.tag-err {
+  background: #3c0d11;
+  color: #f85149;
+}
+
+.tag-skip {
+  background: #2d2206;
+  color: #d29922;
+}
+
+.tag-info {
+  background: #0c2d6b;
+  color: #58a6ff;
+}
+

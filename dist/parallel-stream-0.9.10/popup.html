@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <!-- スマホでタブとして開かれた場合に実寸表示するため(無いと縮小描画で文字が極小になる) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Parallel Stream</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <span class="app-title">Parallel Stream</span>
+      <span id="status" class="status"></span>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <button id="open-multiview" type="button" class="hero-btn">
+        <span class="hero-icon" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+        <span class="hero-text">
+          <span class="hero-title">マルチビューを開く</span>
+          <span class="hero-sub">複数の配信を 1 画面に並べて同時視聴</span>
+        </span>
+        <span class="hero-arrow" aria-hidden="true">▶</span>
+      </button>
+      <p class="hint">追加・配置・画質・音量は専用ページで操作します(起動時は全ミュート)。</p>
+
+      <section class="last-run">
+        <div class="saved-head">
+          <h2>保存中の配信</h2>
+          <button id="clear-saved" type="button">クリア</button>
+        </div>
+        <div id="saved-list" class="block">
+          <span class="empty">なし</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

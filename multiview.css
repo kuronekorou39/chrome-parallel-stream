@@ -427,19 +427,23 @@ body.panel-dragging iframe { pointer-events: none; }
 /* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
 .win-body.split-chat { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
-.win-body .win-chat {
+/* チャットの「枠」。Kick は iframe 自体が、Twitch/YouTube は入れ物(.win-chat-wrap)がこれになる。 */
+.win-body .win-chat-slot {
   position: static; inset: auto;
   flex: 0 0 300px; width: 300px; height: 100%;
   border: 0; display: none; background: #0d1117;
 }
-.win-body.split-chat.chat-on .win-chat { display: block; }
+.win-body.split-chat.chat-on .win-chat-slot { display: block; }
+/* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。 */
+.win-chat-wrap { position: relative; overflow: hidden; }
+.win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border: 0; }
 /* 枠が狭い/縦長のときはチャットを映像の下へ回す(横に並べたままだと映像が潰れる)。
    付け外しは JS の updateWinShapeClass が幅と高さから決める。
    高さは割合で取る。固定 px にすると、小さい枠ではチャットが枠を食い潰す。
    縦積み(スマホ)は下の専用ルールが STACK_CHAT_H と対で高さを決めるので、ここでは触らない。 */
 body:not(.stack-mode) .win.chat-below .win-body.split-chat { flex-direction: column; }
 /* 42% だけだと小さい枠で入力欄が枠外に出て書き込めない。下限を確保する(実測で 340px 必要)。 */
-body:not(.stack-mode) .win.chat-below .win-body .win-chat { flex: 0 0 max(340px, 42%); width: 100%; height: auto; min-height: 0; }
+body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(340px, 42%); width: 100%; height: auto; min-height: 0; }
 
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
@@ -774,7 +778,16 @@ body.stack-mode .win-controls button.max { display: none; }
 .win-adjust { top: 56px; } /* 台形が無いぶん 🎨 パネルは上へ */
 /* Kick: 縦積みでは映像の下にチャットを置く(高さは JS の STACK_CHAT_H と一致させること) */
 body.stack-mode .win-body.split-chat { flex-direction: column; }
-body.stack-mode .win-body .win-chat { flex: 0 0 340px; width: 100%; height: 340px; }
+/* Kick は一覧ごと(JS の STACK_CHAT_H と一致させること)。 */
+body.stack-mode .win-body .win-chat-slot { flex: 0 0 340px; width: 100%; height: 340px; }
+/* Twitch / YouTube はコメントを弾幕で読めるので、一覧は要らない。入力欄だけを残す。
+   入れ物を入力欄の高さまで縮め、中の iframe は下端を合わせたまま高いままにする
+   (低くするとサイト側が入力欄を描かなくなるため、高さ自体は保つ)。
+   132px は JS の STACK_CHAT_INPUT_H と一致させること。 */
+body.stack-mode .win-body .win-chat-wrap { flex: 0 0 132px; height: 132px; }
+body.stack-mode .win-body .win-chat-wrap .win-chat { height: 420px; }
+/* 半幅(横に2つ)では入力欄が使える大きさにならないので出さない(JS の stackChatH と対) */
+body.stack-mode .win.span-half .win-body .win-chat-slot { display: none; }
 body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */
 
 /* 枠の簡易UI(PC含む): [⋮メニュー][✕閉じる]。右端に縦並び。各サイトのトップバー/チャット表示ボタン等と
