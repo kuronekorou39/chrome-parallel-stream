@@ -50,8 +50,11 @@ const MAGIC = '__multiviewControl';
 //  拡張機能のエラー欄に残り続けるので許可する)。
 // magnetometer は deviceorientation を使うために要る(accelerometer と gyroscope だけでは
 // 「deviceorientation events are blocked」になる。スマホの実機で発生)。
+// センサー系に * を付けるのは、枠の中でさらに入れ子になる別オリジンのフレームまで委譲するため。
+// 既定('src' 相当)だと枠自身のオリジンにしか届かず、YouTube/Twitch が内部で読み込む
+// フレームで違反が記録され続ける(枠の iframe に許可を付けても消えなかった。実機で確認)。
 const IFRAME_ALLOW =
-  'accelerometer; autoplay; clipboard-write; encrypted-media; fullscreen; gyroscope; magnetometer; picture-in-picture';
+  'accelerometer *; gyroscope *; magnetometer *; autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture';
 
 // コメント弾幕(チャットを右→左へ流す)。
 const DMK_GAP = 44;          // 同じレーンで前の弾幕の後ろに空ける最小間隔(px)
@@ -286,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.18';
+const EXPECTED_EXT_VERSION = '0.9.19';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -2802,7 +2805,7 @@ function mountChatFrame(win) {
         win.chatReplay = true;
         chat.src =
           'https://www.youtube.com/live_chat_replay?continuation=' + encodeURIComponent(info.continuation) +
-          '&embed_domain=' + encodeURIComponent(location.hostname);
+          '&embed_domain=' + encodeURIComponent(location.hostname) + '&dark_theme=1'; // 白飛び回避
       } else {
         chat.src = toYouTubeChatUrl(win.url);
       }
@@ -3761,8 +3764,10 @@ function youtubeVideoIdOf(url) {
 function toYouTubeChatUrl(url) {
   const id = youtubeVideoIdOf(url);
   if (!id) return null;
+  // dark_theme=1 を付けないと白基調で描かれ、暗いこのページの中で白飛びして見える。
   return (
-    'https://www.youtube.com/live_chat?v=' + encodeURIComponent(id) + '&embed_domain=' + encodeURIComponent(location.hostname)
+    'https://www.youtube.com/live_chat?v=' + encodeURIComponent(id) +
+    '&embed_domain=' + encodeURIComponent(location.hostname) + '&dark_theme=1'
   );
 }
 
