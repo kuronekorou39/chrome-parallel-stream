@@ -284,10 +284,12 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.15';
-// 版入りのファイル名を配る。latest のような固定名だと、落とすたびにブラウザが
-// 「(1)」「(2)」を付けてしまい、どれが最新か分からなくなる。
-const EXT_ZIP_URL = 'dist/parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
+const EXPECTED_EXT_VERSION = '0.9.17';
+// リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
+// 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
+// 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
+const EXT_ZIP_URL = 'dist/parallel-stream-latest.zip';
+const EXT_ZIP_NAME = 'parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -305,7 +307,8 @@ function checkExtVersion() {
   const sub = document.getElementById('mm-update-ver');
   const item = document.getElementById('mm-update');
   if (sub && item) {
-    item.href = EXT_ZIP_URL; // 版入りのファイル名で落とす
+    item.href = EXT_ZIP_URL;
+    item.download = EXT_ZIP_NAME; // 保存名だけ版入りにする
     const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
     sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
     item.classList.toggle('is-old', !!old);
@@ -321,6 +324,7 @@ function checkExtVersion() {
     'ソースを更新して chrome://extensions で再読み込みするか、下の ZIP を入れ直してください。</span>';
   const dl = document.createElement('a');
   dl.href = EXT_ZIP_URL;
+  dl.download = EXT_ZIP_NAME;
   dl.textContent = 'ZIP をダウンロード';
   el.appendChild(dl);
   const close = document.createElement('button');

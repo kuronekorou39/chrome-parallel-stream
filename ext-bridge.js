@@ -14,7 +14,11 @@
   // リポジトリ全体ではなく、拡張機能のファイルだけを詰めた配布物を指す。
   // 展開したフォルダがそのまま拡張機能になるので、入れ子を掘る必要がない
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
-  const ZIP_URL = 'dist/parallel-stream-0.9.15.zip';
+  // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
+  // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
+  // 保存されるファイル名だけ download 属性で版入りにする。
+  const ZIP_URL = 'dist/parallel-stream-latest.zip';
+  const ZIP_NAME = 'parallel-stream-0.9.17.zip'; // release.mjs が版に合わせて書き換える
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
   // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが
@@ -141,6 +145,7 @@
 
     const zip = document.createElement('a');
     zip.href = ZIP_URL;
+    zip.download = ZIP_NAME;
     zip.textContent = 'ZIP をダウンロード';
     zip.style.cssText = 'color:#ff9c94;font-weight:bold';
     li(zip, ' して展開する(展開したフォルダがそのまま拡張機能です)');

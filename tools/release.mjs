@@ -11,7 +11,7 @@
 //
 // 配布物は dist/ に置く。zip の中身は「展開したフォルダがそのまま拡張機能」になる形にする
 // (BEX の『未パッケージ拡張機能をフォルダから読み込む』にそのまま渡せるようにするため)。
-import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync, existsSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,14 +82,15 @@ writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 // 直リンクを固定名(latest)のままにすると、落とすたびにブラウザが (1)(2) を付けてしまい、
 // どれが最新か分からなくなる。JS 側で後から差し替える作りにしていたが、押す方が速いと
 // 間に合わないので、配る HTML の時点で版入りにしておく。
-const zipRe = /dist\/parallel-stream-[\w.]+\.zip/g;
-const zipHref = `dist/parallel-stream-${next}.zip`;
+// リンク先は latest 固定のまま触らない。書き換えるのは「保存されるファイル名」だけ。
+const nameRe = /parallel-stream-\d+\.\d+\.\d+\.zip/g;
+const zipName2 = `parallel-stream-${next}.zip`;
 writeFileSync(
   htmlPath,
-  readFileSync(htmlPath, 'utf8').replace(/\?v=\d+\.\d+\.\d+/g, `?v=${next}`).replace(zipRe, zipHref)
+  readFileSync(htmlPath, 'utf8').replace(/\?v=\d+\.\d+\.\d+/g, `?v=${next}`).replace(nameRe, zipName2)
 );
 const bridgePath = p('ext-bridge.js');
-writeFileSync(bridgePath, readFileSync(bridgePath, 'utf8').replace(zipRe, zipHref));
+writeFileSync(bridgePath, readFileSync(bridgePath, 'utf8').replace(nameRe, zipName2));
 writeFileSync(
   jsPath,
   readFileSync(jsPath, 'utf8').replace(/EXPECTED_EXT_VERSION = '[\d.]+'/, `EXPECTED_EXT_VERSION = '${next}'`)
@@ -106,7 +107,9 @@ if (!report(readVersions())) {
 // どの版を入れたのか分かるようにするため(同じ名前だと入れ替えたかも分からない)。
 const stageName = `parallel-stream-${next}`;
 const stage = p('dist', stageName);
-rmSync(p('dist'), { recursive: true, force: true });
+// dist ごと消さないこと。過去の版の zip を消すと、古いページを開いたままの利用者の
+// リンクが 404 になる(実際に起きた)。作業フォルダだけ作り直す。
+rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 for (const f of PACK) {
   if (!existsSync(p(f))) {
@@ -161,4 +164,20 @@ if (!entries.includes('manifest.json')) {
   process.exit(1);
 }
 console.log(`  検査: ${entries.length} ファイル、すべて直下。manifest.json あり。`);
+
+// 過去の版は残すが、際限なく増やさない。古いページからのリンク切れを防ぐぶんだけ持つ。
+const KEEP = 5;
+const olds = readdirSync(p('dist'))
+  .filter((f) => /^parallel-stream-\d+\.\d+\.\d+\.zip$/.test(f))
+  .sort((a, b) => {
+    const num = (s) => s.match(/(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number);
+    const [a1, a2, a3] = num(a);
+    const [b1, b2, b3] = num(b);
+    return b1 - a1 || b2 - a2 || b3 - a3;
+  });
+for (const f of olds.slice(KEEP)) {
+  rmSync(p('dist', f), { force: true });
+  console.log(`  古い配布物を削除: ${f}`);
+}
+console.log(`  残している版: ${olds.slice(0, KEEP).join(', ')}`);
 console.log(`\n次: git add -A && git commit && git push`);
