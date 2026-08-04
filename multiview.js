@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.19';
+const EXPECTED_EXT_VERSION = '0.9.20';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1649,30 +1649,59 @@ function buildQuickControls(win) {
   // 使う頻度と目的で3つに束ねる。上から「見ている最中に触るもの」「見え方の設定」「弾幕」。
   // 最後に、枠から出る操作を置く。
 
-  // ① 視聴操作。「戻る」は一覧→動画と辿ったあと、見終わって一覧へ帰るための導線。
-  // 履歴が無い間は押せないようにする(押しても何も起きないボタンは置かない)。
-  if (!win.video) win.menuBack = mkItem('← 戻る', () => goBackWindow(win));
-  mkItem('🔄 再読込', () => reloadWindow(win));
-  mkItem('⛶ 全画面で操作', () => toggleStackMax(win));
-  mkSep();
-
-  // ② 見え方。縮小/幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
+  // ① 見え方。幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
   // syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
   // トグル表示にして、いま出ているのか隠れているのかが分かるようにする。
   if (win.chatFrame) win.menuChat = mkToggle(() => toggleChat(win));
-  mkItem('🎨 映像調整', () => toggleAdjust(win));
+  // 映像調整はスマホでは出さない(小さい画面でそこまで詰める場面が無く、行数だけ増える)。
+  win.menuAdjust = mkItem('🎨 映像調整', () => toggleAdjust(win));
+  win.menuAdjust.classList.add('pc-only');
   if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
-  if (!win.video) win.menuZoom = mkToggle(() => cycleZoom(win)); // 縮小は枠内サイト用(Kickは映像のみで不要)
-  win.menuSpan = mkToggle(() => toggleSpan(win));
-  win.menuTall = mkToggle(() => toggleTall(win));
   mkSep();
 
-  // ③ 弾幕。on は永続なので保存(Kickは対象外)。
+  // ② 弾幕。on は永続なので保存(Kickは対象外)。
   if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
   if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   if (!win.video) mkSep();
 
-  mkItem('↗ 元サイトを新タブ', () => openOriginal(win));
+  // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
+  // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
+  // 「戻る」は履歴が無い間は押せない(押しても何も起きないボタンは置かない)。
+  const mkRow = (cls) => {
+    const r = document.createElement('div');
+    r.className = 'win-menu-row' + (cls ? ' ' + cls : '');
+    menu.appendChild(r);
+    return r;
+  };
+  const mkIcon = (row, label, title, fn, keepOpen) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.title = title;
+    b.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!keepOpen) closeMenu();
+      fn();
+    });
+    row.appendChild(b);
+    return b;
+  };
+
+  // 幅と高さは2択ずつなので、値を出さずボタンだけを左右に並べる。押せば切り替わる。
+  // 縦積み専用の効果しか持たないため、PC では syncMenuModeVisibility が行ごと隠す。
+  win.menuSizeRow = mkRow('stack-only');
+  // メニューは開いたままにする。並べ方を決めるのに何度か押して見比べるため。
+  win.menuSpan = mkIcon(win.menuSizeRow, '↔ 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
+  win.menuTall = mkIcon(win.menuSizeRow, '⬍ 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
+  mkSep();
+
+  const opRow = mkRow();
+  win.menuBack = mkIcon(opRow, '←', '枠の中で1つ前のページへ戻る', () => goBackWindow(win));
+  mkIcon(opRow, '🔄', 'この枠を再読込', () => reloadWindow(win));
+  mkIcon(opRow, '⛶', '全画面で操作', () => toggleStackMax(win));
+  mkIcon(opRow, '↗', '元サイトを新しいタブで開く', () => openOriginal(win));
   syncMenuLabels(win);
   syncMenuModeVisibility(win); // PC(自由配置)では幅/高さ/縮小を隠す(縦積みでのみ効くため)
 
@@ -1729,9 +1758,8 @@ function isTall(win) {
 // 軽量はPCでも機能するので残す。モードは実行中に切り替わりうる(タブレット等)ため、メニュー生成時と
 // updateStackMode の両方から呼んで追従させる。
 function syncMenuModeVisibility(win) {
-  for (const m of [win.menuSpan, win.menuTall, win.menuZoom]) {
-    if (m) m.btn.style.display = stackMode ? '' : 'none';
-  }
+  // 幅・高さは行ごと出し入れする(中のボタンを個別に隠すと行だけが残る)。
+  if (win.menuSizeRow) win.menuSizeRow.style.display = stackMode ? '' : 'none';
 }
 function syncMenuLabels(win) {
   if (win.menuBack) {
@@ -1752,30 +1780,14 @@ function syncMenuLabels(win) {
         : 'この配信にはチャットがありません'
       : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
   }
+  // 幅・高さは2択ずつなのでボタンだけ。いま選ばれている側を色で示す。
   if (win.menuTall) {
-    // 「幅」「高さ」は枠そのものの大きさ、「縮小」は枠の中身の表示倍率。同じ大きさの話に見えて
-    // 別物なので、どちらを指すのかを名前に入れる。
-    win.menuTall.name.textContent = '⬍ 枠の高さ';
-    win.menuTall.val.textContent = isTall(win) ? '縦長' : '16:9';
-    win.menuTall.btn.title = 'タップで ' + (isTall(win) ? '16:9' : '縦長') + ' に切替';
+    win.menuTall.classList.toggle('on', isTall(win));
+    win.menuTall.title = 'タップで ' + (isTall(win) ? '16:9' : '縦長') + ' に切替';
   }
   if (win.menuSpan) {
-    win.menuSpan.name.textContent = '↔ 枠の幅';
-    win.menuSpan.val.textContent = win.span === 'half' ? '50%' : '100%';
-    win.menuSpan.btn.title = 'タップで ' + (win.span === 'half' ? '100%' : '50%(横に2つ)') + ' に切替';
-  }
-  if (win.menuZoom) {
-    win.menuZoom.name.textContent = '🔍 中身の縮小';
-    if (win.light) {
-      win.menuZoom.btn.disabled = true; // 軽量プレイヤーは等倍必須(縮小すると自動再生が止まる)
-      win.menuZoom.val.textContent = '等倍';
-      win.menuZoom.btn.title = '軽量プレイヤーは等倍固定';
-    } else {
-      win.menuZoom.btn.disabled = false;
-      const z = effectiveZoom(win);
-      win.menuZoom.val.textContent = z + '%';
-      win.menuZoom.btn.title = 'タップで ' + nextZoom(z) + '% に切替';
-    }
+    win.menuSpan.classList.toggle('on', win.span === 'half');
+    win.menuSpan.title = 'タップで ' + (win.span === 'half' ? '100%(1つ)' : '50%(横に2つ)') + ' に切替';
   }
   if (win.menuDanmaku) {
     // 💬 はチャット列の表示に使っているので、弾幕は別の絵文字にする(同じ記号だと取り違える)。
@@ -2368,24 +2380,16 @@ function setupDanmakuPanel() {
   if (openBtn) openBtn.addEventListener('click', () => openDanmakuPanel(null));
 }
 
-// 枠内サイトの縮小率(100→75→50→100 で巡回)。仮想ビューポートを広げて scale で縮めるので、
-// 16:9 の小さいタイルでもサイトの要素が大きすぎず、広い範囲が見えて操作しやすくなる。
-function nextZoom(z) {
-  return z === 100 ? 75 : z === 75 ? 50 : 100;
-}
-// 実効縮小率。手動指定(win.zoom)があればそれを使う。無ければ:
-//  - 自由配置(PC)= 等倍100%(縮小は枠リサイズで足りる。縮小すると Twitch等が想定外レイアウトになる)
-//  - 縦積み(スマホ)= 小さいタイルに合わせ 全幅75% / 50%幅50%
+// 枠内サイトの縮小率。仮想ビューポートを広げて scale で縮めるので、小さいタイルでも
+// サイトの要素が大きすぎず、広い範囲が見えて操作しやすくなる。
+// 以前は手動で 100→75→50 と巡回させていたが、枠の幅から決まる話でしかなく、
+// 選ばせても迷わせるだけだったのでやめた(保存済みの win.zoom があっても無視する)。
+//  - 自由配置(PC)= 等倍100%(縮小は枠のリサイズで足りる。縮小すると Twitch 等が想定外の
+//    レイアウトになる)
+//  - 縦積み(スマホ)= 幅に合わせて自動。狭いほど縮めて情報量を確保する
 function effectiveZoom(win) {
-  if (win.zoom != null) return win.zoom;
   if (!stackMode) return 100;
   return win.span === 'half' ? ZOOM_DEFAULT_HALF : ZOOM_DEFAULT_FULL;
-}
-function cycleZoom(win) {
-  win.zoom = nextZoom(effectiveZoom(win));
-  applyFrameZoom(win);
-  syncMenuLabels(win);
-  saveLineup();
 }
 function applyFrameZoom(win) {
   if (!win.frame) return;

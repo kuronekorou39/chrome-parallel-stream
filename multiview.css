@@ -857,6 +857,17 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 .win-menu-toggle .wm-val { flex: 0 0 auto; color: #8b949e; font-variant-numeric: tabular-nums; }
 .win-menu-toggle.on .wm-val { color: #3fb950; font-weight: bold; } /* ON は緑(弾幕など) */
 .win-menu-sep { flex: 0 0 auto; height: 1px; background: #30363d; margin: 5px 8px; }
+/* 説明の要らない操作は横一列に並べる。縦に積むと項目数ぶんメニューが伸び、
+   画面の小さいスマホでは端まで届かなくなる。 */
+.win-menu-row { display: flex; gap: 4px; }
+.win-menu-row > button {
+  flex: 1 1 0; min-width: 0;
+  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  padding: 11px 6px; font-family: inherit; font-size: 16px; text-align: center; cursor: pointer;
+}
+.win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu-row > button:disabled { opacity: 0.35; cursor: default; }
+.win-menu-row > button.on { color: #3fb950; } /* いま選ばれている側 */
 
 /* 左上バッジ: ⚡軽量(緑)/ 通常(グレー)。状態表示 兼 タップで軽量⇄通常トグル。
    ヘッダ等と同様、ホバー/タップ(show-bar)中だけ出して、操作が無ければ時間で消える。 */
@@ -980,3 +991,30 @@ body.stack-mode #mm-layout { display: none; }
   .win, .win.show-bar { box-shadow: none; transition: none; }
   .win-bar { filter: none; }
 }
+
+/* ===== スマホ(縦積み)ではメニュー・ダイアログを一回り小さくする ===== */
+/* PC の寸法をそのまま持ち込むと、画面の小さい端末では1枚で画面を覆ってしまい、
+   下の枠が見えないまま操作することになる。文字と余白を詰め、幅も画面基準にする。 */
+body.stack-mode #main-menu { min-width: 210px; gap: 1px; padding: 5px; border-radius: 10px; }
+body.stack-mode #main-menu button,
+body.stack-mode #main-menu a { padding: 9px 11px; font-size: 14px; gap: 8px; }
+body.stack-mode .mm-icon { font-size: 15px; }
+body.stack-mode .mm-sub { font-size: 11px; }
+
+body.stack-mode .win-menu { min-width: 196px; padding: 5px; border-radius: 8px; }
+body.stack-mode .win-menu button { padding: 8px 10px; font-size: 13.5px; }
+body.stack-mode .win-menu-row > button { padding: 9px 4px; font-size: 15px; }
+body.stack-mode .win-menu-toggle { gap: 10px; }
+body.stack-mode .win-menu-sep { margin: 3px 6px; }
+
+body.stack-mode .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+body.stack-mode #add-dialog .pos-dialog,
+body.stack-mode #layout-dialog .pos-dialog,
+body.stack-mode #cookie-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+body.stack-mode .pos-dialog-body { padding: 12px; }
+body.stack-mode .pos-dialog-title { font-size: 14px; }
+body.stack-mode .add-sites { gap: 8px; margin-bottom: 10px; }
+body.stack-mode .add-sites .site-chip { font-size: 13.5px; padding: 9px 10px; }
+
+/* 「映像調整」はスマホでは出さない。小さい画面でそこまで詰める場面が無く、行数だけ増える。 */
+body.stack-mode .win-menu .pc-only { display: none; }
