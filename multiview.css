@@ -698,6 +698,7 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 #main-menu a:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
 #main-menu button.on { color: #3fb950; }
 #main-menu a { text-decoration: none; }
+.mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
 /* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
 .mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
 #mm-update.is-old { color: #e3b341; }

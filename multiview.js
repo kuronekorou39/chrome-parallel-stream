@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.23';
+const EXPECTED_EXT_VERSION = '0.9.24';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3412,9 +3412,13 @@ function setupMainMenu() {
       fn();
     });
   };
-  // 項目をクリックしてもメニューは閉じず出しっぱなしにする(連続で複数のパネルを開ける)。
-  // 閉じるのは「メニュー外(backdrop)のクリック」だけ(下の main-menu-backdrop 配線)。
-  const act = (id, fn) => mkAct(id, fn);
+  // PC は出しっぱなしにする(連続で複数のパネルを開けるほうが速い)。
+  // スマホは画面が狭く、開いたメニューが下のパネルや枠を覆ってしまうので、選んだら閉じる。
+  const act = (id, fn) =>
+    mkAct(id, () => {
+      if (stackMode) toggleMainMenu(false);
+      fn();
+    });
   act('mm-add', () => document.getElementById('add-open-btn').click());
   act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
@@ -3489,6 +3493,9 @@ function setupIdleHide() {
   };
   const hideToolbar = () => {
     if (toolbar.matches(':hover')) return;
+    // 開いている ≡ メニューも一緒に畳む。ツールバーと ≡ ボタンだけ消えてメニューが残ると、
+    // 出所の分からない板が画面に浮いたままになる。
+    toggleMainMenu(false);
     document.body.classList.add('toolbar-hidden');
   };
   let lastArm = 0;

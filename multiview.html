@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.23" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.24" />
 </head>
 <body>
   <div id="toolbar">
@@ -33,16 +33,18 @@
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
+    <!-- 上は「見るための操作」、下は「設定・保守」。使う頻度が違うので区切る。 -->
     <button id="mm-add" type="button"><span class="mm-icon">＋</span><span class="mm-label">追加</span></button>
     <button id="mm-layout" type="button"><span class="mm-icon">📐</span><span class="mm-label">配置</span></button>
     <button id="mm-mixer" type="button"><span class="mm-icon">🎚</span><span class="mm-label">一覧</span></button>
-    <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
     <button id="mm-danmaku" type="button"><span class="mm-icon">💬</span><span class="mm-label">弾幕設定</span></button>
+    <div class="mm-sep"></div>
+    <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
     <button id="mm-cookie" type="button"><span class="mm-icon">🍪</span><span class="mm-label">ログインCookie</span></button>
     <!-- 拡張機能の版。古ければここに出るので、探しに行かなくても気づける。押すと最新の ZIP を落とす。 -->
     <!-- リンク先は常に存在する固定名。版入りの URL を直接指すと、古いページを開いたままだと
          既に消えた版を掴んで 404 になる。保存名だけ download 属性で版入りにする。 -->
-    <a id="mm-update" href="dist/parallel-stream-latest.zip" download="parallel-stream-0.9.23.zip"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能の更新</span><span class="mm-sub" id="mm-update-ver"></span></a>
+    <a id="mm-update" href="dist/parallel-stream-latest.zip" download="parallel-stream-0.9.24.zip"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能の更新</span><span class="mm-sub" id="mm-update-ver"></span></a>
   </div>
 
   <!-- 枠内でログイン状態を使うと、対象サイトの Cookie の SameSite を変更する。
@@ -207,7 +209,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.23"></script>
-  <script src="multiview.js?v=0.9.23"></script>
+  <script src="ext-bridge.js?v=0.9.24"></script>
+  <script src="multiview.js?v=0.9.24"></script>
 </body>
 </html>
