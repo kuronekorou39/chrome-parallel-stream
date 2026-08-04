@@ -791,6 +791,10 @@ body.stack-mode .win-body .win-chat-slot { flex: 0 0 340px; width: 100%; height:
    132px は JS の STACK_CHAT_INPUT_H と一致させること。 */
 body.stack-mode .win-body .win-chat-wrap { flex: 0 0 132px; height: 132px; }
 body.stack-mode .win-body .win-chat-wrap .win-chat { height: 420px; }
+/* 「高さ」で縦長を選んだ枠は、増えたぶんをチャットにも回して一覧まで出す(JS の stackChatH と対)。
+   こうしないと高さを変えてもチャットが 132px のままで、設定が効いていないように見える。 */
+body.stack-mode .win.is-tall .win-body .win-chat-wrap { flex: 0 0 340px; height: 340px; }
+body.stack-mode .win.is-tall .win-body .win-chat-wrap .win-chat { height: 100%; }
 /* 半幅(横に2つ)では入力欄が使える大きさにならないので出さない(JS の stackChatH と対) */
 body.stack-mode .win.span-half .win-body .win-chat-slot { display: none; }
 body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */

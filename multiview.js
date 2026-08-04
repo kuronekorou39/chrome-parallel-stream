@@ -284,7 +284,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.14';
+const EXPECTED_EXT_VERSION = '0.9.15';
 // 版入りのファイル名を配る。latest のような固定名だと、落とすたびにブラウザが
 // 「(1)」「(2)」を付けてしまい、どれが最新か分からなくなる。
 const EXT_ZIP_URL = 'dist/parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
@@ -1011,6 +1011,7 @@ const CHAT_SIDE_MIN_W = 680; // これ未満の幅ではチャットを下に置
 function updateWinShapeClass(win, w, h) {
   win.el.classList.toggle('chat-below', h > w || w < CHAT_SIDE_MIN_W);
   win.el.classList.toggle('span-half', win.span === 'half'); // 半幅ではチャットを出さない(CSS 側)
+  win.el.classList.toggle('is-tall', isTall(win)); // 縦長ならチャットを一覧ごと出す(CSS 側)
 }
 
 // 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
@@ -1158,7 +1159,10 @@ function stackChatH(win) {
   if (!win.body) return 0;
   if (!win.body.classList.contains('split-chat') || !win.body.classList.contains('chat-on')) return 0;
   if (win.span === 'half') return 0;
-  return win.video ? STACK_CHAT_H : STACK_CHAT_INPUT_H;
+  // 「高さ」で縦長を選んだ枠は、増えたぶんをチャットにも回して一覧まで出す。
+  // 16:9 のままなら入力欄だけ(コメントは弾幕で読める)。これで高さの選択が効くようになる。
+  if (win.video || isTall(win)) return STACK_CHAT_H;
+  return STACK_CHAT_INPUT_H;
 }
 
 // 縦積みタイルの高さを幅から算出。既定は 16:9(Kickはチャット分を加算)。
