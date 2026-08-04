@@ -874,6 +874,9 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 .win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
 .win-menu-row > button:disabled { opacity: 0.35; cursor: default; }
 .win-menu-row > button.on { color: #3fb950; } /* いま選ばれている側 */
+/* 縦に積む行。幅・高さは値を出さないだけで、並びは他の項目と揃える。 */
+.win-menu-row.col { flex-direction: column; gap: 2px; }
+.win-menu-row.col > button { padding: 11px 12px; font-size: 15px; text-align: left; }
 
 /* 「全画面」(PC含む): 枠を一時的に画面いっぱいへ(枠内のサイト操作・配信選び・ログイン用)。
    inline の left/top/width/height に勝つため !important。解除は #stack-restore か同メニュー。 */
@@ -986,6 +989,7 @@ body.stack-mode .mm-sub { font-size: 11px; }
 body.stack-mode .win-menu { min-width: 196px; padding: 5px; border-radius: 8px; }
 body.stack-mode .win-menu button { padding: 8px 10px; font-size: 13.5px; }
 body.stack-mode .win-menu-row > button { padding: 9px 4px; font-size: 15px; }
+body.stack-mode .win-menu-row.col > button { padding: 8px 10px; font-size: 13.5px; }
 body.stack-mode .win-menu-toggle { gap: 10px; }
 body.stack-mode .win-menu-sep { margin: 3px 6px; }
 

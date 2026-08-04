@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.25';
+const EXPECTED_EXT_VERSION = '0.9.26';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1672,9 +1672,10 @@ function buildQuickControls(win) {
   // 軽量/通常の切替はメニューに置かない。何を映しているか(一覧か、配信そのものか)で
   // 決まる話で、利用者が選ぶ場面が無いため。一覧から配信を選べば自動で切り替わり、
   // 「← 戻る」で一覧へ帰れば自動で戻る。
-  // 幅と高さは2択ずつなので、値を出さずボタンだけを左右に並べる。押せば切り替わる。
+  // 幅と高さは2択ずつなので値は出さない。並びは他の項目と揃えて縦に積む
+  // (横並びにすると、ここだけ操作の形が違って浮く)。
   // メニューは開いたままにする(並べ方を決めるのに何度か押して見比べるため)。
-  win.menuSizeRow = mkRow('stack-only');
+  win.menuSizeRow = mkRow('stack-only col');
   win.menuSpan = mkIcon(win.menuSizeRow, '↔ 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
   win.menuTall = mkIcon(win.menuSizeRow, '⬍ 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
   mkSep();
