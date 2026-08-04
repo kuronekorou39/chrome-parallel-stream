@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.20';
+const EXPECTED_EXT_VERSION = '0.9.21';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1649,24 +1649,6 @@ function buildQuickControls(win) {
   // 使う頻度と目的で3つに束ねる。上から「見ている最中に触るもの」「見え方の設定」「弾幕」。
   // 最後に、枠から出る操作を置く。
 
-  // ① 見え方。幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
-  // syncMenuModeVisibility が隠す(軽量はPCでも機能するので残す)。
-  // トグル表示にして、いま出ているのか隠れているのかが分かるようにする。
-  if (win.chatFrame) win.menuChat = mkToggle(() => toggleChat(win));
-  // 映像調整はスマホでは出さない(小さい画面でそこまで詰める場面が無く、行数だけ増える)。
-  win.menuAdjust = mkItem('🎨 映像調整', () => toggleAdjust(win));
-  win.menuAdjust.classList.add('pc-only');
-  if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
-  mkSep();
-
-  // ② 弾幕。on は永続なので保存(Kickは対象外)。
-  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
-  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
-  if (!win.video) mkSep();
-
-  // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
-  // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
-  // 「戻る」は履歴が無い間は押せない(押しても何も起きないボタンは置かない)。
   const mkRow = (cls) => {
     const r = document.createElement('div');
     r.className = 'win-menu-row' + (cls ? ' ' + cls : '');
@@ -1689,14 +1671,29 @@ function buildQuickControls(win) {
     return b;
   };
 
+  // ① 見え方。幅/高さは縦積み専用の効果しか持たないため、PC(自由配置)では
+  // syncMenuModeVisibility が行ごと隠す(軽量はPCでも機能するので残す)。
+  // トグル表示にして、いま出ているのか隠れているのかが分かるようにする。
+  if (win.chatFrame) win.menuChat = mkToggle(() => toggleChat(win));
+  // 映像調整はスマホでは出さない(小さい画面でそこまで詰める場面が無く、行数だけ増える)。
+  win.menuAdjust = mkItem('🎨 映像調整', () => toggleAdjust(win));
+  win.menuAdjust.classList.add('pc-only');
+  if (!win.video && !win.noNormalMode) win.menuLight = mkToggle(() => toggleLight(win));
   // 幅と高さは2択ずつなので、値を出さずボタンだけを左右に並べる。押せば切り替わる。
-  // 縦積み専用の効果しか持たないため、PC では syncMenuModeVisibility が行ごと隠す。
+  // メニューは開いたままにする(並べ方を決めるのに何度か押して見比べるため)。
   win.menuSizeRow = mkRow('stack-only');
-  // メニューは開いたままにする。並べ方を決めるのに何度か押して見比べるため。
   win.menuSpan = mkIcon(win.menuSizeRow, '↔ 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
   win.menuTall = mkIcon(win.menuSizeRow, '⬍ 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
   mkSep();
 
+  // ② 弾幕。on は永続なので保存(Kickは対象外)。
+  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
+  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
+  if (!win.video) mkSep();
+
+  // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
+  // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
+  // 「戻る」は履歴が無い間は押せない(押しても何も起きないボタンは置かない)。
   const opRow = mkRow();
   win.menuBack = mkIcon(opRow, '←', '枠の中で1つ前のページへ戻る', () => goBackWindow(win));
   mkIcon(opRow, '🔄', 'この枠を再読込', () => reloadWindow(win));
