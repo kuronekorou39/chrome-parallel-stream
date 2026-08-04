@@ -117,12 +117,17 @@ for (const f of PACK) {
 }
 
 // zip は PowerShell の Compress-Archive で作る(依存を増やさないため)。
-// フォルダごと固めるので、展開すると parallel-stream-<版>/ が出てくる。
+// 中身はフォルダを作らず平置きにする。フォルダごと固めると Compress-Archive が
+// パス区切りに Windows 式の \ を書き、ZIP 仕様(/ が正)から外れる。Android の展開ツールは
+// それを区切りと解釈せず「parallel-stream-0.9.11\manifest.json」という名前の1ファイルとして
+// 展開してしまい、拡張機能の読み込みが manifest 無しで失敗した(実機で発生)。
+// 平置きなら区切り自体が無いので起きない。版は zip のファイル名に入っているので、
+// 展開すればその名前のフォルダができる。
 const zipName = `${stageName}.zip`;
 const zipPath = p('dist', zipName);
 execFileSync(
   'powershell.exe',
-  ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}' -DestinationPath '${zipPath}' -Force`],
+  ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\\*' -DestinationPath '${zipPath}' -Force`],
   { stdio: 'inherit' }
 );
 cpSync(zipPath, p('dist', 'parallel-stream-latest.zip'));
@@ -130,5 +135,30 @@ cpSync(zipPath, p('dist', 'parallel-stream-latest.zip'));
 console.log(`\n配布物:`);
 console.log(`  dist/${zipName}                (ページからはこちらを配る。ファイル名で版が分かる)`);
 console.log(`  dist/parallel-stream-latest.zip (版を知らない相手向けの固定 URL)`);
-console.log(`  展開すると ${stageName}/ が出てきます。そのフォルダを拡張機能として読み込みます。`);
+console.log(`  中身は平置き。展開すると ${stageName}/ ができ、そのフォルダを拡張機能として読み込みます。`);
+
+// 展開して壊れないことを確かめる。区切り文字の事故は実機まで気づけないので、ここで止める。
+const entries = execFileSync(
+  'powershell.exe',
+  [
+    '-NoProfile',
+    '-Command',
+    `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
+      `$z=[System.IO.Compression.ZipFile]::OpenRead('${zipPath}'); ` +
+      `$z.Entries | ForEach-Object { $_.FullName }; $z.Dispose()`,
+  ],
+  { encoding: 'utf8' }
+)
+  .split(/\r?\n/)
+  .filter(Boolean);
+const bad = entries.filter((e) => e.includes('\\') || e.includes('/'));
+if (bad.length) {
+  console.error(`\nzip の中にパス区切りが入っています(平置きのはず):\n  ${bad.join('\n  ')}`);
+  process.exit(1);
+}
+if (!entries.includes('manifest.json')) {
+  console.error('\nzip の直下に manifest.json がありません。');
+  process.exit(1);
+}
+console.log(`  検査: ${entries.length} ファイル、すべて直下。manifest.json あり。`);
 console.log(`\n次: git add -A && git commit && git push`);
