@@ -282,7 +282,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.8';
+const EXPECTED_EXT_VERSION = '0.9.9';
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -1716,17 +1716,19 @@ function syncMenuLabels(win) {
       : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
   }
   if (win.menuTall) {
-    win.menuTall.name.textContent = '⬍ 高さ';
+    // 「幅」「高さ」は枠そのものの大きさ、「縮小」は枠の中身の表示倍率。同じ大きさの話に見えて
+    // 別物なので、どちらを指すのかを名前に入れる。
+    win.menuTall.name.textContent = '⬍ 枠の高さ';
     win.menuTall.val.textContent = isTall(win) ? '縦長' : '16:9';
     win.menuTall.btn.title = 'タップで ' + (isTall(win) ? '16:9' : '縦長') + ' に切替';
   }
   if (win.menuSpan) {
-    win.menuSpan.name.textContent = '↔ 幅';
+    win.menuSpan.name.textContent = '↔ 枠の幅';
     win.menuSpan.val.textContent = win.span === 'half' ? '50%' : '100%';
     win.menuSpan.btn.title = 'タップで ' + (win.span === 'half' ? '100%' : '50%(横に2つ)') + ' に切替';
   }
   if (win.menuZoom) {
-    win.menuZoom.name.textContent = '🔍 縮小';
+    win.menuZoom.name.textContent = '🔍 中身の縮小';
     if (win.light) {
       win.menuZoom.btn.disabled = true; // 軽量プレイヤーは等倍必須(縮小すると自動再生が止まる)
       win.menuZoom.val.textContent = '等倍';
