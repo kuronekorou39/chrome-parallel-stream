@@ -18,4 +18,4 @@ Screenshot_*.png
 *.log
 
 # リリースの作業フォルダ(zip だけをリポジトリに置く)
-dist/parallel-stream/
+dist/parallel-stream-*/
