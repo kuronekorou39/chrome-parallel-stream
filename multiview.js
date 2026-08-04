@@ -289,7 +289,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.24';
+const EXPECTED_EXT_VERSION = '0.9.25';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3490,6 +3490,13 @@ function setupIdleHide() {
   const hideCursor = () => {
     if (toolbar.matches(':hover')) return;
     setIdle(true);
+    // 枠の ✕ / ⋮ も一緒に引っ込める。これらは show-bar / menu-open が付いている間ずっと
+    // 出るので、枠を触った直後に別の枠へ移ったり、⋮ を開いたまま放置したりすると
+    // 出しっぱなしになっていた。無操作になったら枠側の表示状態もまとめて落とす。
+    wins.forEach((w) => {
+      w.el.classList.remove('show-bar', 'menu-open');
+      clearTimeout(w.barTimer);
+    });
   };
   const hideToolbar = () => {
     if (toolbar.matches(':hover')) return;

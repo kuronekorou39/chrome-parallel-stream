@@ -462,8 +462,10 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 /* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
    枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
 /* トップページからは開けないサイト(Kick)。押せることは押せるが、見た目で「別扱い」と分かるようにする。 */
-.site-chip-off { opacity: 0.5; border-style: dashed; }
-.site-chip-off:hover { opacity: 0.8; }
+/* 押せないサイトのボタン。破線にすると、左端の太い色帯まで点線になって崩れて見えるので、
+   線は実線のまま落ち着いた色にして「押せない」ことだけ伝える。 */
+.site-chip-off { color: #6e7681; background: #1a1f26; border-color: #262c34; }
+.site-chip-off:hover { background: #21262d; color: #8b949e; }
 
 /* 枠に追加できない URL を貼られたときの説明。 */
 .add-note {
@@ -752,6 +754,8 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 
 /* ===== 弾幕設定の「詳細設定」折りたたみ ===== */
 .dmk-adv { padding: 0 12px 4px; }
+/* スマホでは詳細設定を出さない。小さい画面で詰める場面が無く、パネルが伸びるだけ。 */
+body.stack-mode .dmk-adv { display: none; }
 .dmk-adv-toggle {
   width: 100%; text-align: left;
   background: transparent; color: #8b949e; border: 0; border-top: 1px solid #21262d;
