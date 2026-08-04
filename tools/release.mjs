@@ -78,7 +78,18 @@ console.log(`版を上げます: ${cur} → ${next}`);
 
 manifest.version = next;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-writeFileSync(htmlPath, readFileSync(htmlPath, 'utf8').replace(/\?v=\d+\.\d+\.\d+/g, `?v=${next}`));
+// ?v= と、ZIP への直リンクを版入りに揃える。
+// 直リンクを固定名(latest)のままにすると、落とすたびにブラウザが (1)(2) を付けてしまい、
+// どれが最新か分からなくなる。JS 側で後から差し替える作りにしていたが、押す方が速いと
+// 間に合わないので、配る HTML の時点で版入りにしておく。
+const zipRe = /dist\/parallel-stream-[\w.]+\.zip/g;
+const zipHref = `dist/parallel-stream-${next}.zip`;
+writeFileSync(
+  htmlPath,
+  readFileSync(htmlPath, 'utf8').replace(/\?v=\d+\.\d+\.\d+/g, `?v=${next}`).replace(zipRe, zipHref)
+);
+const bridgePath = p('ext-bridge.js');
+writeFileSync(bridgePath, readFileSync(bridgePath, 'utf8').replace(zipRe, zipHref));
 writeFileSync(
   jsPath,
   readFileSync(jsPath, 'utf8').replace(/EXPECTED_EXT_VERSION = '[\d.]+'/, `EXPECTED_EXT_VERSION = '${next}'`)
