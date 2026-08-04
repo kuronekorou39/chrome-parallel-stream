@@ -439,7 +439,9 @@ body.panel-dragging iframe { pointer-events: none; }
    当てており、.win-chat-wrap 単独だと詳細度で負けて static のままになる。そうなると中の
    iframe がタイル基準で配置され、420px の高さで映像の上に覆いかぶさる(実測)。 */
 .win-body .win-chat-wrap { position: relative; overflow: hidden; }
-.win-body .win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; border: 0; }
+/* top:auto を明示すること。上の .win-body iframe が inset:0 で top も 0 にしており、
+   top と bottom と height が同時に指定されると top が優先されて下端に寄らない(実測)。 */
+.win-body .win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: 100%; border: 0; }
 /* 枠が狭い/縦長のときはチャットを映像の下へ回す(横に並べたままだと映像が潰れる)。
    付け外しは JS の updateWinShapeClass が幅と高さから決める。
    高さは割合で取る。固定 px にすると、小さい枠ではチャットが枠を食い潰す。
@@ -799,7 +801,9 @@ body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロー
    普段は完全に消し(映像に何も重ねない)、ホバー/タップ(show-bar)/メニュー展開中だけ出す。
    消えている間は pointer-events: none で映像操作を邪魔しない。表示時間は JS の BAR_HIDE_MS。 */
 .win-quick {
-  position: absolute; top: 100px; right: 6px; z-index: 7;
+  /* 左に置く。右端は配信サイト側のボタン(全画面・設定・シアター)と取り合いになりやすく、
+     スマホでは片手で持ったときに親指が届きにくい。 */
+  position: absolute; top: 100px; left: 6px; z-index: 7;
   display: flex; flex-direction: column; gap: 6px;
   opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
 }
@@ -814,7 +818,7 @@ body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロー
 .win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
 .win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
 /* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。 */
-.win.cq-narrow .win-quick { flex-direction: row; top: 6px; right: 4px; gap: 4px; }
+.win.cq-narrow .win-quick { flex-direction: row; top: 6px; left: 4px; gap: 4px; }
 .win.cq-narrow .win-quick > button { width: 38px; height: 38px; font-size: 16px; border-radius: 8px; }
 
 /* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
@@ -830,7 +834,7 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 /* ⋮ のドロップダウンメニュー。開く時に JS(positionWinMenu)が position:fixed で画面内へ配置するので、
    タイルの overflow:hidden で切れず、画面端・下端でもはみ出さない(高さ超過時はメニュー内スクロール)。 */
 .win-menu {
-  position: absolute; top: 50px; right: 0; display: none; z-index: 100001;
+  position: absolute; top: 50px; left: 0; display: none; z-index: 100001; /* ⋮ が左なのでメニューも左から開く */
   flex-direction: column; gap: 2px; min-width: 230px;
   overflow-y: auto; overscroll-behavior: contain;
   background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
