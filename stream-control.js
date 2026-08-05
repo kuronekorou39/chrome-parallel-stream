@@ -30,19 +30,7 @@ function mvInOwnFrame() {
   const MAGIC = '__multiviewControl';
   const host = location.hostname;
 
-  // ---- 音声: 起動直後だけ全ミュート ----
-  function muteAll() {
-    const vids = document.querySelectorAll('video');
-    for (const v of vids) {
-      try { v.muted = true; } catch (e) { /* noop */ }
-    }
-  }
-
-  // 起動時にミュート。遅延ロードの <video> も拾うため数回だけ追いがけし、その後は止める。
-  // 継続監視はしない(ユーザーがプレイヤー自前でミュート解除したのを巻き戻さないため)。
-  muteAll();
-  [300, 1200, 2500].forEach((ms) => setTimeout(muteAll, ms));
-
+  // ---- 音声 ----
   // 親(multiview.html)からの「この枠の実音量」指示(value: 0〜1 = 枠ごと音量 × マスタ)。
   // 枠ごと音量とマスタの掛け算は親側で済ませて effective を送ってくるので、ここはそれを全 video に
   // 当てて維持するだけ。Twitch等は内蔵スライダーが video.volume を動かさない(Web Audio 経由)ため、
@@ -50,17 +38,22 @@ function mvInOwnFrame() {
   // muted もスライダーが所有する(>0 で解除 / 0 でミュート)。スマホの縦積みではシールドにより
   // プレイヤーUIへ触れないため、親のスライダーだけで音が出る/消えることを保証する。
   // 「1つだけ聞く」は他の枠の音量を 0 にして行う(プレイヤー自前のミュートには頼らない)。
-  let mvVolume = null; // null = まだ未受信
-  function applyVol() {
-    if (mvVolume === null) return;
-    const wantMuted = mvVolume <= 0;
-    document.querySelectorAll('video').forEach((v) => {
-      try {
-        if (Math.abs(v.volume - mvVolume) > 0.005) v.volume = mvVolume;
-        if (v.muted !== wantMuted) v.muted = wantMuted;
-      } catch (err) { /* noop */ }
-    });
+  let mvVolume = null; // null = まだ未受信。この間は鳴らさない(轟音防止)
+  function applyVolTo(v) {
+    if (!v || v.tagName !== 'VIDEO') return;
+    try {
+      if (mvVolume === null) { v.muted = true; return; } // 音量が決まるまでは無音を保つ
+      // 音量を先に当ててからミュートを解く。逆にすると、解いた瞬間だけサイトの記憶値
+      // (たいてい最大)で鳴ってしまう。
+      if (Math.abs(v.volume - mvVolume) > 0.005) v.volume = mvVolume;
+      const wantMuted = mvVolume <= 0;
+      if (v.muted !== wantMuted) v.muted = wantMuted;
+    } catch (err) { /* noop */ }
   }
+  function applyVol() {
+    document.querySelectorAll('video').forEach(applyVolTo);
+  }
+  applyVol(); // 既にある video(注入前に用意されていた分)を先に押さえる
 
   // ---- 枠内シアター(スマホでは常時自動) ----
   // 視聴ページではページ内の主要 <video> を枠いっぱいに固定表示し、ページスクロールを封じる。
@@ -215,25 +208,19 @@ function mvInOwnFrame() {
     window.parent.postMessage({ [MAGIC]: true, type: 'frame-hello' }, '*');
   } catch (e) { /* noop */ }
 
-  // プレイヤーの上書きや、遅延ロード/SPA遷移で現れた新しい video にも、親の指定値を当て続ける。
+  // 再生が始まる瞬間・サイトが音量を書き換えた瞬間に、その場で当て直す。
+  // これが無いと「枠を足すたび、最初だけ大音量で鳴って、そのあと落ち着く」になる。プレイヤーは
+  // 自分の記憶値(たいてい最大)を video.volume へ書き戻すので、下の1秒ポーリングまでの最大1秒間、
+  // そのままの音量で鳴ってしまうため。以前は YouTube だけを対象にしていたが、Twitch でも同じことが
+  // 起きていた(こちらは埋め込みが muted で始まるぶん、ミュートを解いた直後に鳴る)。
+  // volumechange の再帰は起きない(差が 0.005 以下なら書かないのでその場で収束する)。
+  // 音量/ミュートを当てるだけで play() は呼ばないので、再生ループや churn も起こさない。
+  ['loadedmetadata', 'canplay', 'play', 'playing', 'volumechange'].forEach((ev) =>
+    document.addEventListener(ev, (e) => applyVolTo(e.target), true)); // capture=非バブルのメディアイベントも拾う
+  // 取りこぼしの保険。イベントの来ない経路(プレイヤーの作り直し等)や、注入前から再生していた
+  // video のために、遅めの周期で当て直し続ける。
   // (枠ごと音量は 🎨 パネルで操作する設計なので、これで取り違え・戻し問題は起きない)
   setInterval(applyVol, 1000);
-  // YouTube はプレイヤーが video.volume を周期的に大きめ(自分の記憶値)へ戻すことがあり、1秒ポーリングだと
-  // 戻すまでの間だけ音量が跳ね上がって聞こえる(特にスマホ)。volumechange/play を捕捉して即座に親指定値へ
-  // 当て直す。音量/ミュートを当てるだけで play() は呼ばないので、再生ループや churn は起こさない。
-  // Twitch(IVS/Web Audio)は video.volume を音量制御に使わず干渉の恐れがあるため対象外、YouTube 限定。
-  if (host.includes('youtube.com')) {
-    const fixVol = (v) => {
-      if (mvVolume === null || !v || v.tagName !== 'VIDEO') return;
-      const wantMuted = mvVolume <= 0;
-      try {
-        if (Math.abs(v.volume - mvVolume) > 0.005) v.volume = mvVolume;
-        if (v.muted !== wantMuted) v.muted = wantMuted;
-      } catch (e) { /* noop */ }
-    };
-    ['volumechange', 'play', 'playing'].forEach((ev) =>
-      document.addEventListener(ev, (e) => fixVol(e.target), true)); // capture=非バブルのメディアイベントも拾う
-  }
 
   // ---- 長押し → 親へ「このタイルを掴んだ」を中継(縦積みのドラッグ並び替え用) ----
   // サイト内の通常タップ・クリック・スクロールには一切干渉しない(静止 LP_MS で発火、動けば不成立)。

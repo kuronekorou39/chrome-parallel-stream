@@ -364,6 +364,15 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   box-shadow: 0 8px 22px rgba(0,0,0,0.6);
 }
 .win.adjust-open .win-adjust { display: flex; }
+/* 「名前 + ✕」のヘッダ。枠一覧(.mixer-head)・弾幕設定(.dmk-head)と同じ形。
+   ただしこのパネルは枠に貼り付いていて動かせないので、掴む見た目(cursor:move)は付けない。 */
+.adj-head { display: flex; align-items: center; gap: 8px; }
+.adj-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; }
+.adj-x { /* mixer-x / dmk-x と同じ、枠なしの小さな✕。 */
+  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
+}
+.adj-x:hover { color: #f85149; }
 /* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
 .win.adjust-open .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
 .adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c9d1d9; cursor: pointer; }
@@ -932,13 +941,20 @@ body.has-stack-max #stack-restore { display: inline-flex; }
 body.idle #toolbar-show,
 body.idle #stack-restore { opacity: 0; }
 
-/* 同じく idle 連動で、開いている機能パネル/ダイアログ(追加・配置・位置・一覧/ミキサー・弾幕設定)も
-   一緒にフェードアウトする(視聴の没入用)。パフォーマンス(#perf-panel)は常時監視に意味があるので除外。
+/* 同じく idle 連動で、開いている機能パネル/ダイアログ(追加・配置・位置・一覧/ミキサー・弾幕設定・
+   ≡ メニュー本体・枠の映像調整)も一緒にフェードアウトする(視聴の没入用)。開いたまま放置したものが
+   一つでも残ると、そこだけ画面に浮いて没入が切れるので、出しっぱなしになりうるものは全部ここへ入れる。
+   パフォーマンス(#perf-panel)は常時監視に意味があるので除外。
    ポインタを動かせば arm() が body.idle を外して復帰。消えている間は pointer-events:none で下へ抜ける。 */
-.mixer-panel, .dmk-panel { transition: opacity 0.2s ease; }
+.mixer-panel, .dmk-panel, #main-menu, .win-adjust { transition: opacity 0.2s ease; }
 body.idle .pos-dialog-overlay.open,
 body.idle .mixer-panel,
+body.idle #main-menu,
+body.idle .win-adjust,
 body.idle .dmk-panel { opacity: 0; pointer-events: none; }
+/* ≡ メニューの透明バックドロップも一緒に無効化する。メニューが見えていないのに
+   「どこをクリックしても閉じるだけ」になると、枠に触れず操作を取りこぼす。 */
+body.idle #main-menu-backdrop { pointer-events: none; }
 /* 追加/配置は overlay 透明・中パネルのみ操作可なので、中パネルの操作も idle 中は無効化する。 */
 body.idle #add-dialog.pos-dialog-overlay.open .pos-dialog,
 body.idle #layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: none; }
@@ -981,6 +997,8 @@ body.stack-mode #mm-layout { display: none; }
   .dmk-head { padding: 14px; }
   .dmk-title { font-size: 15px; }
   .dmk-x { font-size: 20px; padding: 4px 10px; }
+  /* 映像調整の ✕ も同じ大きさに(タッチPC=coarse でも幅があれば縦積みにならず、この panel は出る)。 */
+  .adj-x { font-size: 20px; padding: 4px 10px; }
   .dmk-scope-row, .dmk-onoff { padding: 0 14px 10px; }
   .dmk-rows { gap: 12px; padding: 6px 14px 12px; }
   .dmk-row { gap: 12px; }

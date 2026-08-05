@@ -299,7 +299,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.31';
+const EXPECTED_EXT_VERSION = '0.9.32';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -454,6 +454,10 @@ function onFrameState(e) {
   } else if (d.type === 'frame-hello') {
     syncFrameTheater(win);  // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
     syncFrameDanmaku(win);  // 同じく現在の弾幕 ON/OFF も返す
+    // 音量も返す。frame の load を待っていると、その前にプレイヤーが記憶値(たいてい最大)で
+    // 鳴り始めることがある。挨拶=content script 注入直後に渡せば、たいていは <video> が
+    // できる前に音量が決まり、最初の一音から正しい大きさで出せる。
+    applyVolume(win, masterVolume);
   }
 }
 
@@ -1568,6 +1572,24 @@ function buildAdjustPanel(win) {
   const panel = document.createElement('div');
   panel.className = 'win-adjust';
 
+  // 他の浮動パネル(枠一覧・弾幕設定)と同じ「名前 + ✕」のヘッダ。⋮メニューから開いた後、
+  // 閉じ方が ⋮ を開き直すしかないと分かりづらいので、その場で閉じられるようにする。
+  const head = document.createElement('div');
+  head.className = 'adj-head';
+  const title = document.createElement('span');
+  title.className = 'adj-title';
+  title.textContent = '🎨 映像調整';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'adj-x';
+  close.textContent = '✕';
+  close.title = '閉じる';
+  close.addEventListener('click', (e) => {
+    e.stopPropagation();
+    win.el.classList.remove('adjust-open');
+  });
+  head.append(title, close);
+
   const mkRow = (label, min, max, value, oninput) => {
     const row = document.createElement('label');
     row.className = 'adj-row';
@@ -1616,7 +1638,7 @@ function buildAdjustPanel(win) {
     rSat.input.value = '100';
   });
 
-  panel.append(rOpacity.row, rBright.row, rContrast.row, rSat.row, reset);
+  panel.append(head, rOpacity.row, rBright.row, rContrast.row, rSat.row, reset);
   return panel;
 }
 
