@@ -140,6 +140,7 @@ let activeWin = null;
 // 既定は 0(完全無音)にしていたが、音が出ないと壊れているように見える。かといって最初から
 // 大きいほうが害が大きいので、聞こえるが驚かない程度から始める。
 const MASTER_VOLUME_DEFAULT = 0.1;
+const WIN_VOLUME_DEFAULT = 0.5; // 枠ごとの音量の既定
 let masterVolume = MASTER_VOLUME_DEFAULT;
 let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
@@ -293,7 +294,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.28';
+const EXPECTED_EXT_VERSION = '0.9.29';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -803,7 +804,8 @@ function createWindow(url, opts = {}) {
     noNormalMode: isYouTube,
     history: [],
     prevRect: null, freeRect: null,
-    opacity: 100, vol: 1,
+    // 枠ごとの音量の既定。実音量 = これ × マスタ。最初から大きいと事故になるので半分から。
+    opacity: 100, vol: WIN_VOLUME_DEFAULT,
     filter: { bright: 100, contrast: 100, sat: 100 },
     danmaku: { on: false, layer: null, lanes: [], overrides: {} } // コメント弾幕(層/レーンは非保存。overrides=この枠だけの上書き)
   };
@@ -863,7 +865,7 @@ function createWindow(url, opts = {}) {
   makeBarHandle(win, bar);
   resizeGrip.addEventListener('pointerdown', (e) => beginResize(win, resizeGrip.dataset.dir, e));
   // 台形内の音量バー: 操作しても枠は動かさない(makeBarHandle が .win-vol を除外)。即反映+離したら保存。
-  volSlider.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+  volSlider.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
   volSlider.addEventListener('input', () => {
     setWinVol(win, Number(volSlider.value) / 100); // 台形/ミキサー両方のスライダーを同期
     volIcon.textContent = win.vol <= 0 ? '🔇' : '🔊';
@@ -1214,6 +1216,9 @@ function reapStuckDrag() {
 
 function maybeStartLongPress(win, e) {
   if (!e.isPrimary || e.button !== 0) return;
+  // 縦積み(スマホ)では長押しドラッグでの並び替えをしない。指の動きに左右されて成否が読めず、
+  // スクロールとも取り合いになる。並び替えは ⋮メニューの ▲▼ で確実にできる。
+  if (stackMode) return;
   if (!reapStuckDrag()) return; // 進行中ドラッグがあれば新規は掴ませない(古い残骸なら畳んで継続)
   if (win.el.classList.contains('stack-max')) return;
   if (e.target.closest('.win-quick, .win-menu, .win-badge, .win-adjust, .win-bar, .win-resize-grip, button, input')) return;
@@ -1346,6 +1351,7 @@ function onTileDragMsg(e) {
   const d = e.data;
   if (!d || d[MAGIC] !== true) return;
   if (d.type === 'tile-drag-start') {
+    if (stackMode) return; // 縦積みでは長押しドラッグを使わない(▲▼ で並び替える)
     const win = wins.find((w) =>
       (w.frame && w.frame.contentWindow === e.source) ||
       (w.chatFrame && w.chatFrame.contentWindow === e.source));
@@ -2991,7 +2997,7 @@ function syncMasterUI() {
 // 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
 function applyVolume(win, v) {
   // 非表示でも音は止めない(👁は見た目を消すだけ)。実音量 = 枠ごと音量 × マスタ。
-  const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : 1) * v));
+  const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * v));
   if (win.video) {
     try {
       win.video.volume = eff;
@@ -3013,7 +3019,7 @@ function setWinVol(win, v01) {
   syncVolUI(win);
 }
 function syncVolUI(win) {
-  const v = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+  const v = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
   if (win.volSlider) win.volSlider.value = v;
   const row = document.querySelector('#mixer-panel .mixer-row[data-id="' + win.id + '"] .mixer-row-vol');
   if (row) row.value = v;
@@ -3185,7 +3191,7 @@ function renderMixer() {
     volIcon.textContent = '🔊';
     const vol = document.createElement('input');
     vol.type = 'range'; vol.min = '0'; vol.max = '100';
-    vol.value = String(Math.round((win.vol != null ? win.vol : 1) * 100));
+    vol.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
     vol.className = 'mixer-row-vol';
     vol.title = 'この枠の音量';
     vol.addEventListener('input', () => setWinVol(win, Number(vol.value) / 100));
