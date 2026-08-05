@@ -142,6 +142,13 @@ let activeWin = null;
 const MASTER_VOLUME_DEFAULT = 0.1;
 const WIN_VOLUME_DEFAULT = 0.5; // 枠ごとの音量の既定
 let masterVolume = MASTER_VOLUME_DEFAULT;
+// 弾幕とチャットの「全体の既定」。次に追加される枠に適用し、≡メニューのトグルで全枠まとめて
+// 切り替える(切り替えるとこの既定も更新される)。保存して次回以降も引き継ぐ。
+// チャットの既定は「畳む」。コメントは弾幕で読めるうえ、列を出すと映像がその分狭くなるため
+// (PC・スマホとも。出したい枠は ⋮ の 💬、全部出すなら ≡ の「チャット」で)。
+let danmakuDefaultOn = false;
+let chatDefaultOn = false;
+let mixerAutoShown = false; // 枠一覧の自動表示は1回だけ(閉じたら勝手に出し直さない)
 let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
 // 弾幕設定パネルの状態(init→wireToolbar→setupDanmakuPanel が同期実行されるため、ここ=init より前で初期化する)。
@@ -204,6 +211,12 @@ let stackMode = false;
 
   // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
   if (saved.danmakuGlobal) dmkGlobal = Object.assign({}, DMK_DEFAULTS, dmkSanitize(saved.danmakuGlobal));
+  // 弾幕/チャットの全体既定。枠を作る前に読むこと(createWindow がこの値で初期化するため)。
+  if (saved.defaults) {
+    danmakuDefaultOn = saved.defaults.danmaku === true;
+    chatDefaultOn = saved.defaults.chat === true;
+  }
+  syncMainMenuToggles();
 
   // マスタ音量を復元(無ければ 0)。窓を作る前に入れておき、各枠が最初からこの音量で開くように。
   masterVolume = clampVol(saved.masterVolume);
@@ -221,11 +234,6 @@ let stackMode = false;
   }
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   updateCount();
-
-  // PC は枠一覧(音量・表示切替・並び替え)をほぼ必ず使うので、開いた時点で出しておく。
-  // 閉じれば消えるが、保存はしない(次に開いた時はまた出す=「既定で開いている」扱い)。
-  // スマホは画面が狭く、出しっぱなしだとタイルを覆ってしまうので ≡ から開いてもらう。
-  if (!stackMode) openMixer();
 
   // 表示枠を 1 枠ずつ間隔をあけて読み込む(同時読込の 429/初期化ピーク回避)。各枠はスピナーを出して待つ。
   await loadDeferred(deferred);
@@ -299,7 +307,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.32';
+const EXPECTED_EXT_VERSION = '0.9.33';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -476,6 +484,7 @@ function currentLineupItems() {
       tall: w.tall == null ? null : !!w.tall, // 縦積みタイル高の手動指定(null=既定の16:9)
       span: w.span === 'half' ? 'half' : 'full', // 縦積みタイル幅(100%/50%)
       zoom: w.zoom, // 枠内サイトの縮小率の手動指定(🔍。null=幅に応じた既定)
+      chat: !!w.chatOn, // チャット列を出すか(枠ごと。既定は全体設定から)
       dmk: { on: !!w.danmaku.on, overrides: w.danmaku.overrides || {} } // 弾幕のON/OFFと枠ごと上書き設定
     };
   });
@@ -485,7 +494,14 @@ function saveLineup() {
   if (restoring) return;
   try {
     MV.storage.local.set({
-      [MULTIVIEW_ACTIVE_KEY]: { wins: currentLineupItems(), masterVolume, danmakuGlobal: dmkGlobal, timestamp: new Date().toISOString() }
+      [MULTIVIEW_ACTIVE_KEY]: {
+        wins: currentLineupItems(),
+        masterVolume,
+        danmakuGlobal: dmkGlobal,
+        // 全体の既定(次に追加される枠へ適用する)。枠ごとの状態は wins 側に入っている。
+        defaults: { danmaku: danmakuDefaultOn, chat: chatDefaultOn },
+        timestamp: new Date().toISOString()
+      }
     });
   } catch (e) {
     /* noop */
@@ -514,6 +530,9 @@ function restoreLineup(saved) {
       win.danmaku.overrides = dmkSanitize(it.dmk.overrides); // 枠ごとの上書き設定を復元(検証つき)
       win.danmaku.on = !!it.dmk.on; // ON だった枠は frame.load / frame-hello で syncFrameDanmaku が監視を再開
     }
+    // 枠ごとのチャット表示は保存値を優先(全体の既定より、その枠で選んだ状態を尊重する)。
+    if (typeof it.chat === 'boolean') win.chatOn = it.chat;
+    syncChatVisibility(win); // 弾幕ONなら、畳んでいても取得元として生かす
     syncMenuLabels(win);
     if (Number.isFinite(it.x)) {
       if (stackMode) {
@@ -754,7 +773,9 @@ function createWindow(url, opts = {}) {
     // 最大化など再描画の契機で 404 になる。そこで映像は HLS を <video> で直接再生し
     // (リサイズ/再ペアレントの影響を受けない)、チャットだけ本物の kick.com の popout を
     // 横に並べる(プレイヤーが無いので 404 にならず、拡張ページ配下ならログインも通る想定)。
-    body.classList.add('split-chat', 'chat-on');
+    // chat-on は付けない。出すかどうかは全体の既定(chatDefaultOn)で決まり、枠ができた後に
+    // syncChatVisibility が当てる。読み込みだけは先に始める(畳んでいても後で開けるように)。
+    body.classList.add('split-chat');
     const media = document.createElement('div');
     media.className = 'win-media';
     video = document.createElement('video');
@@ -832,7 +853,9 @@ function createWindow(url, opts = {}) {
     // 枠ごとの音量の既定。実音量 = これ × マスタ。最初から大きいと事故になるので半分から。
     opacity: 100, vol: WIN_VOLUME_DEFAULT,
     filter: { bright: 100, contrast: 100, sat: 100 },
-    danmaku: { on: false, layer: null, lanes: [], overrides: {} } // コメント弾幕(層/レーンは非保存。overrides=この枠だけの上書き)
+    // 弾幕とチャットは全体の既定から始める(復元時は restoreLineup が保存値で上書きする)。
+    chatOn: chatDefaultOn,
+    danmaku: { on: danmakuDefaultOn, layer: null, lanes: [], overrides: {} } // コメント弾幕(層/レーンは非保存。overrides=この枠だけの上書き)
   };
   wins.push(win);
 
@@ -907,6 +930,14 @@ function createWindow(url, opts = {}) {
   // サイト枠(非Kick)の iframe を生成。Kick は <video> なので applyVolume だけ。
   if (!isKick && !opts.startHidden && !opts.deferLoad) mountSiteFrame(win);
   applyVolume(win, masterVolume);
+  syncChatVisibility(win); // 全体の既定(chatDefaultOn)を反映。Kick はこの時点で確定する
+
+  // 枠一覧は「最初の枠ができた時」に開く。まだ何も無い画面に出しても操作する対象が無く、
+  // 邪魔なだけなので出さない。以後は自動で出し直さない(閉じたら閉じたまま)。
+  if (!stackMode && !mixerAutoShown && wins.length === 1) {
+    mixerAutoShown = true;
+    openMixer('right'); // 枠は中央付近に出るので、被らない右端へ寄せる
+  }
 
   if (opts.startHidden) {
     // 休止状態で開始(何も読み込んでいない)。表示時に resumeMedia() が読み込む。
@@ -1054,12 +1085,14 @@ function updateWinShapeClass(win, w, h) {
   win.el.classList.toggle('chat-below', below);
   win.el.classList.toggle('span-half', win.span === 'half'); // 半幅ではチャットを出さない(CSS 側)
   win.el.classList.toggle('is-tall', isTall(win)); // 縦長ならチャットを一覧ごと出す(CSS 側)
-  // 自動で畳むのは「下に置く」形のときだけ。横並びは幅 680px 以上でしか選ばれないので、
-  // 映像に 380px 以上残っており潰れない。
-  const cramped = below && h - Math.max(CHAT_BELOW_MIN_H, h * CHAT_BELOW_RATIO) < CHAT_MEDIA_MIN_H;
+  // 自動で畳むのは自由配置(PC)で「下に置く」形のときだけ。横並びは幅 680px 以上でしか選ばれない
+  // ので映像に 380px 以上残り、潰れない。縦積み(スマホ)はタイル高の決め方も、チャットに割く高さ
+  // (STACK_CHAT_INPUT_H)も別なのでこの式が当てはまらない。しかも畳むとタイルが縮んでまた判定が
+  // 変わる…と行ったり来たりするため、こちらでは判定しない。
+  const cramped = !stackMode && below && h - Math.max(CHAT_BELOW_MIN_H, h * CHAT_BELOW_RATIO) < CHAT_MEDIA_MIN_H;
   if (win.el.classList.contains('cq-hide-chat') !== cramped) {
     win.el.classList.toggle('cq-hide-chat', cramped);
-    syncMenuLabels(win); // ⋮の💬に「今は畳んでいる」ことを出す(切り替わった時だけ)
+    syncChatVisibility(win); // 畳む/戻す(⋮の💬の説明もここで更新される)
   }
 }
 
@@ -1589,6 +1622,9 @@ function buildAdjustPanel(win) {
     win.el.classList.remove('adjust-open');
   });
   head.append(title, close);
+  // ヘッダを掴んで枠の中で移動できる(他の浮動パネルと同じ makePanelDraggable)。
+  // 見たいところに被ったまま調整するしかない、という状態にしないため。
+  makePanelDraggable(panel, head);
 
   const mkRow = (label, min, max, value, oninput) => {
     const row = document.createElement('label');
@@ -1851,7 +1887,7 @@ function syncMenuLabels(win) {
   }
   if (win.menuChat) {
     const usable = hasChatContent(win);
-    const on = win.body.classList.contains('chat-on');
+    const on = !!win.chatOn; // 「出す設定か」。実際に見えているかは枠の大きさにもよる(下の cramped)
     // 「表示」のまま枠が小さくて自動で畳んでいる状態。値は変えず(広げれば戻るので)、
     // 出ていない理由が分かるように説明だけ差し替える。
     const cramped = usable && on && win.el.classList.contains('cq-hide-chat');
@@ -2097,6 +2133,7 @@ function toggleDanmaku(win) {
   if (win.danmaku.on) ensureDanmakuLayer(win);
   else clearDanmakuLayer(win);
   sendDanmakuEnabled(win, win.danmaku.on);
+  syncChatVisibility(win); // 畳んでいるチャットを取得元として生かす/やめる
   syncMenuLabels(win);
 }
 function sendDanmakuEnabled(win, on) {
@@ -2239,7 +2276,9 @@ function renderDmkOnOff() {
   }
 }
 function setAllDanmaku(on) {
+  danmakuDefaultOn = on; // 次に追加される枠にも効かせる
   wins.filter((w) => !w.video).forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
+  syncMainMenuToggles();
   saveLineup();
 }
 // プリセット: 現在の適用先の実効値を名前付きで保存し、選んで適用/削除(MV.storage で全体共有)。
@@ -2835,15 +2874,43 @@ function loginDomainOf(host) {
 function hasChatContent(win) {
   if (!win.chatFrame) return false;
   if (win.video) return true; // Kick は生成時にチャットを読み込んでいる
-  return !!win.light && !win.chatUnavailable;
+  return !!win.light && !win.chatUnavailable && !win.chatPending;
 }
 
 function toggleChat(win) {
   if (!win.body || !hasChatContent(win)) return;
-  const on = win.body.classList.toggle('chat-on');
-  if (win.chatBtn) win.chatBtn.classList.toggle('active', on);
+  win.chatOn = !win.chatOn;
+  syncChatVisibility(win);
+  saveLineup(); // 枠ごとの選択は保存する(全体の既定は ≡ メニュー側が持つ)
+}
+
+// チャット列の見せ方を決めて当てる。3つの状態がある:
+//   出す  (chat-on)   … この枠でチャットを出す設定 かつ 中身があり かつ 枠に置ける大きさがある
+//   生かす(chat-feed) … 出さないが弾幕が ON。チャットは弾幕の取得元なので、消さずに実寸のまま
+//                        切り落として残す(display:none にするとサイトがコメントを描かなくなる)
+//   止める(どちらも無し)… 描かせない。読み込み自体はしてあるので、いつでも出せる
+// Kick は弾幕の対象外(コメントは一覧でしか読めない)なので「生かす」は無い。
+function syncChatVisibility(win) {
+  if (!win.body) return;
+  const usable = hasChatContent(win);
+  const show = usable && !!win.chatOn && !win.el.classList.contains('cq-hide-chat');
+  const feed = usable && !show && !!win.danmaku.on && !win.video;
+  win.body.classList.toggle('chat-on', show);
+  win.body.classList.toggle('chat-feed', feed);
+  if (win.chatBtn) {
+    win.chatBtn.classList.toggle('active', show);
+    win.chatBtn.disabled = !usable;
+  }
   syncMenuLabels(win);
   if (stackMode) relayoutStack(); // チャット分のタイル高が変わる
+}
+
+// 全枠のチャットをまとめて出す/畳む。次に追加される枠の既定にもなる(≡メニューから)。
+function setAllChat(on) {
+  chatDefaultOn = on;
+  wins.forEach((w) => { w.chatOn = on; syncChatVisibility(w); });
+  syncMainMenuToggles();
+  saveLineup();
 }
 
 // サイト枠(Twitch/YouTube/OPENREC)の iframe を生成して body に載せる。
@@ -2934,29 +3001,23 @@ function mountChatFrame(win) {
     .catch(() => hideChat(win, 'なし'));
 }
 
-// チャット列の出し入れ。💬 は「チャットがある枠」でだけ押せるようにする。
+// チャットが「使える/使えない」と分かった時に呼ぶ。出すかどうかは枠の設定(win.chatOn)が決めるので、
+// ここでは中身の有無だけを更新して、見せ方は syncChatVisibility に任せる。
+// 💬 は「チャットがある枠」でだけ押せるようにする。
 function showChat(win) {
   win.chatUnavailable = false;
-  win.body.classList.add('chat-on');
-  if (win.chatBtn) {
-    win.chatBtn.disabled = false;
-    win.chatBtn.classList.add('active');
-    win.chatBtn.title = 'チャットの表示/非表示';
-  }
-  syncMenuLabels(win);
-  if (stackMode) relayoutStack();
+  win.chatPending = false;
+  if (win.chatBtn) win.chatBtn.title = 'チャットの表示/非表示';
+  syncChatVisibility(win);
 }
 
+// why: 'なし'=この配信にチャットが無い / '確認中'=まだ分からない(分かるまでは出さない。
+// 先に出して畳むと画面がガタつくため)。
 function hideChat(win, why) {
   win.chatUnavailable = why === 'なし';
-  win.body.classList.remove('chat-on');
-  if (win.chatBtn) {
-    win.chatBtn.classList.remove('active');
-    win.chatBtn.disabled = true;
-    win.chatBtn.title = why === 'なし' ? 'この動画にはチャットがありません' : 'チャットを確認しています';
-  }
-  syncMenuLabels(win);
-  if (stackMode) relayoutStack();
+  win.chatPending = why === '確認中';
+  if (win.chatBtn) win.chatBtn.title = why === 'なし' ? 'この動画にはチャットがありません' : 'チャットを確認しています';
+  syncChatVisibility(win);
 }
 
 // 枠の iframe を作り直す(軽量⇄通常の切替・再読込用)。休止中なら次の表示時に反映される。
@@ -3308,8 +3369,8 @@ function setupMixer() {
       const h = r && r[MIXER_HEIGHT_KEY];
       if (!h || panel.dataset.userResized) return;
       panel.style.height = h + 'px';
-      // 起動時の自動表示(PC)が先に中央寄せしていたら、伸びたぶん中心がずれるので置き直す。
-      if (!panel.hidden) centerPanel(panel);
+      // 自動表示が先に置いていたら、伸びたぶん位置がずれるので同じ寄せ方で置き直す。
+      if (!panel.hidden) { if (panel.dataset.align === 'right') placePanelRight(panel); else centerPanel(panel); }
     });
   } catch (e) { /* noop */ }
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
@@ -3321,14 +3382,18 @@ function setupMixer() {
   mm.addEventListener('change', () => saveLineup());
 }
 
-// 枠一覧を開く(最前面+中央へ置き直し、中身を最新にしてから出す)。
-// 🎚 一覧ボタン・≡メニュー・起動時の自動表示(PC)で共用する。
-function openMixer() {
+// 枠一覧を開く(最前面へ置き直し、中身を最新にしてから出す)。
+// 🎚 一覧ボタン・≡メニュー・最初の枠ができた時の自動表示で共用する。
+// align: 'right' = 右端へ寄せる(自動で出すとき用。枠は中央付近に出るので被らない)。
+//        省略時は中央(自分で開いた時は、目が向いている中央に出るほうが分かりやすい)。
+function openMixer(align) {
   const panel = document.getElementById('mixer-panel');
   if (!panel) return;
   panel.hidden = false;
   raisePanel(panel);
-  centerPanel(panel);
+  panel.dataset.align = align === 'right' ? 'right' : 'center'; // 高さの復元後に置き直すため覚えておく
+  if (align === 'right') placePanelRight(panel);
+  else centerPanel(panel);
   syncMasterUI();
   renderMixer();
 }
@@ -3364,6 +3429,20 @@ function centerPanel(el) {
   el.style.top = Math.max(0, Math.round((ch - el.offsetHeight) / 2)) + 'px';
 }
 
+// 右端へ寄せる(縦は中央)。中央に出すと枠(こちらも中央付近から出る)に重なるので、
+// こちらから出すパネルは端へ逃がす。移動はできるので、あくまで初期位置。
+const PANEL_EDGE_GAP = 12;
+function placePanelRight(el) {
+  if (!el) return;
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+  const p = el.offsetParent;
+  const cw = p ? p.clientWidth : window.innerWidth;
+  const ch = p ? p.clientHeight : window.innerHeight;
+  el.style.left = Math.max(0, Math.round(cw - el.offsetWidth - PANEL_EDGE_GAP)) + 'px';
+  el.style.top = Math.max(0, Math.round((ch - el.offsetHeight) / 2)) + 'px';
+}
+
 function makePanelDraggable(el, handle) {
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !e.isPrimary) return;
@@ -3380,12 +3459,18 @@ function makePanelDraggable(el, handle) {
     // ドラッグ中は全 iframe を無反応にする。クロスオリジン iframe の上を通るとポインタが
     // そちらへ吸われて掴めなくなる(「下に枠があると持てない」)ため、物理的に通させない。
     document.body.classList.add('panel-dragging');
+    // 収める範囲は「left/top の基準になっている親」で測る。ステージ直下のパネル(枠一覧など)は
+    // ステージ、枠に貼り付いたパネル(映像調整)はその枠。ここをステージ固定にすると、枠の中の
+    // パネルが枠の外まで動かせてしまい、枠の overflow:hidden で消える。
+    const par = el.offsetParent; // position:fixed のパネルは null → ステージ(≒ビューポート)で測る
+    const cw = par ? par.clientWidth : stage.clientWidth;
+    const ch = par ? par.clientHeight : stage.clientHeight;
     onPointerDrag(handle, e, (ev) => {
-      // 枠と同じく EDGE_KEEP px を画面内に残してはみ出しを許容する。
+      // 枠と同じく EDGE_KEEP px を親の中に残してはみ出しを許容する。
       // 上はドラッグハンドル(ヘッダ)がパネル先頭にあるので 0 で止める(出すと掴めなくなる)。
       const minL = EDGE_KEEP - el.offsetWidth;
-      const maxL = stage.clientWidth - EDGE_KEEP;
-      const maxT = Math.max(0, stage.clientHeight - EDGE_KEEP);
+      const maxL = cw - EDGE_KEEP;
+      const maxT = Math.max(0, ch - EDGE_KEEP);
       el.style.left = Math.max(minL, Math.min(maxL, sl + ev.clientX - sx)) + 'px';
       el.style.top = Math.max(0, Math.min(maxT, st + ev.clientY - sy)) + 'px';
     }, () => document.body.classList.remove('panel-dragging'));
@@ -3532,6 +3617,20 @@ function wireToolbar() {
 // 項目: 追加・配置・一覧・パフォーマンス・弾幕設定(音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
+// ≡メニューの「弾幕」「チャット」に現在の全体既定を出す(値 + ON のときは緑)。
+function syncMainMenuToggles() {
+  const set = (id, valId, on, onText, offText) => {
+    const btn = document.getElementById(id);
+    const val = document.getElementById(valId);
+    if (!btn || !val) return;
+    val.textContent = on ? onText : offText;
+    btn.classList.toggle('on', on);
+    btn.title = '全部の枠をまとめて切り替え、これから追加する枠の既定にもする';
+  };
+  set('mm-danmaku-all', 'mm-danmaku-all-val', danmakuDefaultOn, 'ON', 'OFF');
+  set('mm-chat-all', 'mm-chat-all-val', chatDefaultOn, '表示', '非表示');
+}
+
 function toggleMainMenu(force) {
   const menu = document.getElementById('main-menu');
   const backdrop = document.getElementById('main-menu-backdrop');
@@ -3564,6 +3663,10 @@ function setupMainMenu() {
   act('mm-add', () => document.getElementById('add-open-btn').click());
   act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
+  // 弾幕/チャットは全枠まとめて切り替え、そのまま次に追加する枠の既定にもなる。
+  // 押しても閉じない(見比べながら両方を切り替えることが多いため)。
+  mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));
+  mkAct('mm-chat-all', () => setAllChat(!chatDefaultOn));
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   act('mm-cookie', openCookieDialog);

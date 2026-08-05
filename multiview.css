@@ -355,18 +355,23 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-controls button:disabled { opacity: 0.35; cursor: default; } /* ⚡: 変換できないURLの間は無効 */
 .win-controls .close:hover { background: #3c0d11; color: #f85149; }
 
-/* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。 */
+/* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。
+   left は translateX(-50%) ではなく計算で中央に置く(幅は下の 340px 固定)。移動できるように
+   したので、transform が残っていると掴んだ位置と実際の位置がずれるため。 */
 .win-adjust {
-  position: absolute; top: 70px; left: 50%; transform: translateX(-50%); z-index: 7;
+  position: absolute; top: 70px; left: calc(50% - 170px); z-index: 7;
   display: none; flex-direction: column; gap: 12px;
   background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 10px;
   padding: 16px; width: 340px; max-width: calc(100% - 24px);
   box-shadow: 0 8px 22px rgba(0,0,0,0.6);
 }
 .win.adjust-open .win-adjust { display: flex; }
-/* 「名前 + ✕」のヘッダ。枠一覧(.mixer-head)・弾幕設定(.dmk-head)と同じ形。
-   ただしこのパネルは枠に貼り付いていて動かせないので、掴む見た目(cursor:move)は付けない。 */
-.adj-head { display: flex; align-items: center; gap: 8px; }
+/* 「名前 + ✕」のヘッダ。枠一覧(.mixer-head)・弾幕設定(.dmk-head)と同じ形で、
+   ここを掴むと枠の中で移動できる(makePanelDraggable。範囲は枠の中に収まる)。 */
+.adj-head {
+  display: flex; align-items: center; gap: 8px;
+  cursor: move; user-select: none; touch-action: none;
+}
 .adj-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; }
 .adj-x { /* mixer-x / dmk-x と同じ、枠なしの小さな✕。 */
   flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
@@ -443,6 +448,16 @@ body.panel-dragging iframe { pointer-events: none; }
   border: 0; display: none; background: #0d1117;
 }
 .win-body.split-chat.chat-on .win-chat-slot { display: block; }
+/* 畳んでいるが弾幕が ON の枠(判定は JS の syncChatVisibility)。チャットは弾幕の取得元なので、
+   display:none で消すとサイトがコメントを描かなくなり、弾幕まで止まる。入れ物だけを 0 にして、
+   中の iframe は実寸のまま切り落とす(縦積みで入力欄だけを残すのと同じ手)。
+   Kick は枠そのものが iframe = 切り落とす入れ物が無いが、弾幕の対象外なので消えたままでよい。
+   セレクタが長いのは詳細度のため。下の chat-below や縦積みの寸法指定(どちらも .win-chat-slot を
+   狙う)に勝たせる必要がある。.win-chat-wrap は .win-chat-slot でもあるので、それを重ねてある。 */
+body .win .win-body.split-chat.chat-feed .win-chat-wrap.win-chat-slot {
+  display: block; flex: 0 0 0; width: 0; height: 0; min-height: 0;
+}
+body .win .win-body.split-chat.chat-feed .win-chat-wrap .win-chat { width: 300px; height: 420px; }
 /* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。
    セレクタは .win-body から書くこと。上の .win-body .win-chat-slot が position:static を
    当てており、.win-chat-wrap 単独だと詳細度で負けて static のままになる。そうなると中の
@@ -460,16 +475,9 @@ body:not(.stack-mode) .win.chat-below .win-body.split-chat { flex-direction: col
 body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(340px, 42%); width: 100%; height: auto; min-height: 0; }
 
 /* 枠を小さくしていくと、下のチャットが固定 340px を取るせいで映像が残らず「コメント欄だけの枠」に
-   なる。そこまで縮んだらチャットの方を畳んで映像を優先する(判定は JS の updateWinShapeClass。
-   💬 の ON/OFF は変えないので、枠を広げれば黙って元に戻る)。上のルールと詳細度が同じなので、
-   必ずこの順(後ろ)に置くこと。
-   Kick は枠そのものが iframe で、弾幕の対象外(コメントは一覧でしか読めない)なので消してよい。 */
-body:not(.stack-mode) .win.cq-hide-chat .win-body > iframe.win-chat-slot { display: none; }
-/* Twitch / YouTube のチャットは弾幕(コメントを映像に流す)の取得元でもあるため、消してしまうと
-   小さい枠でコメントが一切読めなくなる。入れ物だけを 0 にして中の iframe は実寸のまま切り落とす
-   (縦積みで入力欄だけを残すのと同じ手。サイト側は実寸が無いとチャットを描かない)。 */
-body:not(.stack-mode) .win.cq-hide-chat .win-body .win-chat-wrap { flex: 0 0 0; width: 0; height: 0; min-height: 0; }
-body:not(.stack-mode) .win.cq-hide-chat .win-body .win-chat-wrap .win-chat { width: 300px; height: 420px; }
+   なる。そこまで縮んだら .cq-hide-chat が付き(判定は JS の updateWinShapeClass)、
+   syncChatVisibility が chat-on を外して映像を優先する。💬 の設定自体は変えないので、
+   枠を広げれば黙って元に戻る。弾幕 ON の枠は上の chat-feed で取得元として生かされる。 */
 
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
