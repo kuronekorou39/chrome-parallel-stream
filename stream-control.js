@@ -442,6 +442,37 @@ function mvInOwnFrame() {
     }, 500);
   }
 
+  // ---- 埋め込みプレイヤー: サイトへ飛ぶリンクを無効にする ----
+  // 埋め込みプレイヤーは映像の上にタイトルやロゴを重ね、それが本サイトへのリンクになっている。
+  // 枠を触っているときに踏むと、見ていた枠がサイトへ飛んでしまう。ここは「映像を見る場所」で
+  // あって回遊の入口ではないので、飛ばないようにする(元サイトへは ⋮メニューの ↗ で開ける)。
+  // クリックを止めるだけでなく、そもそも押せないように見た目からも外す。
+  if (isDirectTile && (location.pathname.indexOf('/embed/') === 0 || host.includes('player.twitch.tv'))) {
+    const st = document.createElement('style');
+    st.textContent =
+      // YouTube: 上部のタイトル/チャンネル、右下のロゴ、終了画面のリンク
+      '.ytp-title, .ytp-title-channel, .ytp-watermark, .ytp-youtube-button, .ytp-ce-element' +
+      // Twitch: プレイヤー上のチャンネル名・タイトル
+      ', .player-overlay-background a, [data-a-target="player-info-title-link"]' +
+      ' { display: none !important; pointer-events: none !important; }';
+    (document.head || document.documentElement).appendChild(st);
+    // 取りこぼし対策。別タブで開く形(target=_blank)も含めて、外へ出るリンクは踏ませない。
+    window.addEventListener(
+      'click',
+      (e) => {
+        const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+        if (!a) return;
+        try {
+          const u = new URL(a.href, location.href);
+          if (u.pathname.indexOf('/embed/') === 0) return; // 埋め込み内で完結する遷移は通す
+        } catch (err) { /* noop */ }
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      true
+    );
+  }
+
   // ---- YouTube の live_chat 枠: チャットが使えるかを親へ知らせる ----
   // ライブでない動画では live_chat が「このライブ ストリームではチャットは無効です。」だけを出す。
   // そのとき DOM は一覧(yt-live-chat-item-list-renderer)を持たず、単独の

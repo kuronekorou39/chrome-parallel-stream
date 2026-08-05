@@ -136,7 +136,11 @@ let zCounter = 10;
 let panelZ = 90000;
 let idSeq = 0;
 let activeWin = null;
-let masterVolume = 0; // 全体音量(0〜1)。0=無音。各枠の音量をまとめて設定する。
+// 全体音量(0〜1)。実音量 = 枠ごとの音量 × これ。
+// 既定は 0(完全無音)にしていたが、音が出ないと壊れているように見える。かといって最初から
+// 大きいほうが害が大きいので、聞こえるが驚かない程度から始める。
+const MASTER_VOLUME_DEFAULT = 0.1;
+let masterVolume = MASTER_VOLUME_DEFAULT;
 let restoring = true; // 復元中は saveLineup を抑止(復元の途中経過で保存データを部分上書きしないため)
 const wins = [];
 // 弾幕設定パネルの状態(init→wireToolbar→setupDanmakuPanel が同期実行されるため、ここ=init より前で初期化する)。
@@ -289,7 +293,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.27';
+const EXPECTED_EXT_VERSION = '0.9.28';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1680,6 +1684,9 @@ function buildQuickControls(win) {
   win.menuSizeRow = mkRow('stack-only col');
   win.menuSpan = mkIcon(win.menuSizeRow, '↔ 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
   win.menuTall = mkIcon(win.menuSizeRow, '⬍ 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
+  // 並び替え。長押しドラッグは指の動きに左右されて安定しないので、確実に効く手段を用意する。
+  win.menuUp = mkIcon(win.menuSizeRow, '▲ 上へ', 'ひとつ上へ移動', () => moveWin(win, -1), true);
+  win.menuDown = mkIcon(win.menuSizeRow, '▼ 下へ', 'ひとつ下へ移動', () => moveWin(win, 1), true);
   mkSep();
 
   // ② 弾幕。on は永続なので保存(Kickは対象外)。
@@ -1750,6 +1757,23 @@ function isTall(win) {
 // PC(自由配置)では「幅・高さ・縮小」は実質無効/非推奨なので枠メニューから隠す(縦積みでのみ意味を持つ)。
 // 軽量はPCでも機能するので残す。モードは実行中に切り替わりうる(タブレット等)ため、メニュー生成時と
 // updateStackMode の両方から呼んで追従させる。
+// 並び順をひとつ動かす(縦積みの表示順)。隠している枠は飛ばして、見えている並びで動かす。
+function moveWin(win, dir) {
+  const vis = wins.filter((w) => !w.hidden);
+  const i = vis.indexOf(win);
+  if (i < 0) return;
+  const j = i + dir;
+  if (j < 0 || j >= vis.length) return;
+  const from = wins.indexOf(win);
+  const to = wins.indexOf(vis[j]);
+  wins.splice(from, 1);
+  wins.splice(to, 0, win);
+  relayoutStack();
+  saveLineup();
+  renderMixer();
+  wins.forEach((w) => syncMenuLabels(w)); // 端に来たら押せなくする
+}
+
 function syncMenuModeVisibility(win) {
   // 幅・高さは行ごと出し入れする(中のボタンを個別に隠すと行だけが残る)。
   if (win.menuSizeRow) win.menuSizeRow.style.display = stackMode ? '' : 'none';
@@ -1772,6 +1796,12 @@ function syncMenuLabels(win) {
         ? '通常表示ではサイト側のチャットを使います'
         : 'この配信にはチャットがありません'
       : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
+  }
+  if (win.menuUp || win.menuDown) {
+    const vis = wins.filter((w) => !w.hidden);
+    const i = vis.indexOf(win);
+    if (win.menuUp) win.menuUp.disabled = i <= 0;
+    if (win.menuDown) win.menuDown.disabled = i < 0 || i >= vis.length - 1;
   }
   // 幅・高さは2択ずつなのでボタンだけ。いま選ばれている側を色で示す。
   if (win.menuTall) {
@@ -2939,7 +2969,8 @@ function setMasterVolume(v) {
 
 function clampVol(v) {
   v = Number(v);
-  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0;
+  // 保存が無い/壊れている場合は既定へ(0 にすると、初めて開いた人が無音で戸惑う)。
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : MASTER_VOLUME_DEFAULT;
 }
 
 // マスタ音量つまみ/アイコンを masterVolume に同期させる(ツールバー + ミキサーの両方)。
