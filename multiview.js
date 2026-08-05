@@ -222,6 +222,11 @@ let stackMode = false;
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   updateCount();
 
+  // PC は枠一覧(音量・表示切替・並び替え)をほぼ必ず使うので、開いた時点で出しておく。
+  // 閉じれば消えるが、保存はしない(次に開いた時はまた出す=「既定で開いている」扱い)。
+  // スマホは画面が狭く、出しっぱなしだとタイルを覆ってしまうので ≡ から開いてもらう。
+  if (!stackMode) openMixer();
+
   // 表示枠を 1 枠ずつ間隔をあけて読み込む(同時読込の 429/初期化ピーク回避)。各枠はスピナーを出して待つ。
   await loadDeferred(deferred);
 })();
@@ -1032,10 +1037,26 @@ function setRect(win, x, y, w, h) {
 // 映像に十分な幅が残らないなら下に回す。縦長の枠も同様。
 // w/h を直接見るのでレイアウト読み取り(reflow)は起こさない。
 const CHAT_SIDE_MIN_W = 680; // これ未満の幅ではチャットを下に置く(チャット300 + 映像360 相当)
+// 下に置いたチャットが取る高さ(CSS の max(340px, 42%) と一致させること)。
+const CHAT_BELOW_MIN_H = 340;
+const CHAT_BELOW_RATIO = 0.42;
+// 映像に残す最低の高さ。チャットを下に置くと固定で 340px 取られるため、背の低い枠では
+// 映像が潰れて「コメント欄だけの枠」になる。これを割り込むならチャットの方を畳む
+// (💬 の ON/OFF 自体は触らないので、枠を広げれば黙って戻る)。畳み始める枠の高さは
+// この値 + 340px(= 540px)。早すぎ/遅すぎるならここを動かす。
+const CHAT_MEDIA_MIN_H = 200;
 function updateWinShapeClass(win, w, h) {
-  win.el.classList.toggle('chat-below', h > w || w < CHAT_SIDE_MIN_W);
+  const below = h > w || w < CHAT_SIDE_MIN_W;
+  win.el.classList.toggle('chat-below', below);
   win.el.classList.toggle('span-half', win.span === 'half'); // 半幅ではチャットを出さない(CSS 側)
   win.el.classList.toggle('is-tall', isTall(win)); // 縦長ならチャットを一覧ごと出す(CSS 側)
+  // 自動で畳むのは「下に置く」形のときだけ。横並びは幅 680px 以上でしか選ばれないので、
+  // 映像に 380px 以上残っており潰れない。
+  const cramped = below && h - Math.max(CHAT_BELOW_MIN_H, h * CHAT_BELOW_RATIO) < CHAT_MEDIA_MIN_H;
+  if (win.el.classList.contains('cq-hide-chat') !== cramped) {
+    win.el.classList.toggle('cq-hide-chat', cramped);
+    syncMenuLabels(win); // ⋮の💬に「今は畳んでいる」ことを出す(切り替わった時だけ)
+  }
 }
 
 // 枠幅に応じて台形の中身を出し分けるクラスを付ける(旧 container-query の置き換え)。
@@ -1809,6 +1830,9 @@ function syncMenuLabels(win) {
   if (win.menuChat) {
     const usable = hasChatContent(win);
     const on = win.body.classList.contains('chat-on');
+    // 「表示」のまま枠が小さくて自動で畳んでいる状態。値は変えず(広げれば戻るので)、
+    // 出ていない理由が分かるように説明だけ差し替える。
+    const cramped = usable && on && win.el.classList.contains('cq-hide-chat');
     win.menuChat.name.textContent = '💬 チャット';
     win.menuChat.btn.disabled = !usable;
     win.menuChat.val.textContent = !usable ? 'なし' : on ? '表示' : '非表示';
@@ -1817,7 +1841,9 @@ function syncMenuLabels(win) {
       ? win.light === false
         ? '通常表示ではサイト側のチャットを使います'
         : 'この配信にはチャットがありません'
-      : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
+      : cramped
+        ? '枠が小さいので今は畳んでいます(枠を広げると出ます)'
+        : 'タップで ' + (on ? '非表示' : '表示') + ' に切替';
   }
   if (win.menuUp || win.menuDown) {
     const vis = wins.filter((w) => !w.hidden);
@@ -3258,17 +3284,31 @@ function setupMixer() {
   try {
     MV.storage.local.get(MIXER_HEIGHT_KEY, (r) => {
       const h = r && r[MIXER_HEIGHT_KEY];
-      if (h && !panel.dataset.userResized) panel.style.height = h + 'px';
+      if (!h || panel.dataset.userResized) return;
+      panel.style.height = h + 'px';
+      // 起動時の自動表示(PC)が先に中央寄せしていたら、伸びたぶん中心がずれるので置き直す。
+      if (!panel.hidden) centerPanel(panel);
     });
   } catch (e) { /* noop */ }
   document.getElementById('mixer-close').addEventListener('click', () => { panel.hidden = true; });
   document.getElementById('mixer-btn').addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) { raisePanel(panel); centerPanel(panel); syncMasterUI(); renderMixer(); } // 開いたら最前面+中央
+    if (panel.hidden) openMixer(); else panel.hidden = true;
   });
   const mm = document.getElementById('mixer-master');
   mm.addEventListener('input', () => { setMasterVolume(Number(mm.value) / 100); syncMasterUI(); });
   mm.addEventListener('change', () => saveLineup());
+}
+
+// 枠一覧を開く(最前面+中央へ置き直し、中身を最新にしてから出す)。
+// 🎚 一覧ボタン・≡メニュー・起動時の自動表示(PC)で共用する。
+function openMixer() {
+  const panel = document.getElementById('mixer-panel');
+  if (!panel) return;
+  panel.hidden = false;
+  raisePanel(panel);
+  centerPanel(panel);
+  syncMasterUI();
+  renderMixer();
 }
 
 // 汎用: ハンドルをつかんで要素を移動(ステージ内にクランプ)。ミキサーパネル用。

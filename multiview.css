@@ -450,6 +450,18 @@ body:not(.stack-mode) .win.chat-below .win-body.split-chat { flex-direction: col
 /* 42% だけだと小さい枠で入力欄が枠外に出て書き込めない。下限を確保する(実測で 340px 必要)。 */
 body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(340px, 42%); width: 100%; height: auto; min-height: 0; }
 
+/* 枠を小さくしていくと、下のチャットが固定 340px を取るせいで映像が残らず「コメント欄だけの枠」に
+   なる。そこまで縮んだらチャットの方を畳んで映像を優先する(判定は JS の updateWinShapeClass。
+   💬 の ON/OFF は変えないので、枠を広げれば黙って元に戻る)。上のルールと詳細度が同じなので、
+   必ずこの順(後ろ)に置くこと。
+   Kick は枠そのものが iframe で、弾幕の対象外(コメントは一覧でしか読めない)なので消してよい。 */
+body:not(.stack-mode) .win.cq-hide-chat .win-body > iframe.win-chat-slot { display: none; }
+/* Twitch / YouTube のチャットは弾幕(コメントを映像に流す)の取得元でもあるため、消してしまうと
+   小さい枠でコメントが一切読めなくなる。入れ物だけを 0 にして中の iframe は実寸のまま切り落とす
+   (縦積みで入力欄だけを残すのと同じ手。サイト側は実寸が無いとチャットを描かない)。 */
+body:not(.stack-mode) .win.cq-hide-chat .win-body .win-chat-wrap { flex: 0 0 0; width: 0; height: 0; min-height: 0; }
+body:not(.stack-mode) .win.cq-hide-chat .win-body .win-chat-wrap .win-chat { width: 300px; height: 420px; }
+
 /* Kick 用の直接再生 video */
 .win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
 .win-error {
@@ -478,12 +490,15 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
    クロスオリジンの iframe なので「下にサイトのボタンがあるか」は親から判定できず、受け取った
    ポインタを iframe へ渡し直す手段も無いため、判定では解決できない。位置で避ける。
    --grip-inset-b は再生バー(おおむね 40〜56px)の上へ逃がすための距離。触ってみて調整する。 */
-.win-resize-grip {
-  /* 隅からの距離とつまみの大きさ。サイトの UI(下端の再生バー、右のチャット欄とその折りたたみ、
-     全画面/設定ボタン)を避けるため、隅からしっかり内側へ入れる。被るようならこの3つを変える。 */
+/* 隅からの距離とつまみの大きさ。サイトの UI(下端の再生バー、右のチャット欄とその折りたたみ、
+   全画面/設定ボタン)を避けるため、隅からしっかり内側へ入れる。被るようならこの3つを変える。
+   左の ✕/⋮(.win-quick)も自由配置ではこの値を見て高さを合わせるので、枠に持たせる。 */
+.win {
   --grip-inset-r: 88px;
   --grip-inset-b: 88px;
   --grip-size: 90px;
+}
+.win-resize-grip {
   position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
   z-index: 7; width: var(--grip-size); height: var(--grip-size);
   display: flex; align-items: center; justify-content: center;
@@ -808,8 +823,8 @@ body.stack-mode .win.is-tall .win-body .win-chat-wrap .win-chat { height: 100%; 
 body.stack-mode .win.span-half .win-body .win-chat-slot { display: none; }
 body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */
 
-/* 枠の簡易UI(PC含む): [⋮メニュー][✕閉じる]。右端に縦並び。各サイトのトップバー/チャット表示ボタン等と
-   重ならないよう、全枠でヘッダ2つ分(下記 top)下げて配置する(サイト別分岐はしない)。縦並びは右端に寄せて
+/* 枠の簡易UI(PC含む): [✕閉じる][⋮メニュー]。左端に縦並び。各サイトのトップバー/チャット表示ボタン等と
+   重ならないよう、全枠でヘッダ2つ分(下記 top)下げて配置する(サイト別分岐はしない)。縦並びは端に寄せて
    横方向の占有を減らし邪魔になりにくくするため。短い半幅タイルは下の .cq-narrow で横並び・上寄りに戻す。
    普段は完全に消し(映像に何も重ねない)、ホバー/タップ(show-bar)/メニュー展開中だけ出す。
    消えている間は pointer-events: none で映像操作を邪魔しない。表示時間は JS の BAR_HIDE_MS。 */
@@ -819,6 +834,14 @@ body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロー
   position: absolute; top: 100px; left: 6px; z-index: 7;
   display: flex; flex-direction: column; gap: 6px;
   opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+/* 自由配置(PC)は枠が大きく、上端から 100px だと ✕/⋮ だけが上に浮いて他の操作から離れる。
+   右下のつまみと縦の中心を合わせ、枠まわりの操作を同じ高さに揃える(縦積みは枠が小さく、
+   上端基準のままで映像の中ほどに来るのでそちらは触らない)。
+   114px = ボタン 54px × 2 + すき間 6px = このブロックの高さ。 */
+body:not(.stack-mode) .win-quick {
+  top: auto;
+  bottom: calc(var(--grip-inset-b) + (var(--grip-size) - 114px) / 2);
 }
 .win:hover .win-quick,
 .win.show-bar .win-quick,
@@ -831,8 +854,9 @@ body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロー
 }
 .win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
 .win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
-/* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。 */
-.win.cq-narrow .win-quick { flex-direction: row; top: 6px; left: 4px; gap: 4px; }
+/* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。
+   bottom も戻さないと、上下とも指定されて縦に引き伸ばされる。 */
+.win.cq-narrow .win-quick { flex-direction: row; top: 6px; bottom: auto; left: 4px; gap: 4px; }
 .win.cq-narrow .win-quick > button { width: 46px; height: 46px; font-size: 19px; border-radius: 10px; }
 
 /* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
