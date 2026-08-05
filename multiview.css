@@ -546,9 +546,13 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
    させて下のステージを操作できるようにする。閉じるのは✕だけ(枠外クリックでは閉じない)。
    ダイアログ本体だけ pointer-events:auto に戻す(pointer-events は継承プロパティ)。 */
 #add-dialog.pos-dialog-overlay.open,
-#layout-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
+#layout-dialog.pos-dialog-overlay.open,
+#cookie-dialog.pos-dialog-overlay.open,
+#update-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
 #add-dialog.pos-dialog-overlay.open .pos-dialog,
-#layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
+#layout-dialog.pos-dialog-overlay.open .pos-dialog,
+#cookie-dialog.pos-dialog-overlay.open .pos-dialog,
+#update-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
 .pos-grid {
   display: grid; gap: 8px;
   grid-template-columns: repeat(3, 64px);
@@ -1004,3 +1008,12 @@ body.stack-mode .add-sites .site-chip { font-size: 13.5px; padding: 9px 10px; }
 
 /* 「映像調整」はスマホでは出さない。小さい画面でそこまで詰める場面が無く、行数だけ増える。 */
 body.stack-mode .win-menu .pc-only { display: none; }
+
+/* ===== 拡張機能ダイアログ ===== */
+#update-dialog .pos-dialog { width: 340px; max-width: calc(100% - 32px); }
+body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+.upd-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.upd-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: #8b949e; }
+.upd-row b { color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
+.upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }

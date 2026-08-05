@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.29" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.30" />
 </head>
 <body>
   <div id="toolbar">
@@ -41,10 +41,9 @@
     <div class="mm-sep"></div>
     <button id="mm-perf" type="button"><span class="mm-icon">📊</span><span class="mm-label">パフォーマンス</span></button>
     <button id="mm-cookie" type="button"><span class="mm-icon">🍪</span><span class="mm-label">ログインCookie</span></button>
-    <!-- 拡張機能の版。古ければここに出るので、探しに行かなくても気づける。押すと最新の ZIP を落とす。 -->
-    <!-- リンク先は常に存在する固定名。版入りの URL を直接指すと、古いページを開いたままだと
-         既に消えた版を掴んで 404 になる。保存名だけ download 属性で版入りにする。 -->
-    <a id="mm-update" href="dist/parallel-stream-latest.zip" download="parallel-stream-0.9.29.zip"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能の更新</span><span class="mm-sub" id="mm-update-ver"></span></a>
+    <!-- 拡張機能の版。古ければここに出るので、探しに行かなくても気づける。
+         押すと即ダウンロードではなく、版と入れ方を確認できるダイアログを開く。 -->
+    <button id="mm-update" type="button"><span class="mm-icon">⬇</span><span class="mm-label">拡張機能</span><span class="mm-sub" id="mm-update-ver"></span></button>
   </div>
 
   <!-- 枠内でログイン状態を使うと、対象サイトの Cookie の SameSite を変更する。
@@ -68,6 +67,30 @@
         </p>
         <button id="cookie-restore" class="tb-btn" type="button">変更した Cookie を元に戻す</button>
         <p id="cookie-status" class="cookie-note"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 拡張機能ダイアログ: 入っている版と最新版、更新の手順、配布元へのリンク。
+       押した瞬間にダウンロードが始まると、何が落ちてきたのか分からないのでワンクッション置く。 -->
+  <div id="update-dialog" class="pos-dialog-overlay">
+    <div class="pos-dialog pos-dialog-movable" role="dialog" aria-label="拡張機能">
+      <div class="pos-dialog-head">
+        <span class="pos-dialog-title">⬇ 拡張機能</span>
+        <button id="update-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
+      </div>
+      <div class="pos-dialog-body">
+        <div class="upd-rows">
+          <div class="upd-row"><span>入っている版</span><b id="upd-cur">—</b></div>
+          <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
+        </div>
+        <p id="upd-note" class="cookie-note"></p>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-latest.zip" download="parallel-stream-latest.zip">ZIP をダウンロード</a>
+        <p class="cookie-note">
+          展開してできたフォルダを、<code>chrome://extensions</code> の
+          「パッケージ化されていない拡張機能を読み込む」で選び直してください。
+        </p>
+        <a id="upd-repo" class="upd-link" href="https://github.com/kuronekorou39/chrome-parallel-stream" target="_blank" rel="noopener">GitHub でソースと変更履歴を見る</a>
       </div>
     </div>
   </div>
@@ -209,7 +232,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.29"></script>
-  <script src="multiview.js?v=0.9.29"></script>
+  <script src="ext-bridge.js?v=0.9.30"></script>
+  <script src="multiview.js?v=0.9.30"></script>
 </body>
 </html>

@@ -294,7 +294,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.29';
+const EXPECTED_EXT_VERSION = '0.9.30';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -316,13 +316,29 @@ function checkExtVersion() {
   // メニューには常に版を出す(古いときだけでなく、最新であることも分かるように)。
   const sub = document.getElementById('mm-update-ver');
   const item = document.getElementById('mm-update');
+  const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
   if (sub && item) {
-    item.href = EXT_ZIP_URL;
-    item.download = EXT_ZIP_NAME; // 保存名だけ版入りにする
-    const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
     sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
     item.classList.toggle('is-old', !!old);
-    item.title = old ? '拡張機能が古いままです。押すと最新の ZIP を落とします' : '最新の ZIP を落とします';
+    item.title = old ? '拡張機能が古いままです' : '拡張機能の版と更新方法';
+  }
+  // ダイアログの中身も同じ情報で埋めておく(開いたときに作らない)。
+  const cur = document.getElementById('upd-cur');
+  const latest = document.getElementById('upd-latest');
+  const note = document.getElementById('upd-note');
+  const updDl = document.getElementById('upd-dl');
+  if (cur) cur.textContent = v || '(未検出)';
+  if (latest) latest.textContent = EXPECTED_EXT_VERSION;
+  if (note) {
+    note.textContent = !v
+      ? '拡張機能が見つかりません。下から取得して読み込んでください。'
+      : old
+        ? '新しい版があります。更新すると、このページが期待する動作になります。'
+        : '最新です。更新の必要はありません。';
+  }
+  if (updDl) {
+    updDl.href = EXT_ZIP_URL; // 常に存在する固定名(古いページからでも 404 にならない)
+    updDl.download = EXT_ZIP_NAME; // 保存名だけ版入りにする
   }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
@@ -2684,12 +2700,35 @@ function openCookieDialog() {
   dlg.classList.add('open');
 }
 
+// 拡張機能ダイアログ。押した瞬間にダウンロードが始まると何が落ちてきたのか分からないので、
+// 版と手順を見せてから落とさせる。中身は checkExtVersion が埋めている。
+function openUpdateDialog() {
+  const dlg = document.getElementById('update-dialog');
+  if (!dlg) return;
+  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; }
+  const panel = dlg.querySelector('.pos-dialog');
+  centerPanel(panel);
+  raisePanel(dlg);
+  dlg.classList.add('open');
+}
+
+function setupUpdateDialog() {
+  const dlg = document.getElementById('update-dialog');
+  if (!dlg) return;
+  document.getElementById('update-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
+  const panel = dlg.querySelector('.pos-dialog');
+  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+}
+
 function setupCookieDialog() {
   const dlg = document.getElementById('cookie-dialog');
   if (!dlg) return;
   const close = () => dlg.classList.remove('open');
   document.getElementById('cookie-dialog-close').addEventListener('click', close);
-  dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
+  // 枠外クリックでは閉じない(枠を追加/配置と同じ扱い)。≡メニューから開くと、
+  // メニューを閉じた直後の click がここへ落ちて、開いた瞬間に閉じていた。
+  const panel = dlg.querySelector('.pos-dialog');
+  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
 
   const toggle = document.getElementById('cookie-relax');
   toggle.addEventListener('change', () => {
@@ -3418,6 +3457,7 @@ function wireToolbar() {
   setupMixer();
   setupDanmakuPanel();
   setupCookieDialog();
+  setupUpdateDialog();
   MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     // 読込前にユーザーが位置を選んでいたら、その操作を保存値で巻き戻さない。
     if (!toolbarPosTouched) applyToolbarPos((d && d[TOOLBAR_POS_KEY]) || 'bottom', false);
@@ -3465,6 +3505,7 @@ function setupMainMenu() {
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   act('mm-cookie', openCookieDialog);
+  act('mm-update', openUpdateDialog);
   // 透明バックドロップ: メニュー外のタップは「閉じる」だけで、下のタイルへは絶対に流さない。
   document.getElementById('main-menu-backdrop').addEventListener('pointerdown', (e) => {
     e.preventDefault();
