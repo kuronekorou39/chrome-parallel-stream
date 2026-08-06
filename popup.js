@@ -68,12 +68,19 @@ async function renderSavedList() {
     .join('');
 }
 
+// 消すのは「保存中の配信」だけ。この保存には配信の一覧のほかに、全体音量・弾幕の設定・
+// 弾幕/チャットの既定も同居している。丸ごと上書きすると、配信を消したつもりで設定まで
+// 消える(実際にそうなっていた)。読み出してから配信の分だけを空にして書き戻す。
+// 専用ページのキー名を知らなくて済むよう、残す側ではなく消す側を列挙する。
+const CLEARED_KEYS = ['wins', 'urls'];
 async function clearSaved() {
-  await chrome.storage.local.set({
-    [MULTIVIEW_ACTIVE_KEY]: { urls: [], timestamp: new Date().toISOString() }
-  });
+  const data = await chrome.storage.local.get(MULTIVIEW_ACTIVE_KEY);
+  const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
+  const next = Object.assign({}, saved, { timestamp: new Date().toISOString() });
+  CLEARED_KEYS.forEach((k) => { if (k in next) next[k] = []; });
+  await chrome.storage.local.set({ [MULTIVIEW_ACTIVE_KEY]: next });
   await renderSavedList();
-  setStatus('保存中の配信をクリアしました。', 'success');
+  setStatus('保存中の配信をクリアしました(音量・弾幕などの設定は残ります)。', 'success');
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
