@@ -444,7 +444,7 @@ body.panel-dragging iframe { pointer-events: none; }
 /* チャットの「枠」。Kick は iframe 自体が、Twitch/YouTube は入れ物(.win-chat-wrap)がこれになる。 */
 .win-body .win-chat-slot {
   position: static; inset: auto;
-  flex: 0 0 300px; width: 300px; height: 100%;
+  flex: 0 0 var(--chat-w); width: var(--chat-w); height: 100%;
   border: 0; display: none; background: #0d1117;
 }
 .win-body.split-chat.chat-on .win-chat-slot { display: block; }
@@ -457,7 +457,7 @@ body.panel-dragging iframe { pointer-events: none; }
 body .win .win-body.split-chat.chat-feed .win-chat-wrap.win-chat-slot {
   display: block; flex: 0 0 0; width: 0; height: 0; min-height: 0;
 }
-body .win .win-body.split-chat.chat-feed .win-chat-wrap .win-chat { width: 300px; height: 420px; }
+body .win .win-body.split-chat.chat-feed .win-chat-wrap .win-chat { width: var(--chat-w); height: 420px; }
 /* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。
    セレクタは .win-body から書くこと。上の .win-body .win-chat-slot が position:static を
    当てており、.win-chat-wrap 単独だと詳細度で負けて static のままになる。そうなると中の
@@ -514,10 +514,17 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
    ように決めてある: 240 - 6 - 114(✕/⋮ の高さ) = 下から 120px、つまみと縦中心を合わせるので
    120 + (114 - 90) / 2 = 132px。片方だけ動かすと高さが揃わなくなるので、ここを動かすこと。 */
 .win {
-  --grip-inset-r: 88px;
+  --grip-edge-r: 88px;  /* 右端からの基本の距離 */
+  --grip-inset-r: var(--grip-edge-r);
   --grip-inset-b: 132px;
   --grip-size: 90px;
+  --chat-w: 300px;      /* 横に並べるチャット列の幅(下の .win-chat-slot と対) */
 }
+/* 右にチャット列が出ている枠は、その幅ぶん内側へ寄せる。寄せないとつまみが列の上に乗り、
+   映像ではなくチャットの上をつまむことになって、スクロールや書き込みとも取り合いになる。
+   横並びは幅 680px 以上でしか選ばれない(それ未満は chat-below で下に回る)ので、
+   300px 寄せてもつまみが枠の左へはみ出すことはない。 */
+.win.chat-visible:not(.chat-below) { --grip-inset-r: calc(var(--grip-edge-r) + var(--chat-w)); }
 .win-resize-grip {
   position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
   z-index: 7; width: var(--grip-size); height: var(--grip-size);

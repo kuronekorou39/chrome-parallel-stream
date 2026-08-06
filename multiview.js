@@ -307,7 +307,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.37';
+const EXPECTED_EXT_VERSION = '0.9.38';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -2905,6 +2905,10 @@ function syncChatVisibility(win) {
   const feed = usable && !show && !!win.danmaku.on && !win.video;
   win.body.classList.toggle('chat-on', show);
   win.body.classList.toggle('chat-feed', feed);
+  // 枠側にも出しておく。リサイズのつまみは枠の直下にあり、チャットが右に出ている間は
+  // その幅ぶん内側へ寄せる必要があるが、chat-on は .win-body 側なので選べない。
+  // 縦か横かを決める chat-below も枠側にあるので、両方が枠に載っていれば CSS だけで決まる。
+  win.el.classList.toggle('chat-visible', show);
   if (win.chatBtn) {
     win.chatBtn.classList.toggle('active', show);
     win.chatBtn.disabled = !usable;
