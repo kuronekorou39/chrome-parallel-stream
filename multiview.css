@@ -657,6 +657,11 @@ body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロー�
   flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-family: inherit; font-size: 13px; cursor: pointer;
   background: #21262d; color: #f0f6fc; border: 1px solid #30363d; border-radius: 6px;
 }
+/* 「その枠だけ」を編集している状態(⋮ から開くとこちら)。全体の既定を変えているつもりで
+   枠の上書きに入れてしまうと、全体で開き直したときに何も変わっていないように見えるので、
+   一目で分かるように色を付ける。 */
+#danmaku-panel.scope-win .dmk-scope { border-color: #f0b849; color: #f0b849; }
+#danmaku-panel.scope-win .dmk-scope-label { color: #f0b849; }
 /* 種類ごとの見出し(サイズ/速度/色/表示)。 */
 .dmk-group {
   font-size: 11px; color: #6e7681; letter-spacing: 0.04em;

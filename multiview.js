@@ -307,7 +307,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.33';
+const EXPECTED_EXT_VERSION = '0.9.34';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -2234,6 +2234,14 @@ function renderDanmakuPanel() {
   });
   populateDmkScope();
   renderDmkOnOff();
+  // 適用先をタイトルにも出す。⋮ から開くと「その枠だけ」になるが、適用先の行だけだと気づかず
+  // 「全体を変えたつもりが枠の上書きになっていた(=全体で開き直すと元のまま)」が起きるため。
+  const titleEl = document.querySelector('#danmaku-panel .dmk-title');
+  // 枠名まで入れると 300px 幅では見出しが切れる。どちらを編集中かだけを短く出し、
+  // どの枠かは真下の「適用先」で見せる。
+  if (titleEl) titleEl.textContent = dmkPanelWin ? '💬 弾幕設定(この枠だけ)' : '💬 弾幕設定(全体)';
+  const panelEl = document.getElementById('danmaku-panel');
+  if (panelEl) panelEl.classList.toggle('scope-win', !!dmkPanelWin); // 枠選択中は適用先の行を目立たせる
   const resetBtn = document.getElementById('dmk-reset');
   if (resetBtn) {
     if (dmkPanelWin) { // 枠: 全体と違う設定がある時だけ「解除」を出す
