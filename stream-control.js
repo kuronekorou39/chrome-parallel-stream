@@ -39,15 +39,28 @@ function mvInOwnFrame() {
   // プレイヤーUIへ触れないため、親のスライダーだけで音が出る/消えることを保証する。
   // 「1つだけ聞く」は他の枠の音量を 0 にして行う(プレイヤー自前のミュートには頼らない)。
   let mvVolume = null; // null = まだ未受信。この間は鳴らさない(轟音防止)
-  function applyVolTo(v) {
+  // 自分で当てた直後の volumechange は無視する間隔。
+  // volumechange を合図に即座に当て直すと、サイト側も自分の記憶値へ戻そうとするため押し合いになり、
+  // 1秒間に何百回も書き合って枠が重くなる。同一サイトの枠は1プロセスに同居するので、1枠で起きると
+  // 同居する枠まで一斉にカクつく(実際に発生)。ここで間隔を空け、押し合っても毎秒数回までに抑える。
+  // 取りこぼしても下の1秒ポーリングが必ず拾うので、音量が狂ったままにはならない。
+  const VOL_SETTLE_MS = 350;
+  function applyVolTo(v, viaVolumeChange) {
     if (!v || v.tagName !== 'VIDEO') return;
+    const now = Date.now();
+    if (viaVolumeChange && v.mvVolAt && now - v.mvVolAt < VOL_SETTLE_MS) return; // 自分が書いた反響 or 押し合い
     try {
-      if (mvVolume === null) { v.muted = true; return; } // 音量が決まるまでは無音を保つ
+      if (mvVolume === null) { // 音量が決まるまでは無音を保つ
+        if (!v.muted) { v.muted = true; v.mvVolAt = now; }
+        return;
+      }
       // 音量を先に当ててからミュートを解く。逆にすると、解いた瞬間だけサイトの記憶値
       // (たいてい最大)で鳴ってしまう。
-      if (Math.abs(v.volume - mvVolume) > 0.005) v.volume = mvVolume;
+      let wrote = false;
+      if (Math.abs(v.volume - mvVolume) > 0.005) { v.volume = mvVolume; wrote = true; }
       const wantMuted = mvVolume <= 0;
-      if (v.muted !== wantMuted) v.muted = wantMuted;
+      if (v.muted !== wantMuted) { v.muted = wantMuted; wrote = true; }
+      if (wrote) v.mvVolAt = now; // 書いた時だけ記録(書いていないなら反響も起きない)
     } catch (err) { /* noop */ }
   }
   function applyVol() {
@@ -215,8 +228,12 @@ function mvInOwnFrame() {
   // 起きていた(こちらは埋め込みが muted で始まるぶん、ミュートを解いた直後に鳴る)。
   // volumechange の再帰は起きない(差が 0.005 以下なら書かないのでその場で収束する)。
   // 音量/ミュートを当てるだけで play() は呼ばないので、再生ループや churn も起こさない。
-  ['loadedmetadata', 'canplay', 'play', 'playing', 'volumechange'].forEach((ev) =>
+  // 再生が始まる契機は素直に当てる(何度も連続しない)。canplay は入れない。バッファリングのたびに
+  // 飛んでくるので、回線が細ったときに当て直しが増えて悪化する側に効く。
+  ['loadedmetadata', 'play', 'playing'].forEach((ev) =>
     document.addEventListener(ev, (e) => applyVolTo(e.target), true)); // capture=非バブルのメディアイベントも拾う
+  // サイト側の書き換えへの追従だけは押し合いになりうるので、上の VOL_SETTLE_MS で間隔を空ける。
+  document.addEventListener('volumechange', (e) => applyVolTo(e.target, true), true);
   // 取りこぼしの保険。イベントの来ない経路(プレイヤーの作り直し等)や、注入前から再生していた
   // video のために、遅めの周期で当て直し続ける。
   // (枠ごと音量は 🎨 パネルで操作する設計なので、これで取り違え・戻し問題は起きない)
@@ -434,7 +451,13 @@ function mvInOwnFrame() {
   // 枠を触っているときに踏むと、見ていた枠がサイトへ飛んでしまう。ここは「映像を見る場所」で
   // あって回遊の入口ではないので、飛ばないようにする(元サイトへは ⋮メニューの ↗ で開ける)。
   // クリックを止めるだけでなく、そもそも押せないように見た目からも外す。
-  if (isDirectTile && (location.pathname.indexOf('/embed/') === 0 || host.includes('player.twitch.tv'))) {
+  // Twitch のチャットも www.twitch.tv/embed/<ch>/chat = /embed/ 始まりなので、パスだけで
+  // 判定するとチャット枠にも入る。隠す指定は一致しないので無害だが、下のリンク無効化が効いて
+  // チャット内の URL やメンションが踏めなくなる。プレイヤーの埋め込みだけに絞る。
+  const isPlayerEmbed =
+    (location.pathname.indexOf('/embed/') === 0 && !/\/chat\/?$/.test(location.pathname)) ||
+    host.includes('player.twitch.tv');
+  if (isDirectTile && isPlayerEmbed) {
     const st = document.createElement('style');
     st.textContent =
       // YouTube: 上部のタイトル/チャンネル、右下のロゴ、終了画面のリンク
