@@ -881,6 +881,48 @@ body:not(.stack-mode) .win-quick {
 .win.cq-narrow .win-quick { flex-direction: row; top: 6px; bottom: auto; left: 4px; gap: 4px; }
 .win.cq-narrow .win-quick > button { width: 46px; height: 46px; font-size: 19px; border-radius: 10px; }
 
+/* ===== 枠の操作(✕ / ⋮ / リサイズのつまみ)の見え方: 3段階 =====
+   出ているあいだも、ふだんは映像に溶けるすりガラスにしておき、近づくとボタンらしくなる。
+   出す/消す(opacity)は上のルールが担当で、ここは「出ている間の濃さ」だけを決める。
+     1. 遠い … 半透明のガラス板。映像の上に四角い板が常に乗っているように見せない
+     2. 近い … ✕/⋮ はひとまとまりなので、どちらかに寄れば両方はっきりさせる
+     3. 乗った … 押せる的として最も強く出す
+   マウスのある環境だけに当てる。タッチには hover が無く、薄いまま戻らなくなるため。
+   backdrop-filter は下の映像をぼかす演出。効かない環境(別プロセスの iframe 等)でも
+   半透明の板として成立するよう、地色と枠線だけで見えるようにしてある。 */
+@media (hover: hover) {
+  .win-quick > button,
+  .win-resize-grip {
+    background: rgba(22, 27, 34, 0.22);
+    border-color: rgba(240, 246, 252, 0.16);
+    color: rgba(240, 246, 252, 0.5);
+    box-shadow: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 明るい映像の上でも記号が沈まないように */
+    backdrop-filter: blur(7px) saturate(115%);
+    -webkit-backdrop-filter: blur(7px) saturate(115%);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .win-quick:hover > button {
+    background: rgba(13, 17, 23, 0.82);
+    border-color: rgba(240, 246, 252, 0.3);
+    color: #f0f6fc;
+  }
+  .win-quick > button:hover {
+    background: rgba(13, 17, 23, 0.95);
+    border-color: #58a6ff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+  .win-quick > button.q-close:hover {
+    background: rgba(60, 13, 17, 0.95); border-color: #f85149; color: #f85149;
+  }
+  .win-resize-grip:hover {
+    background: rgba(88, 166, 255, 0.3);
+    border-color: rgba(88, 166, 255, 0.9);
+    color: #f0f6fc;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+}
+
 /* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
    席をスルッと空ける(自由配置=free では他枠は動かないので reordering は付かない)。 */
 body.stack-mode.reordering { user-select: none; }
