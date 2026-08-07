@@ -537,7 +537,13 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
   opacity: 0; pointer-events: none; /* 出ていないときは押せない */
   transition: opacity 0.15s ease;
 }
-.win:hover .win-resize-grip, .win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
+/* 出す条件。:hover はマウスのある環境だけに限る。タッチで :hover を残すと、一度タップした枠に
+   張り付いたまま戻らず、時間で消えなくなる(枠の中が iframe のサイトはタップが枠の中へ吸われる
+   ので起きないが、Kick だけは映像が親側の <video> なので枠自身に :hover が残る。実機で発生)。 */
+.win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .win:hover .win-resize-grip { opacity: 1; pointer-events: auto; }
+}
 .win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
 
 /* ===== メニュー位置ダイアログ(中央モーダル) ===== */
@@ -875,9 +881,13 @@ body:not(.stack-mode) .win-quick {
   top: auto;
   bottom: calc(var(--grip-inset-b) + (var(--grip-size) - 114px) / 2);
 }
-.win:hover .win-quick,
+/* 出す条件。:hover はマウスのある環境だけ(上の .win-resize-grip と同じ理由。タッチで :hover が
+   張り付くと、Kick の枠だけ ✕/⋮ が消えなくなる)。タッチは show-bar の時間切れで消える。 */
 .win.show-bar .win-quick,
 .win.menu-open .win-quick { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .win:hover .win-quick { opacity: 1; pointer-events: auto; }
+}
 .win-quick > button {
   /* ✕ と ⋮ は枠の上に重なる小さな的なので、指で外さない大きさにする。 */
   width: 54px; height: 54px; border-radius: 12px; border: 1px solid #30363d;
