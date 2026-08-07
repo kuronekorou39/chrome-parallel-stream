@@ -1,5 +1,9 @@
 # 設計メモ
 
+素の JavaScript のみで、ビルド不要・npm 依存なしです(Manifest V3)。
+Kick だけはサイトを埋め込まず、[hls.js](https://github.com/video-dev/hls.js) で HLS を直接再生しています
+(拡張ページの文脈だとプレイヤーの内部リクエストが弾かれ、再描画のたびに 404 になるため)。
+
 ## UI ページを通常のオリジンに置いている理由
 
 マルチビューの UI は、拡張ページ(`chrome-extension://`)ではなく通常の https ページとして配信しています
