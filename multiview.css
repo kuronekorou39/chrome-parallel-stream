@@ -1110,8 +1110,11 @@ body.stack-mode #layout-dialog .pos-dialog,
 body.stack-mode #cookie-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
 body.stack-mode .pos-dialog-body { padding: 12px; }
 body.stack-mode .pos-dialog-title { font-size: 14px; }
-body.stack-mode .add-sites { gap: 8px; margin-bottom: 10px; }
-body.stack-mode .add-sites .site-chip { font-size: 13.5px; padding: 9px 10px; }
+/* サイトのボタンだけは縮めない。2×2 で4つしかなく、縮めても画面はほとんど稼げない一方、
+   指で押す的としては小さすぎて隣を押してしまう(実機で誤タップ多発)。高さ 48px 前後を確保し、
+   すき間も広めに取って、隣との押し間違いを減らす。 */
+body.stack-mode .add-sites { gap: 12px; margin-bottom: 12px; }
+body.stack-mode .add-sites .site-chip { font-size: 15px; padding: 14px 12px; }
 
 /* 「映像調整」はスマホでは出さない。小さい画面でそこまで詰める場面が無く、行数だけ増える。 */
 body.stack-mode .win-menu .pc-only { display: none; }
