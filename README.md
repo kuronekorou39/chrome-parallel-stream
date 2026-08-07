@@ -29,12 +29,16 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 ## インストール
 
-**[UI ページ](https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html)を開くだけでは動きません。拡張機能が必須です。**
+1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-latest.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
+2. Chrome のアドレスバーに `chrome://extensions` と入れて開く
+3. 右上の「**デベロッパー モード**」を ON にする
+4. 左上に出てくる「**パッケージ化されていない拡張機能を読み込む**」を押して、1 で展開したフォルダを選ぶ
+5. Chrome 右上のパズルのアイコン → **Parallel Stream** → 「**マルチビューを開く**」
 
-1. このリポジトリをクローンする
-2. Chrome で `chrome://extensions` を開き、「デベロッパーモード」を ON
-3. 「パッケージ化されていない拡張機能を読み込む」で、`manifest.json` があるディレクトリを選ぶ
-4. ツールバーのアイコン → 「マルチビューを開く」
+これで使えます。更新するときは、新しい ZIP を落として同じ手順でフォルダを選び直してください
+(アプリの `≡` メニュー →「拡張機能」から、新しい版が出ているか確認できます)。
+
+> 開発する場合は、このリポジトリをクローンして、そのフォルダを 4 で選んでください。
 
 ---
 
