@@ -475,7 +475,17 @@ function mvInOwnFrame() {
       '.ytp-title, .ytp-title-channel, .ytp-watermark, .ytp-youtube-button, .ytp-ce-element' +
       // Twitch: プレイヤー上のチャンネル名・タイトル
       ', .player-overlay-background a, [data-a-target="player-info-title-link"]' +
-      ' { display: none !important; pointer-events: none !important; }';
+      ' { display: none !important; pointer-events: none !important; }' +
+      // Twitch: 再生が止まった時に映像の上へ大きく出る案内(配信タイトル・チャンネル名・カテゴリ)。
+      // 回線が細ると出っぱなしになって邪魔なうえ、押すと別タブでサイトが開いてしまう。
+      // .video-player__overlay の子のうち、
+      //   .player-overlay-background … 再生ボタンが入っている(残す)
+      //   .video-preview-overlay      … 停止中のサムネイル(残す)
+      //   .click-handler              … タップ判定(残す)
+      // 以外を畳む。案内はこのどれでもない子の下にあり、クラス名がビルドごとに変わるハッシュ
+      // なので直接は指せない。実機で「案内だけ消えて再生ボタンは残る」ことを確認済み。
+      ' .video-player__overlay > div:not(.player-overlay-background):not(.video-preview-overlay):not(.click-handler)' +
+      ' { display: none !important; }';
     (document.head || document.documentElement).appendChild(st);
     // 取りこぼし対策。別タブで開く形(target=_blank)も含めて、外へ出るリンクは踏ませない。
     window.addEventListener(
