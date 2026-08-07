@@ -307,7 +307,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.39';
+const EXPECTED_EXT_VERSION = '0.9.40';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1421,14 +1421,20 @@ function beginStackDrag(win, e) {
 // frame 内の content script(stream-control.js)から中継される長押しドラッグ。
 // 開始時に iframe の画面内位置 + frame内クライアント座標で親クライアント系へ校正し、
 // 以後の移動は screen 座標の差分で追う(タイルごと iframe が動いても screen はぶれない)。
+// メッセージの送り主(frame の window)から、どの枠かを引く。映像側とチャット側のどちらから
+// 来ても同じ枠を返す(枠の中の操作は、どちらのフレームからでも中継されてくるため)。
+function winOfSource(src) {
+  return wins.find((w) =>
+    (w.frame && w.frame.contentWindow === src) ||
+    (w.chatFrame && w.chatFrame.contentWindow === src));
+}
+
 function onTileDragMsg(e) {
   const d = e.data;
   if (!d || d[MAGIC] !== true) return;
   if (d.type === 'tile-drag-start') {
     if (stackMode) return; // 縦積みでは長押しドラッグを使わない(▲▼ で並び替える)
-    const win = wins.find((w) =>
-      (w.frame && w.frame.contentWindow === e.source) ||
-      (w.chatFrame && w.chatFrame.contentWindow === e.source));
+    const win = winOfSource(e.source);
     if (!win) return;
     const frameEl = win.frame && win.frame.contentWindow === e.source ? win.frame : win.chatFrame;
     const r = frameEl.getBoundingClientRect();
@@ -1450,15 +1456,17 @@ function onTileDragMsg(e) {
     finishStackDrag();
   } else if (d.type === 'tile-shift-click') {
     // frame 上での Shift+クリック → その枠を複数選択にトグル。
-    const win = wins.find((w) =>
-      (w.frame && w.frame.contentWindow === e.source) ||
-      (w.chatFrame && w.chatFrame.contentWindow === e.source));
+    const win = winOfSource(e.source);
     if (win) { toggleMultiSelect(win); revealHeader(win); }
   } else if (d.type === 'tile-raise') {
     // frame 内で右クリック → ドラッグ前でもその枠を即最前面へ(重なりの下から出す)。
-    const win = wins.find((w) =>
-      (w.frame && w.frame.contentWindow === e.source) ||
-      (w.chatFrame && w.chatFrame.contentWindow === e.source));
+    const win = winOfSource(e.source);
+    if (win) { focusWindow(win); revealHeader(win); }
+  } else if (d.type === 'tile-tap') {
+    // 枠の中(別オリジンの iframe)のタップ。親には届かないので content script が中継してくる。
+    // 枠の縁を狙わなくても、どこを触ってもその枠が選ばれ、✕/⋮ が出るようにする。
+    // focusWindow は DOM のフォーカスを奪わないので、枠の中で文字を打っている最中でも邪魔しない。
+    const win = winOfSource(e.source);
     if (win) { focusWindow(win); revealHeader(win); }
   }
 }

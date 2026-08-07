@@ -398,6 +398,17 @@ function mvInOwnFrame() {
   };
   window.addEventListener('pointermove', relayActivity, { capture: true, passive: true });
   window.addEventListener('pointerdown', relayActivity, { capture: true, passive: true });
+
+  // ---- 枠の中のタップを親へ知らせる(枠の選択 + 操作ボタンの表示) ----
+  // 枠の中身は別オリジンなので、ここへのタップは親のページに一切届かない。親は「iframe へ
+  // フォーカスが移った」を blur で拾っているが、タッチでは移らないことが多く(既にその iframe に
+  // フォーカスがある / 動画のタップでフォーカスが動かない)、結果として枠の縁を狙わないと
+  // 枠を選べなかった。押した時点で1通だけ送る(移動やスクロールでは送らない=tile-activity とは別)。
+  // 入れ子のフレームからも送る。上の階層の content script が親まで中継する。
+  window.addEventListener('pointerdown', (e) => {
+    if (!e.isPrimary) return;
+    post('tile-tap');
+  }, { capture: true, passive: true });
   window.addEventListener('message', (e) => {
     if (e.source !== window.parent) return; // この枠を埋め込んでいる親からのみ
     const d = e.data;
@@ -695,7 +706,7 @@ function mvInOwnFrame() {
     if (!dmkOriginAllowed(e.origin)) return;  // 対象サイト配下の子のみ(広告/第三者iframeを弾く)
     const d = e.data;
     if (!d || d[MAGIC] !== true) return;
-    if (d.type === 'tile-activity') { // 入れ子(live_chat 等)の操作も上(最終的にトップ)へ「活動中」として中継
+    if (d.type === 'tile-activity' || d.type === 'tile-tap') { // 入れ子(live_chat 等)の操作も上(最終的にトップ)へ中継
       try { window.parent.postMessage(d, '*'); } catch (err) { /* noop */ }
     } else if (d.type === 'chat-message') {
       if (!dmkOn) return; // ON の間だけ中継(不要中継・注入面の縮小)
