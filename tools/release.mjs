@@ -180,4 +180,11 @@ for (const f of olds.slice(KEEP)) {
   console.log(`  古い配布物を削除: ${f}`);
 }
 console.log(`  残している版: ${olds.slice(0, KEEP).join(', ')}`);
+
+// zip を作る前の作業フォルダは、作った後は用が無い。放っておくと版のぶんだけ溜まり続けるので
+// (git は追跡していないが、手元のディスクと検索結果を汚す)、今回のもの以外は消す。
+const stages = readdirSync(p('dist'), { withFileTypes: true })
+  .filter((e) => e.isDirectory() && /^parallel-stream-\d+\.\d+\.\d+$/.test(e.name) && e.name !== stageName);
+for (const e of stages) rmSync(p('dist', e.name), { recursive: true, force: true });
+if (stages.length) console.log(`  古い作業フォルダを削除: ${stages.length} 件`);
 console.log(`\n次: git add -A && git commit && git push`);
