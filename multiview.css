@@ -1116,6 +1116,12 @@ body.stack-mode .pos-dialog-title { font-size: 14px; }
 body.stack-mode .add-sites { gap: 12px; margin-bottom: 12px; }
 body.stack-mode .add-sites .site-chip { font-size: 15px; padding: 14px 12px; }
 
+/* 押しても枠を作らないサイト(mellow-fan / Kick)は、押し間違いを気にする対象ではないので
+   一段小さくして下段に落ち着かせる。2×2 の下の行がまとめて低くなる。
+   PC・タッチ・縦積みのどの指定より後に置いて、全部に効かせている。 */
+.add-sites .site-chip-off { font-size: 13px; padding: 8px 10px; }
+body.stack-mode .add-sites .site-chip-off { font-size: 13.5px; padding: 9px 10px; }
+
 /* 「映像調整」はスマホでは出さない。小さい画面でそこまで詰める場面が無く、行数だけ増える。 */
 body.stack-mode .win-menu .pc-only { display: none; }
 

@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.45" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.46" />
 </head>
 <body>
   <div id="toolbar">
@@ -120,14 +120,17 @@
         <button id="add-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
       </div>
       <div class="pos-dialog-body">
-        <!-- ワンクリックでサイトのトップを枠に開く。Kick だけはサイトを埋め込まず hls.js で直接再生する
-             仕組みのため、トップページでは成立しない。ボタンは並べたうえで非活性にし、押したら
-             「配信ページの URL を直接貼ってほしい」旨を出す(項目が無いと、そもそも対応しているのか
-             分からないため)。 -->
+        <!-- 上段(Twitch / YouTube)はワンクリックでサイトのトップを枠に開く。
+             下段(mellow-fan / Kick)は押しても枠を作らず、「配信ページの URL を貼ってほしい」旨を
+             出すだけ。Kick はサイトを埋め込まず hls.js で直接再生する仕組みでトップページが成立せず、
+             mellow-fan は普段使わないのに押すと枠が出て煩わしいため。項目自体は残す
+             (無いと、そもそも対応しているのかが分からなくなる)。見た目も一段小さく落としてある。 -->
         <div class="add-sites">
           <button class="site-chip" data-site="twitch" type="button" title="Twitch を開く">Twitch</button>
           <button class="site-chip" data-site="youtube" type="button" title="YouTube を開く">YouTube</button>
-          <button class="site-chip" data-site="openrec" type="button" title="mellow-fan(旧 OPENREC)を開く">mellow-fan</button>
+          <button class="site-chip site-chip-off" data-site="openrec" type="button"
+                  data-note="mellow-fan は配信ページの URL を貼り付けてください。"
+                  title="mellow-fan は配信ページの URL を貼り付けてください">mellow-fan</button>
           <button class="site-chip site-chip-off" data-site="kick" type="button"
                   data-note="Kick は配信ページの URL を貼り付けてください。"
                   title="Kick は配信ページの URL を貼り付けてください">Kick</button>
@@ -236,7 +239,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.45"></script>
-  <script src="multiview.js?v=0.9.45"></script>
+  <script src="ext-bridge.js?v=0.9.46"></script>
+  <script src="multiview.js?v=0.9.46"></script>
 </body>
 </html>

@@ -310,7 +310,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.45';
+const EXPECTED_EXT_VERSION = '0.9.46';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3632,7 +3632,7 @@ function wireToolbar() {
   // ダイアログ内: 主要サイトのワンクリック追加(閉じないので、続けて何枠でも追加できる)。
   document.querySelectorAll('.site-chip').forEach((btn) => {
     btn.addEventListener('click', () => {
-      // data-note 付き(Kick)はトップページから開けないサイト。理由を出すだけで枠は作らない。
+      // data-note 付き(Kick / mellow-fan)は枠を作らず、理由を出して URL 欄へ誘導するだけ。
       // disabled 属性にすると click が飛ばず理由を出せないので、見た目だけ非活性にしてある。
       if (btn.dataset.note) { note(btn.dataset.note); document.getElementById('add-url').focus(); return; }
       note('');
