@@ -11,7 +11,8 @@ _metadata/
 chrome-parallel-stream.zip
 
 # 動作確認のために置いた一時スクリーンショット(実機キャプチャ等)。ソースではないので追跡しない。
-image.png
+# README に載せるものは docs/images/ へ縮小・JPEG 化して置く(元の PNG は数MBあるため)。
+image*.png
 Screenshot_*.png
 キャプチャ*.png
 
