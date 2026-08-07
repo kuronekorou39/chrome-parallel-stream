@@ -313,7 +313,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.51';
+const EXPECTED_EXT_VERSION = '0.9.52';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -787,13 +787,13 @@ function createWindow(url, opts = {}) {
     video = document.createElement('video');
     video.className = 'win-video';
     video.autoplay = true;
-    video.muted = true; // 起動時はミュート(轟音防止)。以後はネイティブUIで自分で解除
+    video.muted = true; // 起動時はミュート(轟音防止)。音量はミキサーで操作する
     video.playsInline = true;
-    // 縦積み(スマホ)では出さない。Kick だけがネイティブUIを出しっぱなしで、他のサイト(埋め込み
-    // プレイヤー)は触らなければ引っ込むため、ここだけ映像の上に常に操作列が乗って見える。
-    // 時間も再生も設定も、このアプリ側(音量はミキサー、全画面と再読込は⋮メニュー)で足りる。
-    // 触れる的が減るぶん、タップで枠を選ぶ動作も邪魔されなくなる。
-    video.controls = !stackMode;
+    // ネイティブUIは出さない。Kick だけがこれを出しっぱなしで、他のサイト(埋め込みプレイヤー)は
+    // 触らなければ引っ込むため、ここだけ映像の上に常に操作列が乗って見えていた。
+    // 時間も再生も設定も、ライブを見るぶんには使わない(音量はミキサー、全画面と再読込は⋮メニュー)。
+    // 触れる的が減るぶん、クリック/タップで枠を選ぶ動作も邪魔されなくなる。
+    video.controls = false;
     media.appendChild(video);
     body.appendChild(media);
     // 休止スタート(startHidden)や遅延読み込み(deferLoad)時は、表示/順次読込のタイミングで読む。
@@ -1187,7 +1187,6 @@ function updateStackMode() {
       if (r) setRect(w, r.x, r.y, r.w, r.h);
     });
   }
-  wins.forEach((w) => { if (w.video) w.video.controls = !on; }); // Kick のネイティブUI(縦積みでは出さない)
   wins.forEach((w) => sendTheaterEnabled(w, on && !w.light)); // モード切替を各フレームへ(軽量はシアター不要)
   wins.forEach((w) => applyFrameZoom(w)); // 既定縮小率がモードで変わる(自由配置=等倍 / 縦積み=75/50%)
   wins.forEach((w) => syncMenuModeVisibility(w)); // PCでは幅/高さ/縮小を隠す(縦積み専用のため)
