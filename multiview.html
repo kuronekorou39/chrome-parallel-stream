@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.50" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.51" />
 </head>
 <body>
   <div id="toolbar">
@@ -68,6 +68,8 @@
           枠の中でログイン状態になり、チャットへの書き込みなどができます。
           この変更はこのページの中だけでなく<strong>ブラウザ全体に効き、拡張機能を削除しても残ります</strong>。
           OFF にすると以後は Cookie に触れませんが、既に変更したぶんは下のボタンで戻してください。
+          戻せるのは<strong>この拡張が変更を記録したぶんだけ</strong>で、戻した時点で記録は消えます
+          (続けて押すと「0 件」になります)。
         </p>
         <button id="cookie-restore" class="tb-btn" type="button">変更した Cookie を元に戻す</button>
         <p id="cookie-status" class="cookie-note"></p>
@@ -239,7 +241,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.50"></script>
-  <script src="multiview.js?v=0.9.50"></script>
+  <script src="ext-bridge.js?v=0.9.51"></script>
+  <script src="multiview.js?v=0.9.51"></script>
 </body>
 </html>
