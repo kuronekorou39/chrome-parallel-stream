@@ -126,19 +126,21 @@ for (const f of PACK) {
 // 展開してしまい、拡張機能の読み込みが manifest 無しで失敗した(実機で発生)。
 // 平置きなら区切り自体が無いので起きない。版は zip のファイル名に入っているので、
 // 展開すればその名前のフォルダができる。
-const zipName = `${stageName}.zip`;
+// 置くのは固定名の1つだけ。配る URL は常に latest なので(版入りの URL を直接指すと、古いページを
+// 開いたままの利用者が消えた版を掴んで 404 になる)、版入りの zip はどこからも参照されない。
+// 版はダウンロード時の保存名(download 属性)で分かるようにしてあり、ファイル名として存在する
+// 必要は無い。過去の版が要るなら git から取り出せる。
+const zipName = 'parallel-stream-latest.zip';
 const zipPath = p('dist', zipName);
 execFileSync(
   'powershell.exe',
   ['-NoProfile', '-Command', `Compress-Archive -Path '${stage}\\*' -DestinationPath '${zipPath}' -Force`],
   { stdio: 'inherit' }
 );
-cpSync(zipPath, p('dist', 'parallel-stream-latest.zip'));
 
 console.log(`\n配布物:`);
-console.log(`  dist/${zipName}                (ページからはこちらを配る。ファイル名で版が分かる)`);
-console.log(`  dist/parallel-stream-latest.zip (版を知らない相手向けの固定 URL)`);
-console.log(`  中身は平置き。展開すると ${stageName}/ ができ、そのフォルダを拡張機能として読み込みます。`);
+console.log(`  dist/${zipName}(固定 URL。保存名は ${stageName}.zip になる)`);
+console.log(`  中身は平置き。展開すると1つフォルダができ、それを拡張機能として読み込みます。`);
 
 // 展開して壊れないことを確かめる。区切り文字の事故は実機まで気づけないので、ここで止める。
 const entries = execFileSync(
@@ -165,21 +167,12 @@ if (!entries.includes('manifest.json')) {
 }
 console.log(`  検査: ${entries.length} ファイル、すべて直下。manifest.json あり。`);
 
-// 過去の版は残すが、際限なく増やさない。古いページからのリンク切れを防ぐぶんだけ持つ。
-const KEEP = 5;
-const olds = readdirSync(p('dist'))
-  .filter((f) => /^parallel-stream-\d+\.\d+\.\d+\.zip$/.test(f))
-  .sort((a, b) => {
-    const num = (s) => s.match(/(\d+)\.(\d+)\.(\d+)/).slice(1).map(Number);
-    const [a1, a2, a3] = num(a);
-    const [b1, b2, b3] = num(b);
-    return b1 - a1 || b2 - a2 || b3 - a3;
-  });
-for (const f of olds.slice(KEEP)) {
+// 版入りの zip を置いていた頃の名残を掃除する(参照が無いのに毎回リポジトリへ増えていく)。
+const olds = readdirSync(p('dist')).filter((f) => /^parallel-stream-\d+\.\d+\.\d+\.zip$/.test(f));
+for (const f of olds) {
   rmSync(p('dist', f), { force: true });
-  console.log(`  古い配布物を削除: ${f}`);
+  console.log(`  版入りの古い zip を削除: ${f}`);
 }
-console.log(`  残している版: ${olds.slice(0, KEEP).join(', ')}`);
 
 // zip を作る前の作業フォルダは、作った後は用が無い。放っておくと版のぶんだけ溜まり続けるので
 // (git は追跡していないが、手元のディスクと検索結果を汚す)、今回のもの以外は消す。
