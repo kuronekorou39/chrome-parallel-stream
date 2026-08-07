@@ -471,8 +471,12 @@ function mvInOwnFrame() {
   if (isDirectTile && isPlayerEmbed) {
     const st = document.createElement('style');
     st.textContent =
-      // YouTube: 上部のタイトル/チャンネル、右下のロゴ、終了画面のリンク
+      // YouTube: 上部のタイトル/チャンネル、右下のロゴ、終了画面のリンク。
+      // さらに、止まった時に映像を覆うもの: 一時停止中の「他の動画」パネル、終了画面のサムネイル群、
+      // エラー画面の中の外部リンク(押すと別タブで YouTube が開く)。
+      // エラーの文言自体は残す。枠が黒いだけだと、止まっているのか壊れているのか分からなくなるため。
       '.ytp-title, .ytp-title-channel, .ytp-watermark, .ytp-youtube-button, .ytp-ce-element' +
+      ', .ytp-pause-overlay, .ytp-endscreen-content, .ytp-error-content-wrap-reason a, .ytp-small-redirect' +
       // Twitch: プレイヤー上のチャンネル名・タイトル
       ', .player-overlay-background a, [data-a-target="player-info-title-link"]' +
       ' { display: none !important; pointer-events: none !important; }' +
