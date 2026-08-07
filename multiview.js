@@ -40,6 +40,9 @@ const RESTORE_STAGGER_MS = 1000; // 起動(更新)時、複数枠を一気に読
 const LOAD_SPINNER_FALLBACK_MS = 8000; // 読み込みスピナーを必ず消す保険(load イベントが来ないサイト/エラー対策)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const STACK_TALL_RATIO = 0.75; // 縦長タイルの高さ(ステージ高比)。⋮の「高さ切替」で縦長にした枠に使う
+// 最後のタイルの下に足す空きの量(画面高に対する比)。下端は ≡ メニューが重なり、
+// キーボードが出ると画面の下半分が埋まるので、最後の枠を上へ送れるだけの余地を残す。
+const STACK_TAIL_RATIO = 0.5;
 const TOOLBAR_POS_KEY = 'toolbarPos'; // ツールバーの配置(top/bottom/left/right)を保存する storage キー
 const TOOLBAR_POSITIONS = ['top', 'bottom', 'left', 'right'];
 const PERF_HISTORY = 60; // パフォーマンスパネルのスパークラインに保持するサンプル数(≒直近60秒)
@@ -307,7 +310,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.41';
+const EXPECTED_EXT_VERSION = '0.9.42';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -1221,6 +1224,9 @@ function relayoutStack() {
     }
   }
   // 末尾に余白の番兵を置き、最後のタイルが下配置ツールバーの裏に隠れず最後までスクロールできるようにする。
+  // さらに画面ぶんの空きを足して、要素が無くても下へスクロールできるようにする。下端は ≡ メニューが
+  // 重なるうえ、枠の中の入力欄(チャット)を触るとキーボードが出て画面の下半分が埋まるため、
+  // 最後のタイルを上へ送れる余地が要る。空白に見えるのは意図したもの。
   let pad = document.getElementById('stack-pad');
   if (!pad) {
     pad = document.createElement('div');
@@ -1230,7 +1236,8 @@ function relayoutStack() {
   }
   pad.style.left = '0px';
   // バーは縦積みでは非表示(offsetHeight=0)のため、≡メニューぶんの最低余白は常に確保する。
-  pad.style.top = (y + Math.max(72, cs.contains('tb-pos-bottom') ? tb.offsetHeight : 0)) + 'px';
+  const gapForBar = Math.max(72, cs.contains('tb-pos-bottom') ? tb.offsetHeight : 0);
+  pad.style.top = (y + gapForBar + Math.round(stage.clientHeight * STACK_TAIL_RATIO)) + 'px';
 }
 
 // 縦積みでチャットに足す高さ。
@@ -3449,6 +3456,19 @@ function centerPanel(el) {
   el.style.top = Math.max(0, Math.round((ch - el.offsetHeight) / 2)) + 'px';
 }
 
+// 下端へ寄せる(横は中央)。縦積み(スマホ)はタイルが上から順に積まれるので、中央に出すと
+// 追加したそばから枠に隠れてしまう。続けて追加する間、積み上がる様子が見えるようにする。
+function placePanelBottom(el) {
+  if (!el) return;
+  el.style.right = 'auto';
+  el.style.bottom = 'auto';
+  const p = el.offsetParent;
+  const cw = p ? p.clientWidth : window.innerWidth;
+  const ch = p ? p.clientHeight : window.innerHeight;
+  el.style.left = Math.max(0, Math.round((cw - el.offsetWidth) / 2)) + 'px';
+  el.style.top = Math.max(0, Math.round(ch - el.offsetHeight - PANEL_EDGE_GAP)) + 'px';
+}
+
 // 右端へ寄せる(縦は中央)。中央に出すと枠(こちらも中央付近から出る)に重なるので、
 // こちらから出すパネルは端へ逃がす。移動はできるので、あくまで初期位置。
 const PANEL_EDGE_GAP = 12;
@@ -3547,12 +3567,15 @@ function wireToolbar() {
   const addDialog = document.getElementById('add-dialog');
   const addPanel = addDialog.querySelector('.pos-dialog');
   const closeAdd = () => addDialog.classList.remove('open');
-  // 開くたび中央へ置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば中央から始まる)。
+  // 開くたび置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば同じ位置から始まる)。
   // 表示中にもう一度押したら閉じる(≡メニューの項目どうしで挙動を揃える)。
+  // 縦積み(スマホ)だけ下寄せ。タイルが上から積まれるので、中央だと追加した枠にすぐ隠れる。
   const openAdd = (e) => {
     if (e) e.stopPropagation();
     if (addDialog.classList.contains('open')) { closeAdd(); return; }
-    centerPanel(addPanel); raisePanel(addDialog); addDialog.classList.add('open');
+    if (stackMode) placePanelBottom(addPanel); else centerPanel(addPanel);
+    raisePanel(addDialog);
+    addDialog.classList.add('open');
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
