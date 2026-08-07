@@ -262,7 +262,39 @@ function onFrameUrl(e) {
   // 枠の中で一覧から配信・動画を選んだら、その時点で「プレイヤー + チャット」の構成へ移る。
   // 利用者に軽量/通常を選ばせない方針(見ている対象で決まる話でしかない)。
   // YouTube は視聴ページを枠に入れるとレンダラが落ちるので、そもそも他に選択肢が無い。
+  if (kickWatchChannel(win.url)) { swapToKickWindow(win); return; } // Kick は枠ごと作り直す(下記)
   if (toLightUrl(win.url)) switchToEmbed(win);
+}
+
+// Kick の枠を、一覧を開いている iframe から HLS 直再生の枠へ差し替える。
+// Kick のプレイヤーは iframe 内だと再描画のたびに 404 になるため映像は <video> で持つが、
+// その器は枠の生成時にしか作れない。そこで「同じ場所・同じ並び順・同じ音量で作り直す」。
+// これで利用者は URL をコピーせず、枠の中で配信を選ぶだけでよくなる。
+function swapToKickWindow(win) {
+  const url = win.url;
+  const rect = win.freeRect || getRect(win); // 縦積み中はタイル座標ではなく退避してある自由配置の座標
+  const idx = wins.indexOf(win);
+  const vol = win.vol;
+  closeWindow(win);
+  const next = createWindow(url, { silent: true });
+  if (!next) return;
+  if (Number.isFinite(vol)) setWinVol(next, vol);
+  // 並び順を元の位置へ戻す(縦積みでは並び順がそのまま画面の順番になるため)。
+  const at = wins.indexOf(next);
+  if (idx >= 0 && at >= 0 && at !== idx) {
+    wins.splice(at, 1);
+    wins.splice(idx, 0, next);
+  }
+  if (stackMode) {
+    next.freeRect = rect;
+    relayoutStack();
+  } else {
+    setRect(next, rect.x, rect.y, rect.w, rect.h);
+  }
+  focusWindow(next);
+  updateCount();
+  saveLineup();
+  renderMixer();
 }
 
 // live_chat 枠からの「チャットが使えるか」。使えない動画(ライブでない等)では列ごと畳む。
@@ -313,7 +345,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.53';
+const EXPECTED_EXT_VERSION = '0.9.54';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -734,7 +766,9 @@ function createWindow(url, opts = {}) {
   volSlider.title = 'この枠の音量';
   volWrap.append(volIcon, volSlider);
 
-  const isKick = hostOf(url).includes('kick.com');
+  // Kick は「配信ページ」のときだけ HLS 直再生の枠にする。トップや一覧は普通の iframe で開き、
+  // 枠の中で配信を選んだら onFrameUrl が作り直す(そのために URL を貼らずに済む)。
+  const isKick = !!kickWatchChannel(url);
   // YouTube は視聴ページを枠に入れると Chromium が落ちるため、埋め込みプレイヤーで映像を出し、
   // チャットは公式の live_chat 枠を横に並べる(Kick と同じ2分割)。
   // 2分割の器は枠の生成時にしか作れないので、トップページ等でも YouTube なら先に用意しておく
@@ -1048,6 +1082,18 @@ function kickChannelOf(url) {
   } catch (e) {
     return '';
   }
+}
+
+// kick.com のうち「配信ページ」だけを拾う(トップ・一覧・検索などはチャンネルではない)。
+// 配信ページなら チャンネル名 を、それ以外なら '' を返す。
+const KICK_NON_CHANNEL = [
+  'browse', 'categories', 'category', 'following', 'search', 'popout', 'clips',
+  'subscriptions', 'messages', 'dashboard', 'about', 'help', 'faq', 'terms', 'privacy'
+];
+function kickWatchChannel(url) {
+  if (!hostOf(url).includes('kick.com')) return '';
+  const ch = kickChannelOf(url);
+  return ch && !KICK_NON_CHANNEL.includes(ch.toLowerCase()) ? ch : '';
 }
 
 function showVideoError(body, msg) {
@@ -2900,6 +2946,9 @@ function loginDomainOf(host) {
   if (host.includes('twitch.tv')) return 'twitch.tv';
   if (host.includes('mellow-fan.com')) return 'mellow-fan.com';
   if (host.includes('openrec.tv')) return 'openrec.tv';
+  // Kick は配信を選ぶための一覧を枠で開く。ログイン状態でないとフォロー中が出ず、
+  // 「自分が見たい配信を選ぶ」という用途が果たせない。
+  if (host.includes('kick.com')) return 'kick.com';
   return null;
 }
 
