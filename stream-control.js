@@ -485,6 +485,11 @@ function mvInOwnFrame() {
       // 以外を畳む。案内はこのどれでもない子の下にあり、クラス名がビルドごとに変わるハッシュ
       // なので直接は指せない。実機で「案内だけ消えて再生ボタンは残る」ことを確認済み。
       ' .video-player__overlay > div:not(.player-overlay-background):not(.video-preview-overlay):not(.click-handler)' +
+      ' { display: none !important; }' +
+      // Twitch: 「特定のオーディエンス向けに指定されています」の注意書き(コンテンツ分類ラベル)。
+      // 再生ボタンと同じ側にあるので上のルールでは消えない。隠しても再生の妨げにはならないことは
+      // 実機で確認済み(隠した状態から再生を再開できた)。
+      ' [data-a-target="content-classification-warning-disclosure-overlay"], .disclosure-card' +
       ' { display: none !important; }';
     (document.head || document.documentElement).appendChild(st);
     // 取りこぼし対策。別タブで開く形(target=_blank)も含めて、外へ出るリンクは踏ませない。
