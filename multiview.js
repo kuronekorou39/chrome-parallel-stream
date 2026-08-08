@@ -348,7 +348,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.57';
+const EXPECTED_EXT_VERSION = '0.9.58';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -838,10 +838,16 @@ function createWindow(url, opts = {}) {
 
     const channel = kickChannelOf(url);
     if (channel) {
+      // 他サイトと同じ「入れ物 + iframe」にする。畳んでいる間も弾幕の取得元として生かすには、
+      // 入れ物側を 0 にして中の iframe を実寸のまま切り落とす必要があるため(chat-feed)。
+      // iframe を直接置いていた頃は、畳む = display:none しかなく、弾幕も一緒に止まっていた。
+      const wrap = document.createElement('div');
+      wrap.className = 'win-chat-slot win-chat-wrap';
       const chat = document.createElement('iframe');
-      chat.className = 'win-chat win-chat-slot'; // Kick は一覧ごと出すので入れ物は要らない
+      chat.className = 'win-chat';
       chat.allow = IFRAME_ALLOW;
-      body.appendChild(chat);
+      wrap.appendChild(chat);
+      body.appendChild(wrap);
       chatFrame = chat;
       // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
       if (!opts.startHidden && !opts.deferLoad) {
@@ -1297,8 +1303,8 @@ function relayoutStack() {
 }
 
 // 縦積みでチャットに足す高さ。
-// Twitch / YouTube は弾幕でコメントが読めるので、一覧まで出す必要がない。入力欄だけを残す
-// (CSS 側で枠の下端に合わせて切り出す)。Kick は弾幕の対象外なので一覧が要る。
+// コメントは弾幕で読めるので、一覧まで出す必要がない。入力欄だけを残す
+// (CSS 側で枠の下端に合わせて切り出す)。全サイト共通(Kick も 0.9.58 から弾幕に対応)。
 // 半幅(横に2つ)のときは、そもそも入力欄が使える大きさにならないので出さない。
 function stackChatH(win) {
   if (!win.body) return 0;
@@ -1306,7 +1312,7 @@ function stackChatH(win) {
   if (win.span === 'half') return 0;
   // 「高さ」で縦長を選んだ枠は、増えたぶんをチャットにも回して一覧まで出す。
   // 16:9 のままなら入力欄だけ(コメントは弾幕で読める)。これで高さの選択が効くようになる。
-  if (win.video || isTall(win)) return STACK_CHAT_H;
+  if (isTall(win)) return STACK_CHAT_H;
   return STACK_CHAT_INPUT_H;
 }
 
@@ -1861,10 +1867,11 @@ function buildQuickControls(win) {
   win.menuDown = mkIcon(win.menuSizeRow, '▼ 下へ', 'ひとつ下へ移動', () => moveWin(win, 1), true);
   mkSep();
 
-  // ② 弾幕。on は永続なので保存(Kickは対象外)。
-  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
-  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
-  if (!win.video) mkSep();
+  // ② 弾幕。on は永続なので保存。
+  // Kick も 0.9.54 で content script が入り、チャットを読めるようになったので対象に含める。
+  win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
+  mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
+  mkSep();
 
   // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
   // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
@@ -2252,7 +2259,7 @@ function dmkEditValue(key, value) {
 function applyDanmakuSettings() {
   wins.forEach((w) => { if (w.danmaku.layer) w.danmaku.layer.style.opacity = dmkSettings(w).opacity / 100; });
 }
-// 適用先ドロップダウンの選択肢を「全体の既定 + 弾幕対象の各枠(Kick以外)」で作り直し、現在の対象を選択。
+// 適用先ドロップダウンの選択肢を「全体の既定 + 各枠」で作り直し、現在の対象を選択。
 // 個別設定のある枠には ● を付けて分かるようにする。対象枠が閉じられていたら全体へ戻す。
 function populateDmkScope() {
   const sel = document.getElementById('dmk-scope');
@@ -2262,7 +2269,7 @@ function populateDmkScope() {
   const og = document.createElement('option');
   og.value = 'global'; og.textContent = '全体の既定';
   sel.appendChild(og);
-  wins.filter((w) => !w.video).forEach((w) => {
+  wins.forEach((w) => {
     const o = document.createElement('option');
     o.value = String(w.id);
     o.textContent = winLabel(w) + (dmkHasDiff(w) ? ' ●' : ''); // ● = 全体と違う個別設定あり
@@ -2356,7 +2363,7 @@ function renderDmkOnOff() {
 }
 function setAllDanmaku(on) {
   danmakuDefaultOn = on; // 次に追加される枠にも効かせる
-  wins.filter((w) => !w.video).forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
+  wins.forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
   syncMainMenuToggles();
   saveLineup();
 }
@@ -2434,7 +2441,7 @@ function openDanmakuPanel(win) {
     panel.hidden = true;
     return;
   }
-  dmkPanelWin = (win && !win.video) ? win : null; // Kick は弾幕対象外なので全体扱い
+  dmkPanelWin = win || null;
   if (win) focusWindow(win);
   panel.hidden = false;
   raisePanel(panel);
@@ -2977,12 +2984,12 @@ function toggleChat(win) {
 //   生かす(chat-feed) … 出さないが弾幕が ON。チャットは弾幕の取得元なので、消さずに実寸のまま
 //                        切り落として残す(display:none にするとサイトがコメントを描かなくなる)
 //   止める(どちらも無し)… 描かせない。読み込み自体はしてあるので、いつでも出せる
-// Kick は弾幕の対象外(コメントは一覧でしか読めない)なので「生かす」は無い。
+// Kick も同じ扱い(入れ物 + iframe の構造に揃えてあるので切り落としが効く)。
 function syncChatVisibility(win) {
   if (!win.body) return;
   const usable = hasChatContent(win);
   const show = usable && !!win.chatOn && !win.el.classList.contains('cq-hide-chat');
-  const feed = usable && !show && !!win.danmaku.on && !win.video;
+  const feed = usable && !show && !!win.danmaku.on;
   win.body.classList.toggle('chat-on', show);
   win.body.classList.toggle('chat-feed', feed);
   // 枠側にも出しておく。リサイズのつまみは枠の直下にあり、チャットが右に出ている間は

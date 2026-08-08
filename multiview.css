@@ -441,7 +441,7 @@ body.panel-dragging iframe { pointer-events: none; }
 /* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
 .win-body.split-chat { display: flex; }
 .win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
-/* チャットの「枠」。Kick は iframe 自体が、Twitch/YouTube は入れ物(.win-chat-wrap)がこれになる。 */
+/* チャットの「枠」。全サイト共通で入れ物(.win-chat-wrap)がこれになる。 */
 .win-body .win-chat-slot {
   position: static; inset: auto;
   flex: 0 0 var(--chat-w); width: var(--chat-w); height: 100%;
@@ -451,7 +451,6 @@ body.panel-dragging iframe { pointer-events: none; }
 /* 畳んでいるが弾幕が ON の枠(判定は JS の syncChatVisibility)。チャットは弾幕の取得元なので、
    display:none で消すとサイトがコメントを描かなくなり、弾幕まで止まる。入れ物だけを 0 にして、
    中の iframe は実寸のまま切り落とす(縦積みで入力欄だけを残すのと同じ手)。
-   Kick は枠そのものが iframe = 切り落とす入れ物が無いが、弾幕の対象外なので消えたままでよい。
    セレクタが長いのは詳細度のため。下の chat-below や縦積みの寸法指定(どちらも .win-chat-slot を
    狙う)に勝たせる必要がある。.win-chat-wrap は .win-chat-slot でもあるので、それを重ねてある。 */
 body .win .win-body.split-chat.chat-feed .win-chat-wrap.win-chat-slot {
@@ -851,9 +850,9 @@ body.stack-mode .win-controls button.max { display: none; }
 /* 台形ヘッダは PC 含め出さない。移動は長押しドラッグ、操作は簡易UI(.win-quick + ⋮メニュー)。 */
 .win .win-bar { display: none; }
 .win-adjust { top: 56px; } /* 台形が無いぶん 🎨 パネルは上へ */
-/* Kick: 縦積みでは映像の下にチャットを置く(高さは JS の STACK_CHAT_H と一致させること) */
+/* 縦積みでは映像の下にチャットを置く(高さは JS の stackChatH と一致させること) */
 body.stack-mode .win-body.split-chat { flex-direction: column; }
-/* Kick は一覧ごと(JS の STACK_CHAT_H と一致させること)。 */
+/* 全幅にして、高さは下の入れ物のルールで決める(既定は入力欄だけ、縦長なら一覧ごと)。 */
 body.stack-mode .win-body .win-chat-slot { flex: 0 0 340px; width: 100%; height: 340px; }
 /* Twitch / YouTube はコメントを弾幕で読めるので、一覧は要らない。入力欄だけを残す。
    入れ物を入力欄の高さまで縮め、中の iframe は下端を合わせたまま高いままにする
