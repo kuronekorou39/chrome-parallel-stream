@@ -48,14 +48,17 @@ try {
     if (!existsSync(p(f))) { console.error(`見つかりません: ${f}`); process.exit(1); }
     cpSync(p(f), join(devDir, f));
   }
-  const changed = execFileSync('git', ['status', '--porcelain'], { cwd: work, encoding: 'utf8' }).trim();
-  if (!changed) {
+  // 変更の有無は add したあとの索引で見る。作業ツリーの比較だと、改行コードの正規化のせいで
+  // 中身が同じでも「変更あり」に見えてしまう(実際に空コミットで失敗した)。
+  execFileSync('git', ['add', 'dev'], { cwd: work, stdio: 'inherit' });
+  let staged = true;
+  try { execFileSync('git', ['diff', '--cached', '--quiet'], { cwd: work }); staged = false; } catch (e) { staged = true; }
+  if (!staged) {
     console.log('確認用ページは既に最新です。');
   } else {
-    execFileSync('git', ['add', 'dev'], { cwd: work, stdio: 'inherit' });
     execFileSync('git', ['commit', '-m', 'chore: 確認用ページ(dev)を更新'], { cwd: work, stdio: 'inherit' });
-    execFileSync('git', ['push', 'origin', 'release'], { cwd: work, stdio: 'inherit' });
   }
+  execFileSync('git', ['push', 'origin', 'release'], { cwd: work, stdio: 'inherit' });
   console.log(`\n確認用: ${PAGES}/dev/multiview.html`);
   console.log('反映まで1分ほどかかります。利用者が見るページ(ルート)は変わりません。');
 } finally {
