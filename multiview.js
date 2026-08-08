@@ -348,7 +348,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.58';
+const EXPECTED_EXT_VERSION = '0.9.59';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -2856,6 +2856,72 @@ function tileAll() {
   saveLineup(); // 整列後の配置を保存(復元中の初回フォールバックでは restoring で抑止)
 }
 
+// 音量の大きい枠ほど大きく並べ直す。「主に聞いている配信が主役、他は横目で追う」を
+// そのまま画面にする。音量は既に自分で決めているので、大きさを決め直す手間が要らない。
+//
+// 決め方: 大きさは音量だけで決める(面積 ∝ 音量。辺はその平方根)。枠は全部 16:9 のまま。
+// 音量の大きい順に横へ詰め、幅を超えたら次の行へ。全体の倍率だけを二分探索で決めて画面に収める。
+// 行を横幅いっぱいに引き伸ばす方式(写真の敷き詰め)も試したが、行ごとに倍率が変わるせいで
+// 「同じ音量なのに大きさが違う」が起きるので採らない。面積を音量に正確に比例させるほうを優先し、
+// 余りは中央寄せで余白として見せる(隙間なく敷き詰めることとは両立しない)。
+const VOL_LAYOUT_FLOOR = 0.25;   // 音量0の枠の重み。0にすると消えてしまうので下限を置く
+const VOL_LAYOUT_ASPECT = 16 / 9; // 配信は横長。枠はこの比を保つ
+function layoutByVolume() {
+  if (stackMode) { relayoutStack(); return; } // 縦積みは全幅固定なので大きさを変えられない
+  const vis = wins.filter((w) => !w.hidden);
+  if (!vis.length) return;
+  const gap = 6;
+  const W = stage.clientWidth - gap * 2;
+  const H = stage.clientHeight - gap * 2;
+  // 重みは「枠ごとの音量」。マスタは全枠に同じだけ掛かるので大小関係に影響しない。
+  const items = vis
+    .map((win) => ({ win, r: Math.sqrt(Math.max(VOL_LAYOUT_FLOOR, win.vol != null ? win.vol : WIN_VOLUME_DEFAULT)) }))
+    .sort((a, b) => b.r - a.r);
+
+  // 画面に収まる範囲でいちばん大きい倍率を探す(行の折り返しが飛び飛びに変わるので二分探索)。
+  let lo = 10, hi = Math.max(H, W), best = null;
+  for (let i = 0; i < 30; i++) {
+    const base = (lo + hi) / 2;
+    const p = packVolumeRows(items, W, gap, base);
+    if (p.totalH <= H && p.rows.every((row) => row.w <= W)) { best = { rows: p.rows, totalH: p.totalH, base }; lo = base; }
+    else { hi = base; }
+  }
+  if (!best) { const p = packVolumeRows(items, W, gap, 60); best = { rows: p.rows, totalH: p.totalH, base: 60 }; }
+
+  let y = gap + Math.max(0, (H - best.totalH) / 2); // 余りは上下に散らす
+  best.rows.forEach((row) => {
+    const rowH = Math.max(...row.items.map((it) => best.base * it.r));
+    let x = gap + Math.max(0, (W - row.w) / 2); // 行は横中央へ
+    row.items.forEach((it) => {
+      const h = best.base * it.r;
+      const w = h * VOL_LAYOUT_ASPECT;
+      it.win.maximized = false;
+      // setRect が最小サイズ(MIN_W/MIN_H)で下限を切るので、音量が小さすぎる枠も潰れない
+      // (そのぶん面積の比例は崩れるが、読めない大きさで並べても意味が無い)。
+      setRect(it.win, Math.round(x), Math.round(y + (rowH - h) / 2), Math.round(w), Math.round(h));
+      x += w + gap;
+    });
+    y += rowH + gap;
+  });
+  saveLineup();
+}
+
+// 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
+function packVolumeRows(items, W, gap, base) {
+  const rows = [];
+  let cur = [], curW = 0;
+  for (const it of items) {
+    const w = base * it.r * VOL_LAYOUT_ASPECT;
+    const next = curW ? curW + gap + w : w;
+    if (cur.length && next > W) { rows.push({ items: cur, w: curW }); cur = [it]; curW = w; }
+    else { cur.push(it); curW = next; }
+  }
+  if (cur.length) rows.push({ items: cur, w: curW });
+  let totalH = 0;
+  rows.forEach((row, i) => { totalH += Math.max(...row.items.map((it) => base * it.r)) + (i ? gap : 0); });
+  return { rows, totalH };
+}
+
 // ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
 // src を読み込む。これでフレーム内でログイン状態になり、チャット投稿などができる。
 // 🍪 ログインCookie ダイアログ。切り替えと「元に戻す」を置く。
@@ -3819,6 +3885,8 @@ function setupLayoutDialog() {
   if (tile) tile.addEventListener('click', () => tileAll());
   const snap = document.getElementById('layout-snap');
   if (snap) snap.addEventListener('click', () => snapLayout());
+  const byVol = document.getElementById('layout-volume');
+  if (byVol) byVol.addEventListener('click', () => layoutByVolume());
   const nameInput = document.getElementById('layout-name');
   const save = document.getElementById('layout-save');
   const doSave = async () => {

@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.58" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.59" />
 </head>
 <body>
   <div id="toolbar">
@@ -163,6 +163,10 @@
             <span class="layout-action-title">✨ 整形</span>
             <span class="layout-action-desc">今の配置のまま整える</span>
           </button>
+          <button id="layout-volume" class="layout-action" type="button" title="音量の大きい枠ほど大きく並べ直す">
+            <span class="layout-action-title">🔊 音量順</span>
+            <span class="layout-action-desc">聞いている枠ほど大きく</span>
+          </button>
         </div>
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
@@ -238,7 +242,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.58"></script>
-  <script src="multiview.js?v=0.9.58"></script>
+  <script src="ext-bridge.js?v=0.9.59"></script>
+  <script src="multiview.js?v=0.9.59"></script>
 </body>
 </html>
