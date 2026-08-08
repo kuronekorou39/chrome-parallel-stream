@@ -348,7 +348,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.56';
+const EXPECTED_EXT_VERSION = '0.9.57';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3139,6 +3139,22 @@ function reloadWindow(win) {
     if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
     setupKickVideo(win.video, win.url, media);
   }
+  // チャットは映像とは別のフレームなので、映像だけ作り直しても止まったままになる。
+  // 「再読み込み」を押す場面はたいていチャットが固まった時なので、こちらも読み直す。
+  reloadChatFrame(win);
+}
+
+// チャット列のフレームだけを読み直す。src を入れ直すと、ログインCookieを通す経路
+// (loadFrameWithLogin)も含めて最初からやり直せる。
+function reloadChatFrame(win) {
+  const chat = win.chatFrame;
+  if (!chat) return;
+  const src = chat.getAttribute('src');
+  if (!src || src === 'about:blank') return; // まだ中身を持っていない(チャット無しの枠)
+  const domain = loginDomainOf(hostOf(src));
+  chat.src = 'about:blank';
+  if (domain) loadFrameWithLogin(chat, domain, src);
+  else chat.src = src;
 }
 
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
