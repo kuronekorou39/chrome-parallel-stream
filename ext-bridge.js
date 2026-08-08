@@ -18,13 +18,43 @@
   // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
   // 保存されるファイル名だけ download 属性で版入りにする。
   const ZIP_URL = 'dist/parallel-stream-latest.zip';
-  const ZIP_NAME = 'parallel-stream-0.9.55.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.56.zip'; // release.mjs が版に合わせて書き換える
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
   // chrome-extension://<ID>/multiview.html でも開けてしまう。ただしそこでは広告ブロックが
   // 効かないので、開かれたら黙って正しい方へ転送する(古いブックマークもこれで直る)。
+  //
+  // 例外は ?dev=1。GitHub Pages は release ブランチを配るので、作業中(main)の UI を確かめる
+  // 場所がここしか無い。転送せず、拡張ページとして開いたまま動かす。
+  // 拡張ページでは page-bridge.js が注入されない代わりに chrome.* をそのまま呼べるので、
+  // MV.* は同じ形のまま中身を直呼びに差し替える(呼び出し側=multiview.js は何も変えない)。
   if (location.protocol === 'chrome-extension:') {
-    location.replace(HOSTED_URL + location.search + location.hash);
+    if (!/(^|[?&])dev=1(&|$)/.test(location.search)) {
+      location.replace(HOSTED_URL + location.search + location.hash);
+      return;
+    }
+    const cb2 = (p, cb) => { if (typeof cb === 'function') p.then((r) => cb(r)); return p; };
+    window.MV = {
+      storage: {
+        local: {
+          get: (keys, cb) => cb2(chrome.storage.local.get(keys).catch(() => ({})), cb),
+          set: (items, cb) => cb2(chrome.storage.local.set(items).catch(() => undefined), cb)
+        }
+      },
+      runtime: { sendMessage: (msg) => chrome.runtime.sendMessage(msg) },
+      system: {
+        cpu: { getInfo: () => chrome.system.cpu.getInfo() },
+        memory: { getInfo: () => chrome.system.memory.getInfo() }
+      },
+      tabs: {
+        create(opts) {
+          window.open(opts && opts.url, '_blank', 'noopener');
+          return Promise.resolve();
+        }
+      },
+      extVersion: chrome.runtime.getManifest().version
+    };
+    window.addEventListener('load', () => window.dispatchEvent(new CustomEvent('mv-ext-ready')));
     return;
   }
 

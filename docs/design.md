@@ -30,6 +30,25 @@ iframe」になり、他の拡張が問題なく動くようになります。
 | GitHub Pages | UI(`multiview.html` / `.js` / `.css`)の配信のみ |
 | 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、Kick の再生 URL 取得、設定の保存 |
 
+## ブランチと公開
+
+| ブランチ | 役割 |
+| --- | --- |
+| `main` | 作業用。ここへ push しても利用者には何も届かない |
+| `release` | 公開用。**GitHub Pages はこのブランチを配る** |
+
+UI は GitHub Pages から配っているので、`main` に push した時点で公開してしまうと、利用者の
+画面が作業のたびに変わり、「拡張機能が古い」の表示も毎回出る。公開する時だけ `release` を
+進める。
+
+```
+git push origin main:release   # これを実行した時だけ、利用者に届く
+```
+
+作業中の UI を自分で確かめるときは、拡張機能に同梱されている
+`chrome-extension://<拡張ID>/multiview.html?dev=1` を開く(`?dev=1` が無いと Pages へ転送される)。
+拡張ページなので枠の中で他の拡張(広告スキッパー)は効かないが、それ以外は同じように動く。
+
 ## リリース
 
 `node tools/release.mjs` で版を上げ、配布用の ZIP を `dist/` に作ります。版番号は
