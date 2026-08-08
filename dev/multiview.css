@@ -1,0 +1,1152 @@
+/* マルチビュー本体ページ。上部ツールバー + 下部ステージ(フローティング窓)。 */
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
+  background: #000;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  color: #c9d1d9;
+}
+body { display: flex; flex-direction: column; }
+
+/* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
+body.idle, body.idle * { cursor: none !important; }
+
+/* ===== ツールバー ===== */
+/* 別レイヤーで上に重ねる(フローに入れない)。これで出し入れしてもステージ=全画面が
+   変わらず、中の窓が動かない。背後が透けて見えるよう半透明にする(ボタン類は各自不透明)。 */
+#toolbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 16px;
+  background: rgba(13,17,23,0.5);
+  border-bottom: 1px solid #21262d;
+  font-size: 15px;
+  z-index: 100000;
+}
+
+/* ヘッダにポインタが乗っている間(操作中)は透過を解いてはっきり見せる。 */
+#toolbar:hover { background: rgba(13,17,23,0.98); }
+
+/* ===== メニュー位置(上/下=横バー, 左/右=縦バー)。JS が body.tb-pos-* / tb-vertical を付ける ===== */
+body.tb-pos-top #toolbar    { top: 0; bottom: auto; left: 0; right: 0; }
+body.tb-pos-bottom #toolbar { top: auto; bottom: 0; left: 0; right: 0; border-bottom: none; border-top: 1px solid #21262d; }
+body.tb-pos-left #toolbar   { top: 0; bottom: 0; left: 0; right: auto; border-bottom: none; border-right: 1px solid #21262d; }
+body.tb-pos-right #toolbar  { top: 0; bottom: 0; left: auto; right: 0; border-bottom: none; border-left: 1px solid #21262d; }
+
+/* 縦バー: 縦積みにして各コントロールを幅いっぱいに。 */
+body.tb-vertical #toolbar {
+  flex-direction: column; flex-wrap: nowrap; align-items: stretch;
+  width: 240px; max-height: 100%; overflow-y: auto;
+}
+body.tb-vertical .tb-sep { width: 100%; height: 1px; }
+body.tb-vertical .tb-input,
+body.tb-vertical #master-vol { width: 100%; }
+body.tb-vertical .tb-grow,
+body.tb-vertical .tb-hint { display: none; }
+
+/* 出し入れアニメ: 位置に応じた方向へスライド+フェード。初回適用はアニメさせない(tb-ready で有効化)。 */
+body.tb-ready #toolbar { transition: background 0.2s ease, transform 0.28s ease, opacity 0.28s ease; }
+body.toolbar-hidden #toolbar { opacity: 0; pointer-events: none; }
+body.tb-pos-top.toolbar-hidden #toolbar    { transform: translateY(-100%); }
+body.tb-pos-bottom.toolbar-hidden #toolbar { transform: translateY(100%); }
+body.tb-pos-left.toolbar-hidden #toolbar   { transform: translateX(-100%); }
+body.tb-pos-right.toolbar-hidden #toolbar  { transform: translateX(100%); }
+
+/* ツールバーを隠したときに出る復帰ボタン(隠れたバーの方向側に、フェードで現れる)。 */
+#toolbar-show {
+  position: fixed; z-index: 100001;
+  display: inline-flex; align-items: center; gap: 6px;
+  opacity: 0; pointer-events: none;
+  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 7px; padding: 9px 13px; font-family: inherit; font-size: 14px; cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+body.toolbar-hidden #toolbar-show { opacity: 1; pointer-events: auto; }
+#toolbar-show:hover { background: #30363d; border-color: #58a6ff; }
+body.tb-pos-top #toolbar-show,
+body.tb-pos-right #toolbar-show { top: 8px; right: 10px; bottom: auto; left: auto; }
+body.tb-pos-bottom #toolbar-show { bottom: 8px; left: 10px; top: auto; right: auto; }
+body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: auto; }
+
+/* 主要サイトのワンクリック追加チップ */
+.site-chip {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-left-width: 4px; border-radius: 5px;
+  padding: 7px 12px; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.site-chip:hover { background: #30363d; }
+.site-chip[data-site="twitch"] { border-left-color: #9147ff; }
+.site-chip[data-site="youtube"] { border-left-color: #ff0033; }
+.site-chip[data-site="kick"] { border-left-color: #53fc18; }
+.site-chip[data-site="openrec"] { border-left-color: #ffd200; }
+.tb-item { display: inline-flex; align-items: center; gap: 8px; color: #8b949e; font-size: 15px; }
+#count {
+  font-weight: bold; color: #f0f6fc; font-size: 16px;
+  background: #21262d; border-radius: 12px; padding: 4px 13px; min-width: 30px; text-align: center;
+}
+.tb-sep { width: 1px; height: 24px; background: #30363d; }
+.tb-grow { flex: 1 1 auto; }
+.tb-hint { color: #6e7681; font-size: 12px; white-space: nowrap; }
+
+#master-vol { width: 160px; height: 22px; accent-color: #58a6ff; cursor: pointer; }
+
+.tb-btn {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 7px; padding: 10px 18px; font-family: inherit; font-size: 15px; cursor: pointer;
+}
+.tb-btn:hover { background: #30363d; border-color: #58a6ff; }
+/* 「＋追加」を目立たせる主要アクション。 */
+.tb-btn-primary { background: #1f6feb; border-color: #388bfd; color: #fff; font-weight: bold; }
+.tb-btn-primary:hover { background: #388bfd; border-color: #58a6ff; }
+.tb-btn.on { background: #3c0d11; border-color: #f85149; color: #f85149; }
+
+.tb-input {
+  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px;
+  padding: 7px 11px; font-family: inherit; font-size: 13px; width: 240px;
+}
+.tb-input:focus { outline: none; border-color: #58a6ff; }
+
+/* 追加ダイアログ(枠を追加): サイトボタン + URL入力。pos-dialog の見た目を流用。 */
+#add-dialog .pos-dialog { width: 380px; max-width: calc(100% - 32px); }
+/* サイトのボタンは 2×2 の等幅グリッド。flex の折り返しだと 3+1 に割れて不揃いに見える。 */
+.add-sites { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.add-sites .site-chip {
+  font-size: 15px; padding: 11px 12px; border-left-width: 5px;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.add-url-row { display: flex; gap: 8px; align-items: stretch; }
+/* min-width:0 で入力欄を縮めさせ、ボタンを押し出さない。ボタンは縮まず折り返さない(「追加」が縦組みになるのを防ぐ)。 */
+.add-url-row .tb-input { flex: 1 1 auto; width: auto; min-width: 0; font-size: 15px; padding: 10px 12px; }
+.add-url-row .tb-btn { flex: 0 0 auto; white-space: nowrap; }
+
+/* 配置ダイアログ(📐): 整列/整形 + レイアウト保存・一覧。pos-dialog を流用。 */
+#layout-dialog .pos-dialog { width: 340px; max-width: calc(100% - 32px); }
+/* 説明文が長いので幅を決め打ちする。指定しないと1行に伸びてダイアログが画面幅いっぱいになる。 */
+#cookie-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
+
+/* セクション見出し: 左のアクセントバーで「ここから別の段」と示し、操作ボタンや履歴と役割を区別する。 */
+.layout-sec {
+  color: #c9d1d9; font-size: 12px; font-weight: bold; margin: 16px 2px 8px;
+  padding-left: 8px; border-left: 3px solid #388bfd;
+}
+/* 整列/整形は「2つで1つのコントロール」=セグメント(外周だけ角丸・中央は区切り線)。角丸ボックスを増やさず、
+   各ボタンに見出し+説明を縦に置く(セクション見出しは付けず、ボタン自身が役割を説明する)。 */
+.layout-actions {
+  display: flex; gap: 0; margin-bottom: 4px;
+  border: 1px solid #30363d; border-radius: 8px; overflow: hidden;
+}
+.layout-action {
+  flex: 1 1 0;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: #21262d; border: none; border-radius: 0;
+  padding: 9px 8px; font-family: inherit; cursor: pointer; color: #c9d1d9;
+}
+.layout-action + .layout-action { border-left: 1px solid #30363d; }
+.layout-action:hover { background: #30363d; }
+.layout-action-title { font-size: 14px; font-weight: bold; color: #f0f6fc; }
+.layout-action-desc { font-size: 11px; color: #8b949e; line-height: 1.3; text-align: center; }
+
+.layout-save-row { display: flex; gap: 8px; align-items: stretch; }
+/* min-width:0 で入力欄を縮めさせ、保存ボタンを枠外へ押し出さない。ボタンは縮まず折り返さない。 */
+.layout-save-row .tb-input { flex: 1 1 auto; width: auto; min-width: 0; font-size: 14px; padding: 9px 11px; }
+.layout-save-row .tb-btn { flex: 0 0 auto; white-space: nowrap; }
+
+/* 保存済み履歴: 角丸ボックスの羅列をやめ、控えめな「行リスト」に。各行は[名前][🗑]を区切り線で
+   つないだ1ユニット。ホバーは緑系(操作ボタン/保存の青と区別し『戻る対象』を表す)。 */
+.layout-list { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
+.layout-item {
+  display: flex; align-items: stretch; gap: 0;
+  border: 1px solid transparent; border-radius: 6px; overflow: hidden;
+}
+.layout-item:hover { border-color: #21262d; }
+.layout-item-main {
+  flex: 1 1 auto; text-align: left; cursor: pointer;
+  background: transparent; color: #c9d1d9; border: none; border-radius: 0;
+  padding: 9px 12px; font-family: inherit;
+}
+.layout-item-main:hover { background: rgba(63,185,80,0.12); }
+.layout-item-name { font-size: 14px; font-weight: bold; color: #f0f6fc; word-break: break-all; }
+.layout-item-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
+.layout-del {
+  flex: 0 0 auto; width: 40px; cursor: pointer;
+  background: transparent; color: #6e7681; border: none; border-radius: 0; font-size: 15px;
+}
+.layout-item:hover .layout-del { border-left: 1px solid #21262d; }
+.layout-del:hover { background: rgba(248,81,73,0.15); color: #f85149; }
+
+/* ===== 枠一覧 / ミキサーパネル(移動・リサイズ自由の浮動パネル) ===== */
+/* 地・影・ヘッダの見た目はパフォーマンスパネル(#perf-panel / .perf-head)に合わせている。 */
+.mixer-panel {
+  position: absolute; top: 64px; left: 64px; width: 340px; height: 400px;
+  display: flex; flex-direction: column; z-index: 90000;
+  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+}
+.mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
+/* perf-head と同じくフラット(濃い帯・下線なし)。 */
+.mixer-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  cursor: move; user-select: none; touch-action: none;
+}
+.mixer-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; } /* perf-title と同じ */
+/* perf-close と同じく枠なしの小さな✕。 */
+.mixer-x {
+  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
+}
+.mixer-x:hover { color: #f85149; }
+.mixer-master {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #21262d;
+}
+.mixer-master-label { font-size: 12px; color: #8b949e; } /* perf-label と同じ */
+.mixer-master input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
+.mixer-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
+/* 下端のリサイズハンドル: 枠が増えて一覧が長くなった時に縦へ伸ばせる(高さは保存)。 */
+.mixer-resize {
+  flex: 0 0 12px; cursor: ns-resize; touch-action: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.mixer-resize::before {
+  content: ""; width: 40px; height: 3px; border-radius: 2px; background: rgba(201,209,217,0.35);
+}
+.mixer-resize:hover::before { background: rgba(88,166,255,0.7); }
+.mixer-empty { color: #6e7681; font-size: 13px; text-align: center; padding: 20px; }
+/* 1行で詰めず、上=枠名(URL)+👁、下=音量つまみ(全幅)の 2段にする。URLが見切れにくい。 */
+.mixer-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-radius: 6px; }
+.mixer-row:hover { background: rgba(255,255,255,0.05); }
+.mixer-row.is-hidden { opacity: 0.55; }
+.mixer-row + .mixer-row { border-top: 1px solid rgba(255,255,255,0.05); } /* 行どうしの薄い区切り */
+.mixer-row-top { display: flex; align-items: center; gap: 8px; }
+.mixer-row-bot { display: flex; align-items: center; gap: 8px; }
+/* サイトの色付きアイコン(T/Y/K/O)。 */
+.mixer-row-site {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: bold; color: #0d1117;
+}
+.mixer-row-label {
+  flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: #c9d1d9;
+  border: none; cursor: pointer; font-family: inherit; font-size: 13px; padding: 5px 6px; border-radius: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mixer-row-label:hover { background: rgba(88,166,255,0.18); }
+/* サイト部分は薄く小さく、チャンネル名/動画IDは白太字で強調する。 */
+.mixer-row-label .mx-site { color: #6e7681; font-size: 11px; }
+.mixer-row-label .mx-name { color: #f0f6fc; font-weight: bold; }
+.mixer-row-eye {
+  flex: 0 0 auto; background: transparent; border: none; cursor: pointer;
+  width: 34px; height: 34px; font-size: 17px; border-radius: 6px;
+}
+.mixer-row-eye:hover { background: rgba(255,255,255,0.12); }
+.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; padding-left: 4px; }
+.mixer-row-vol { flex: 1 1 auto; width: auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
+
+/* ===== ステージ ===== */
+#stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
+#stage-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 20px;
+}
+/* 空ステージの案内カード。導線(＋枠を追加)をここにも置き、スマホでも迷わず・押しやすくする。 */
+.empty-card {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  max-width: 460px; padding: 36px 40px;
+  background: rgba(13,17,23,0.85); border: 1px dashed #30363d; border-radius: 16px;
+}
+.empty-icon {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  width: 68px; height: 68px; padding: 8px;
+  background: rgba(88,166,255,0.08); border: 1px solid #30363d; border-radius: 14px;
+}
+.empty-icon span { background: rgba(88,166,255,0.45); border-radius: 4px; animation: cell-pulse 2.8s ease-in-out infinite; }
+.empty-icon span:nth-child(2) { animation-delay: 0.7s; }
+.empty-icon span:nth-child(3) { animation-delay: 1.4s; }
+.empty-icon span:nth-child(4) { animation-delay: 2.1s; }
+@keyframes cell-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.empty-title { color: #f0f6fc; font-size: 18px; font-weight: bold; }
+.empty-hint { color: #8b949e; font-size: 14px; line-height: 1.7; }
+#empty-add-btn {
+  margin-top: 4px;
+  background: #1f6feb; color: #fff; border: 1px solid #388bfd; border-radius: 10px;
+  padding: 13px 28px; font-family: inherit; font-size: 16px; font-weight: bold; cursor: pointer;
+}
+#empty-add-btn:hover { background: #388bfd; border-color: #58a6ff; }
+
+/* ===== フローティング窓 ===== */
+.win {
+  position: absolute; display: flex; flex-direction: column;
+  background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  min-width: 426px; min-height: 240px; /* JS の MIN_W / MIN_H と一致させること(16:9。右下のつまみが原寸で収まる) */
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  user-select: none; -webkit-user-select: none; /* 枠の長押しで親要素のテキストが選択されるのを防ぐ(iframe 内は stream-control.js が担当) */
+}
+/* 一時表示中(クリック直後・数秒で消える)の枠を青枠で示す。 */
+.win.show-bar { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
+/* 複数選択中の枠(Shift+クリック等)は緑の枠で示す。まとめて移動・整形の対象。 */
+.win.selected { border-color: #3fb950; box-shadow: 0 0 0 2px rgba(63,185,80,0.6), 0 6px 24px rgba(0,0,0,0.6); }
+/* ミキサーの項目クリックで、その枠を一瞬パルス強調(どれがどの枠か分かる)。 */
+.win.pulse { animation: win-pulse 0.65s ease-out 2; }
+@keyframes win-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(88,166,255,0.9), 0 6px 20px rgba(0,0,0,0.6); }
+  100% { box-shadow: 0 0 0 16px rgba(88,166,255,0), 0 6px 20px rgba(0,0,0,0.6); }
+}
+
+/* ヘッダは「上部中央の台形ハンドル」。既定は非表示で、出てる間は大きく目立たせる(すぐ消えるので)。
+   つかむと左右スライド(枠の上辺沿い)、両端から先・縦方向では枠ごと移動する(RDPの接続バー風)。
+   --bar-x がスライド量(中央=0、JS が枠ごとにセット)。 */
+.win-bar {
+  position: absolute; top: 0; left: 50%; z-index: 6;
+  display: flex; align-items: stretch; justify-content: space-between; gap: 4px;
+  height: 62px; padding: 0 30px; max-width: calc(100% - 16px);
+  background: linear-gradient(180deg, rgba(28,33,40,0.98), rgba(13,17,23,0.86));
+  /* 上辺が枠上端に密着し、下へすぼまる台形(上が長い)。padding(30px)で両端グリップを斜辺の内側に置く。 */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 26px 100%);
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+  user-select: none; touch-action: none;
+  opacity: 0; transform: translate(calc(-50% + var(--bar-x, 0px)), -100%); pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+/* ドラッグ中は transform をアニメさせず、指/カーソルに即追従させる。 */
+.win-bar.sliding { transition: opacity 0.2s ease; }
+/* 両端グリップ=ヘッダを左右スライド(↔)。中央(barMain)=つかむと枠移動(✛)。つまむ位置で挙動が変わる。 */
+.win-grip {
+  flex: 0 0 auto; width: 26px; display: flex; align-items: center; justify-content: center;
+  cursor: ew-resize; color: rgba(201,209,217,0.5); font-size: 24px; line-height: 1; user-select: none;
+}
+.win-grip:hover { color: #f0f6fc; background: rgba(255,255,255,0.08); }
+.win-bar-main {
+  flex: 1 1 auto; min-width: 0; height: 100%; cursor: move;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+/* ホバー(マウス)または一時表示(クリック/タップ後・数秒で消える)でだけ、上端から降りる。 */
+.win:hover .win-bar,
+.win.show-bar .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
+
+.win-title {
+  flex: 0 1 auto; font-size: 14px; color: #c9d1d9; max-width: 180px; padding-left: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 枠ごとの音量バー(台形ハンドル内)。余白を埋めるように伸び、狭い枠ではコンテナクエリで隠す。 */
+.win-vol { flex: 1 1 auto; min-width: 60px; display: flex; align-items: center; gap: 6px; touch-action: auto; }
+.win-vol-icon { flex: 0 0 auto; font-size: 15px; line-height: 1; }
+.win-vol input[type="range"] {
+  flex: 1 1 auto; min-width: 0; width: auto; height: 26px; margin: 0;
+  accent-color: #58a6ff; cursor: pointer;
+}
+/* 枠が狭いと台形の中身が見切れるので、優先度の低い順に隠す(タイトル → 音量。ボタンは常に残す)。
+   幅判定は JS(updateWinWidthClass)が .win に cq-hide-* クラスを付ける。container-query は
+   コンポジタのスクロールツリーに触れ、DCHECK 有効ビルドで input_handler のアサートを踏みうるため不使用。 */
+.win.cq-hide-title .win-title { display: none; }
+.win.cq-hide-vol .win-vol { display: none; }
+/* 操作ボタンは台形ハンドルの中に横並べ(大きめ)。表示/非表示は親 .win-bar に従う。
+   スライド/移動はボタン上では発火しない(makeBarHandle が .win-controls を除外)。 */
+.win-controls {
+  display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;
+}
+.win-controls button {
+  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  width: 44px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.win-controls button:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #f0f6fc; }
+.win-controls button.active { color: #3fb950; }
+.win-controls button:disabled { opacity: 0.35; cursor: default; } /* ⚡: 変換できないURLの間は無効 */
+.win-controls .close:hover { background: #3c0d11; color: #f85149; }
+
+/* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。
+   left は translateX(-50%) ではなく計算で中央に置く(幅は下の 340px 固定)。移動できるように
+   したので、transform が残っていると掴んだ位置と実際の位置がずれるため。 */
+.win-adjust {
+  position: absolute; top: 70px; left: calc(50% - 170px); z-index: 7;
+  display: none; flex-direction: column; gap: 12px;
+  background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 10px;
+  padding: 16px; width: 340px; max-width: calc(100% - 24px);
+  box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+}
+.win.adjust-open .win-adjust { display: flex; }
+/* 「名前 + ✕」のヘッダ。枠一覧(.mixer-head)・弾幕設定(.dmk-head)と同じ形で、
+   ここを掴むと枠の中で移動できる(makePanelDraggable。範囲は枠の中に収まる)。 */
+.adj-head {
+  display: flex; align-items: center; gap: 8px;
+  cursor: move; user-select: none; touch-action: none;
+}
+.adj-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; }
+.adj-x { /* mixer-x / dmk-x と同じ、枠なしの小さな✕。 */
+  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
+}
+.adj-x:hover { color: #f85149; }
+/* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
+.win.adjust-open .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
+.adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c9d1d9; cursor: pointer; }
+.adj-row > span { flex: 0 0 116px; white-space: nowrap; }
+/* min-width:0 と width:auto で flex の既定 min-width:auto による『はみ出し』を防ぐ。 */
+.adj-row input[type="range"] { flex: 1 1 auto; min-width: 0; width: auto; height: 24px; margin: 0; accent-color: #58a6ff; cursor: pointer; }
+.adj-reset {
+  align-self: flex-end; margin-top: 2px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  padding: 8px 16px; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.adj-reset:hover { background: #30363d; border-color: #58a6ff; }
+
+.win-body { position: relative; flex: 1 1 auto; background: #000; }
+.win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* コメント弾幕の層: 映像の上(z:2)・スピナー(z:3)や操作UI(z:6-8)の下。ポインタは透過。
+   filter は iframe にだけ当たるので、別要素のこの層は色変換を受けない。 */
+.win-danmaku { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.win-danmaku .dmk {
+  position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform;
+  color: #fff; font-weight: bold; /* font-size / line-height / color は spawnDanmaku が設定値から個別に付与 */
+  text-shadow: 0 0 3px #000, 0 0 5px #000, 1px 1px 2px #000;
+}
+/* チャットの絵文字/スタンプ画像(Twitch emote / YouTube カスタム絵文字)。高さは spawnDanmaku が行に合わせて付与。 */
+.win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
+
+/* パネル(📊/🎚)をドラッグ/リサイズしている間は、全 iframe を無反応にする。クロスオリジン
+   iframe の上をポインタが通ると掴みが奪われる(「下に枠があると持てない」)のを物理的に防ぐ。 */
+body.panel-dragging iframe { pointer-events: none; }
+
+/* 読み込み中スピナー(順次読み込みの待機〜ロード完了まで映像の上に重ねる)。 */
+.win-loading {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: #0b0e14; color: #8b949e; pointer-events: none;
+}
+.win-spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid rgba(88,166,255,0.25); border-top-color: #58a6ff;
+  animation: win-spin 0.8s linear infinite;
+}
+@keyframes win-spin { to { transform: rotate(360deg); } }
+.win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
+
+/* 拡張機能が古いときの注意。操作の邪魔をしないよう下端に出し、閉じられるようにする。 */
+#mv-ext-old {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483000;
+  max-width: min(92vw, 560px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+  padding: 12px 16px; border-radius: 10px; border: 1px solid #8a6d1f; background: #2a2313; color: #f0e6c8;
+  font-size: 13px; line-height: 1.6; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+#mv-ext-old b { flex: 0 0 100%; font-size: 14px; }
+#mv-ext-old span { flex: 1 1 260px; }
+#mv-ext-old a { color: #ffd479; font-weight: bold; text-decoration: underline; }
+#mv-ext-old button {
+  padding: 6px 14px; border-radius: 6px; border: 1px solid #6b5a2a; background: #3a3120; color: #f0e6c8; cursor: pointer;
+}
+#mv-ext-old button:hover { background: #4a3f28; }
+
+/* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
+.win-body.split-chat { display: flex; }
+.win-media { position: relative; flex: 1 1 auto; min-width: 0; background: #000; }
+/* チャットの「枠」。全サイト共通で入れ物(.win-chat-wrap)がこれになる。 */
+.win-body .win-chat-slot {
+  position: static; inset: auto;
+  flex: 0 0 var(--chat-w); width: var(--chat-w); height: 100%;
+  border: 0; display: none; background: #0d1117;
+}
+.win-body.split-chat.chat-on .win-chat-slot { display: block; }
+/* 畳んでいるが弾幕が ON の枠(判定は JS の syncChatVisibility)。チャットは弾幕の取得元なので、
+   display:none で消すとサイトがコメントを描かなくなり、弾幕まで止まる。入れ物だけを 0 にして、
+   中の iframe は実寸のまま切り落とす(縦積みで入力欄だけを残すのと同じ手)。
+   セレクタが長いのは詳細度のため。下の chat-below や縦積みの寸法指定(どちらも .win-chat-slot を
+   狙う)に勝たせる必要がある。.win-chat-wrap は .win-chat-slot でもあるので、それを重ねてある。 */
+body .win .win-body.split-chat.chat-feed .win-chat-wrap.win-chat-slot {
+  display: block; flex: 0 0 0; width: 0; height: 0; min-height: 0;
+}
+body .win .win-body.split-chat.chat-feed .win-chat-wrap .win-chat { width: var(--chat-w); height: 420px; }
+/* 入れ物の中では、iframe は下端に合わせて置く。入れ物を縮めると下だけが残る。
+   セレクタは .win-body から書くこと。上の .win-body .win-chat-slot が position:static を
+   当てており、.win-chat-wrap 単独だと詳細度で負けて static のままになる。そうなると中の
+   iframe がタイル基準で配置され、420px の高さで映像の上に覆いかぶさる(実測)。 */
+.win-body .win-chat-wrap { position: relative; overflow: hidden; }
+/* top:auto を明示すること。上の .win-body iframe が inset:0 で top も 0 にしており、
+   top と bottom と height が同時に指定されると top が優先されて下端に寄らない(実測)。 */
+.win-body .win-chat-wrap .win-chat { position: absolute; left: 0; right: 0; top: auto; bottom: 0; width: 100%; height: 100%; border: 0; }
+/* 枠が狭い/縦長のときはチャットを映像の下へ回す(横に並べたままだと映像が潰れる)。
+   付け外しは JS の updateWinShapeClass が幅と高さから決める。
+   高さは割合で取る。固定 px にすると、小さい枠ではチャットが枠を食い潰す。
+   縦積み(スマホ)は下の専用ルールが STACK_CHAT_H と対で高さを決めるので、ここでは触らない。 */
+body:not(.stack-mode) .win.chat-below .win-body.split-chat { flex-direction: column; }
+/* 42% だけだと小さい枠で入力欄が枠外に出て書き込めない。下限を確保する(実測で 340px 必要)。 */
+body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(340px, 42%); width: 100%; height: auto; min-height: 0; }
+
+/* 枠を小さくしていくと、下のチャットが固定 340px を取るせいで映像が残らず「コメント欄だけの枠」に
+   なる。そこまで縮んだら .cq-hide-chat が付き(判定は JS の updateWinShapeClass)、
+   syncChatVisibility が chat-on を外して映像を優先する。💬 の設定自体は変えないので、
+   枠を広げれば黙って元に戻る。弾幕 ON の枠は上の chat-feed で取得元として生かされる。 */
+
+/* Kick 用の直接再生 video */
+.win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
+.win-error {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 16px; color: #ffb4ac; font-size: 12px; line-height: 1.6;
+  background: #161b22;
+}
+
+/* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
+/* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
+   枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
+/* トップページからは開けないサイト(Kick)。押せることは押せるが、見た目で「別扱い」と分かるようにする。 */
+/* 押せないサイトのボタン。破線にすると、左端の太い色帯まで点線になって崩れて見えるので、
+   線は実線のまま落ち着いた色にして「押せない」ことだけ伝える。 */
+.site-chip-off { color: #6e7681; background: #1a1f26; border-color: #262c34; }
+.site-chip-off:hover { background: #21262d; color: #8b949e; }
+
+/* 枠に追加できない URL を貼られたときの説明。 */
+.add-note {
+  margin: 8px 0 0; font-size: 12px; line-height: 1.6;
+  color: #ffb4ac; word-break: break-all;
+}
+
+/* ===== 枠に重なる操作(✕ / ⋮ / リサイズのつまみ)の置き場所 =====
+   枠の中は別オリジンの iframe なので、「その位置にサイトのボタンがあるか」を親から判定する
+   手段が無い(受け取ったポインタを iframe へ渡し直すこともできない)。当たり判定では解決
+   できないので、位置で避ける。以下の値がその避け方そのもの。ここだけ見れば決まる。
+   考え方: 映像の見たいところ(中央)を空け、サイト自身の UI と取り合わない位置へ逃がす。
+     ✕/⋮  … 左端から1つぶん内側へ入れる。端ぴったりだと枠の輪郭と一体に見えて押しづらく、
+             チャット列や配信サイトの左上表示とも近くなる。高さは右のつまみと縦の中心を揃える
+             (左右がバラバラの高さにあると散らかって見える)。
+     つまみ … 右下の隅寄り。ただし下端はサイトの再生バー(おおむね 40〜56px)が出るので、その上へ。
+             右は、チャット列と被る問題を「チャットが出ている間だけ列の幅ぶん寄せる」で解いた
+             (下の .chat-visible のルール)ため、基本の距離は隅に寄せてよい。
+             高さは左右の中ほど(つまみ 96px = 中心が下から 141px)。ここを動かすと ✕/⋮ も
+             一緒に動いて、常に高さが揃う。
+   被るようならこの3つ(--quick-left / --grip-inset-b / --grip-edge-r)を変える。 */
+.win {
+  --quick-left: 60px;   /* ✕/⋮ の左余白(6px + ボタン1つぶん 54px) */
+  /* つまみと縦の中心を合わせる。114px = ボタン 54px × 2 + すき間 6px = ✕/⋮ の高さ。
+     ただし背の低い枠だと上へはみ出すので、上余白 6px を残す位置(100% - 114 - 6)で頭打ちにする。
+     これでつまみをどれだけ下げても ✕/⋮ が枠外へ出ない。 */
+  --quick-bottom: min(calc(var(--grip-inset-b) + (var(--grip-size) - 114px) / 2), calc(100% - 120px));
+  --grip-edge-r: 24px;  /* 右端からの基本の距離 */
+  --grip-inset-r: var(--grip-edge-r);
+  --grip-inset-b: 96px;
+  --grip-size: 90px;
+  --chat-w: 300px;      /* 横に並べるチャット列の幅(下の .win-chat-slot と対) */
+}
+/* 右にチャット列が出ている枠は、その幅ぶん内側へ寄せる。寄せないとつまみが列の上に乗り、
+   映像ではなくチャットの上をつまむことになって、スクロールや書き込みとも取り合いになる。
+   横並びは幅 680px 以上でしか選ばれない(それ未満は chat-below で下に回る)ので、
+   300px 寄せてもつまみが枠の左へはみ出すことはない。 */
+.win.chat-visible:not(.chat-below) { --grip-inset-r: calc(var(--grip-edge-r) + var(--chat-w)); }
+.win-resize-grip {
+  position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
+  z-index: 7; width: var(--grip-size); height: var(--grip-size);
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(13,17,23,0.72); color: #8b949e;
+  border: 1px solid rgba(48,54,61,0.9); border-radius: 14px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.55);
+  font-size: 40px; line-height: 1; user-select: none;
+  cursor: nwse-resize; touch-action: none;
+  opacity: 0; pointer-events: none; /* 出ていないときは押せない */
+  transition: opacity 0.15s ease;
+}
+/* 出す条件。:hover はマウスのある環境だけに限る。タッチで :hover を残すと、一度タップした枠に
+   張り付いたまま戻らず、時間で消えなくなる(枠の中が iframe のサイトはタップが枠の中へ吸われる
+   ので起きないが、Kick だけは映像が親側の <video> なので枠自身に :hover が残る。実機で発生)。 */
+.win.show-bar .win-resize-grip { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .win:hover .win-resize-grip { opacity: 1; pointer-events: auto; }
+}
+.win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
+
+/* ===== メニュー位置ダイアログ(中央モーダル) ===== */
+.pos-dialog-overlay {
+  position: fixed; inset: 0; z-index: 90000; /* 移動可能ダイアログ(枠を追加/配置)は浮動パネルバンド。JS raisePanel が上書き */
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease, background 0.18s ease;
+}
+.pos-dialog-overlay.open { opacity: 1; pointer-events: auto; background: rgba(0,0,0,0.25); }
+/* #pos-dialog(メニュー位置)は画面を暗転する真のモーダルなので、浮動パネルより上に固定する。 */
+#pos-dialog.pos-dialog-overlay { z-index: 100002; }
+.pos-dialog {
+  background: rgba(13,17,23,0.98); border: 1px solid #30363d; border-radius: 12px;
+  padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  transform: scale(0.96); transition: transform 0.18s ease;
+}
+.pos-dialog-overlay.open .pos-dialog { transform: scale(1); }
+.pos-dialog-title { text-align: center; color: #c9d1d9; font-size: 14px; margin-bottom: 14px; }
+
+/* ===== ドラッグ移動できるダイアログ(枠を追加 / 配置) =====
+   見た目・ヘッダ・✕ を「枠一覧(ミキサー)」「パフォーマンス」と統一する(地・影・フラットなヘッダ帯・右上の小さな✕)。
+   .pos-dialog-movable だけ position:absolute にして JS(centerDialog)が left/top で中央へ置く。
+   #pos-dialog(メニュー位置)は .pos-dialog-movable を付けていないので従来どおりのモーダル(中央寄せタイトル+下部「閉じる」)のまま。 */
+.pos-dialog-movable {
+  position: absolute; padding: 0; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #c9d1d9;
+}
+/* ヘッダ帯 = ドラッグの取っ手。mixer-head と同じくフラット(濃い帯・下線なし)。 */
+.pos-dialog-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  cursor: move; user-select: none; touch-action: none;
+}
+.pos-dialog-movable .pos-dialog-title { /* mixer-title と同じ。中央寄せの基本形を上書きして左寄せに。 */
+  flex: 1 1 auto; text-align: left; font-size: 12px; color: #c9d1d9; margin: 0;
+}
+.pos-dialog-x { /* mixer-x / perf-close と同じ、枠なしの小さな✕。 */
+  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
+}
+.pos-dialog-x:hover { color: #f85149; }
+.pos-dialog-body { padding: 4px 12px 14px; }
+.pos-dialog-body > :first-child { margin-top: 0; } /* 先頭セクション(見出し等)の上余白を詰める */
+/* 枠一覧/パフォーマンスと同じフロート挙動: 背景を暗転せず、オーバーレイはクリックを透過(pointer-events:none)
+   させて下のステージを操作できるようにする。閉じるのは✕だけ(枠外クリックでは閉じない)。
+   ダイアログ本体だけ pointer-events:auto に戻す(pointer-events は継承プロパティ)。 */
+#add-dialog.pos-dialog-overlay.open,
+#layout-dialog.pos-dialog-overlay.open,
+#cookie-dialog.pos-dialog-overlay.open,
+#update-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
+#add-dialog.pos-dialog-overlay.open .pos-dialog,
+#layout-dialog.pos-dialog-overlay.open .pos-dialog,
+#cookie-dialog.pos-dialog-overlay.open .pos-dialog,
+#update-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
+.pos-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(3, 64px);
+  grid-template-rows: repeat(3, 56px);
+  grid-template-areas:
+    ".    top    ."
+    "left center right"
+    ".    bottom .";
+}
+.pos-pick {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 8px;
+  font-family: inherit; font-size: 18px; cursor: pointer;
+}
+.pos-pick span { font-size: 11px; color: #8b949e; }
+.pos-pick:hover { background: #30363d; border-color: #58a6ff; }
+.pos-pick.active { border-color: #58a6ff; background: rgba(31,111,235,0.2); color: #f0f6fc; }
+.pos-pick.active span { color: #c9d1d9; }
+.pos-pick.pos-top { grid-area: top; }
+.pos-pick.pos-bottom { grid-area: bottom; }
+.pos-pick.pos-left { grid-area: left; }
+.pos-pick.pos-right { grid-area: right; }
+.pos-grid-center {
+  grid-area: center; display: flex; align-items: center; justify-content: center;
+  color: #6e7681; font-size: 12px; border: 1px dashed #30363d; border-radius: 8px;
+}
+.pos-dialog-close {
+  display: block; margin: 16px auto 0;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  padding: 8px 20px; font-family: inherit; font-size: 13px; cursor: pointer;
+}
+.pos-dialog-close:hover { background: #30363d; border-color: #58a6ff; }
+
+/* ===== パフォーマンスパネル(📊) ===== */
+/* perf ボタンの ON は青(整形モードの赤 .on と区別)。 */
+.tb-btn.on-blue { background: #0d2440; border-color: #58a6ff; color: #58a6ff; }
+#perf-panel {
+  position: fixed; left: 10px; bottom: 10px; z-index: 90000; /* 浮動パネルバンド。JS raisePanel が前面化で上書き */
+  width: 232px; background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+}
+#perf-panel[hidden] { display: none; }
+.perf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: move; user-select: none; touch-action: none; }
+.perf-title { color: #c9d1d9; font-size: 12px; }
+#perf-close { background: transparent; color: #8b949e; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+#perf-close:hover { color: #f85149; }
+.perf-row { display: flex; align-items: center; gap: 8px; height: 28px; }
+.perf-label { flex: 0 0 28px; color: #8b949e; font-size: 12px; }
+.perf-val { flex: 0 0 56px; color: #f0f6fc; font-size: 12px; font-variant-numeric: tabular-nums; }
+.perf-val.warn { color: #f85149; font-weight: bold; }
+.perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
+
+/* ===== 弾幕設定パネル(💬。地・影・ヘッダは枠一覧/パフォーマンスに合わせる) ===== */
+.dmk-panel {
+  position: absolute; top: 64px; left: 64px; width: 300px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; z-index: 90000;
+  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+}
+.dmk-panel[hidden] { display: none; }
+body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロールに連れられない */
+.dmk-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: move; user-select: none; touch-action: none; }
+.dmk-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dmk-x { flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px; font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer; }
+.dmk-x:hover { color: #f85149; }
+/* 適用先ドロップダウン(全体の既定 / 個別の枠を名前で選ぶ)。 */
+.dmk-scope-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+.dmk-scope-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+.dmk-scope {
+  flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-family: inherit; font-size: 13px; cursor: pointer;
+  background: #21262d; color: #f0f6fc; border: 1px solid #30363d; border-radius: 6px;
+}
+/* 「その枠だけ」を編集している状態(⋮ から開くとこちら)。全体の既定を変えているつもりで
+   枠の上書きに入れてしまうと、全体で開き直したときに何も変わっていないように見えるので、
+   一目で分かるように色を付ける。 */
+#danmaku-panel.scope-win .dmk-scope { border-color: #f0b849; color: #f0b849; }
+#danmaku-panel.scope-win .dmk-scope-label { color: #f0b849; }
+/* 種類ごとの見出し(サイズ/速度/色/表示)。 */
+.dmk-group {
+  font-size: 11px; color: #6e7681; letter-spacing: 0.04em;
+  border-top: 1px solid #21262d; padding-top: 8px;
+}
+.dmk-group:first-child { border-top: none; padding-top: 0; }
+/* ↺ 個別リセット(この枠だけ全体と違う項目に出る)。 */
+.dmk-revert {
+  flex: 0 0 auto; width: 26px; height: 26px; line-height: 1; font-size: 13px; cursor: pointer;
+  background: transparent; color: #d29922; border: 1px solid rgba(210,153,34,0.5); border-radius: 6px;
+}
+.dmk-revert:hover { background: rgba(210,153,34,0.15); color: #f0f6fc; }
+/* 隠しても場所は確保する(display:none にすると隣のつまみ幅が変わって UI がずれるため visibility で消す)。 */
+.dmk-revert.is-hidden { visibility: hidden; }
+/* 適用先に応じた弾幕 ON/OFF(枠=トグル / 全体=すべてON/OFF)。 */
+.dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
+.dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+/* 一番よく押すので、設定行のトグルより大きく取る。「すべてON/OFF」も同じ大きさに揃える
+   (プリセットの小さいボタンも .dmk-bulk なので、この行の中だけを対象にする)。 */
+.dmk-onoff .dmk-toggle,
+.dmk-onoff .dmk-bulk { flex: 1 1 auto; padding: 12px 0; font-size: 15px; font-weight: bold; }
+.dmk-bulk {
+  flex: 1 1 0; padding: 6px 0; font-family: inherit; font-size: 12px; cursor: pointer;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+}
+.dmk-bulk:hover { border-color: #58a6ff; color: #f0f6fc; }
+/* プリセット(現在の適用先の値を保存・適用・削除)。 */
+.dmk-presets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 4px; }
+.dmk-presets-head { font-size: 11px; color: #6e7681; }
+.dmk-presets-btns { display: flex; gap: 6px; }
+.dmk-rows { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 10px; }
+.dmk-row { display: flex; align-items: center; gap: 10px; }
+.dmk-label { flex: 0 0 80px; font-size: 12px; color: #8b949e; }
+.dmk-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
+.dmk-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+/* datalist は目盛りの指定にだけ使う。中身のテキストは出さない。 */
+.dmk-row datalist { display: none; }
+.dmk-toggle { flex: 1 1 auto; padding: 6px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; }
+.dmk-toggle.on { background: #0d2818; border-color: #3fb950; color: #3fb950; } /* ON は緑 */
+.dmk-reset { margin: 0 12px 12px; padding: 8px 0; font-family: inherit; font-size: 12px; cursor: pointer; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
+.dmk-reset:hover { background: #30363d; border-color: #58a6ff; }
+.dmk-reset[hidden] { display: none; }
+
+/* ===== スマホ縦積みモード(body.stack-mode。multiview.js の updateStackMode が付与) ===== */
+/* 自由配置をやめ「全幅×16:9 の縦並びタイル」にする(高さ計算は JS の relayoutStack)。
+   移動・リサイズ・最大化のUIは封印し、タップとスクロールだけで操作できる形にする。 */
+body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
+/* バー型ツールバーは PC 含め使わない。≡ を常時(左下に)出し、押すと縦リストのメインメニューが開く。 */
+#toolbar { display: none; }
+#toolbar-show {
+  opacity: 1; pointer-events: auto;
+  top: auto; right: auto; bottom: 8px; left: 10px;
+}
+
+/* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
+   backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */
+/* メニューを出しっぱなしにできるよう、backdrop は浮動パネル(90000台)より下に置く。これでメニューから
+   開いたパネル(追加/配置/一覧/パフォーマンス)はメニューが開いたままでも操作でき、タイル(枠)や
+   ステージ余白のタップだけが backdrop に当たってメニューを閉じる(タイルへは流さない)。メニュー自身は z:100004 で最前面。 */
+#main-menu-backdrop { position: fixed; inset: 0; z-index: 89999; background: transparent; }
+#main-menu-backdrop[hidden] { display: none; }
+#main-menu {
+  position: fixed; left: 10px; bottom: 64px; z-index: 100004;
+  display: flex; flex-direction: column; gap: 2px; min-width: 250px;
+  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 12px;
+  padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+}
+#main-menu[hidden] { display: none; }
+#main-menu button,
+#main-menu a {
+  display: flex; align-items: center; gap: 10px;
+  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  padding: 13px 14px; font-family: inherit; font-size: 16px; text-align: left;
+  cursor: pointer; white-space: nowrap;
+}
+#main-menu button:hover,
+#main-menu a:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+#main-menu button.on { color: #3fb950; }
+#main-menu a { text-decoration: none; }
+.mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
+/* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
+.mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
+#mm-update.is-old { color: #e3b341; }
+#mm-update.is-old .mm-sub { color: #e3b341; font-weight: bold; }
+/* アイコン列を固定幅にして、絵文字/＋の幅差でラベル開始位置がずれないように揃える。 */
+.mm-icon { flex: 0 0 1.6em; text-align: center; font-size: 17px; line-height: 1; }
+.mm-label { flex: 1 1 auto; }
+
+/* ===== スクロールバー ===== */
+/* パネル内のスクロール領域は既定のスクロールバーだと明るく太くて浮くので、暗い配色の細身に揃える。
+   Firefox 等は scrollbar-color/-width、Chromium は ::-webkit-scrollbar を見る(両方書く)。 */
+.mixer-list,
+.layout-list,
+.dmk-rows,
+.dmk-adv-body,
+.pos-dialog-body,
+#toolbar {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+.mixer-list::-webkit-scrollbar,
+.layout-list::-webkit-scrollbar,
+.dmk-rows::-webkit-scrollbar,
+.dmk-adv-body::-webkit-scrollbar,
+.pos-dialog-body::-webkit-scrollbar,
+#toolbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.mixer-list::-webkit-scrollbar-track,
+.layout-list::-webkit-scrollbar-track,
+.dmk-rows::-webkit-scrollbar-track,
+.dmk-adv-body::-webkit-scrollbar-track,
+.pos-dialog-body::-webkit-scrollbar-track,
+#toolbar::-webkit-scrollbar-track { background: transparent; }
+.mixer-list::-webkit-scrollbar-thumb,
+.layout-list::-webkit-scrollbar-thumb,
+.dmk-rows::-webkit-scrollbar-thumb,
+.dmk-adv-body::-webkit-scrollbar-thumb,
+.pos-dialog-body::-webkit-scrollbar-thumb,
+#toolbar::-webkit-scrollbar-thumb {
+  background: #30363d; border-radius: 4px;
+  border: 2px solid transparent; background-clip: content-box; /* 細く見せつつ当たり判定は確保 */
+}
+.mixer-list::-webkit-scrollbar-thumb:hover,
+.layout-list::-webkit-scrollbar-thumb:hover,
+.dmk-rows::-webkit-scrollbar-thumb:hover,
+.dmk-adv-body::-webkit-scrollbar-thumb:hover,
+.pos-dialog-body::-webkit-scrollbar-thumb:hover,
+#toolbar::-webkit-scrollbar-thumb:hover { background: #484f58; background-clip: content-box; }
+.mixer-list::-webkit-scrollbar-corner,
+.layout-list::-webkit-scrollbar-corner,
+.pos-dialog-body::-webkit-scrollbar-corner { background: transparent; }
+
+/* ===== 弾幕設定の「詳細設定」折りたたみ ===== */
+.dmk-adv { padding: 0 12px 4px; }
+/* スマホでは詳細設定を出さない。小さい画面で詰める場面が無く、パネルが伸びるだけ。 */
+body.stack-mode .dmk-adv { display: none; }
+.dmk-adv-toggle {
+  width: 100%; text-align: left;
+  background: transparent; color: #8b949e; border: 0; border-top: 1px solid #21262d;
+  padding: 9px 2px; font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.dmk-adv-toggle:hover { color: #c9d1d9; }
+.dmk-adv-body { padding-bottom: 4px; }
+
+/* ===== 🍪 ログインCookie ダイアログ ===== */
+.cookie-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #c9d1d9; cursor: pointer; margin-bottom: 8px;
+}
+.cookie-row input { width: 16px; height: 16px; accent-color: #3fb950; cursor: pointer; }
+.cookie-note {
+  margin: 0 0 10px; font-size: 12px; line-height: 1.7; color: #8b949e;
+}
+.cookie-note code {
+  background: #0d1117; color: #c9d1d9; padding: 1px 5px; border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.cookie-note strong { color: #f0b849; }
+body.stack-mode .win { min-width: 0; min-height: 0; } /* 全幅タイルは MIN_W より狭くなる */
+/* 縦積み(スマホ)は常に整列済みでリサイズしないので、つまみは出さない。 */
+body.stack-mode .win-resize-grip,
+body.stack-mode .win-grip { display: none; }
+body.stack-mode .win-controls button.max { display: none; }
+/* 台形ヘッダは PC 含め出さない。移動は長押しドラッグ、操作は簡易UI(.win-quick + ⋮メニュー)。 */
+.win .win-bar { display: none; }
+.win-adjust { top: 56px; } /* 台形が無いぶん 🎨 パネルは上へ */
+/* 縦積みでは映像の下にチャットを置く(高さは JS の stackChatH と一致させること) */
+body.stack-mode .win-body.split-chat { flex-direction: column; }
+/* 全幅にして、高さは下の入れ物のルールで決める(既定は入力欄だけ、縦長なら一覧ごと)。 */
+body.stack-mode .win-body .win-chat-slot { flex: 0 0 340px; width: 100%; height: 340px; }
+/* Twitch / YouTube はコメントを弾幕で読めるので、一覧は要らない。入力欄だけを残す。
+   入れ物を入力欄の高さまで縮め、中の iframe は下端を合わせたまま高いままにする
+   (低くするとサイト側が入力欄を描かなくなるため、高さ自体は保つ)。
+   132px は JS の STACK_CHAT_INPUT_H と一致させること。 */
+body.stack-mode .win-body .win-chat-wrap { flex: 0 0 132px; height: 132px; }
+body.stack-mode .win-body .win-chat-wrap .win-chat { height: 420px; }
+/* 「高さ」で縦長を選んだ枠は、増えたぶんをチャットにも回して一覧まで出す(JS の stackChatH と対)。
+   こうしないと高さを変えてもチャットが 132px のままで、設定が効いていないように見える。 */
+body.stack-mode .win.is-tall .win-body .win-chat-wrap { flex: 0 0 340px; height: 340px; }
+body.stack-mode .win.is-tall .win-body .win-chat-wrap .win-chat { height: 100%; }
+/* 半幅(横に2つ)では入力欄が使える大きさにならないので出さない(JS の stackChatH と対) */
+body.stack-mode .win.span-half .win-body .win-chat-slot { display: none; }
+body.stack-mode .mixer-panel { position: fixed; } /* ステージのスクロールに連れられない */
+
+/* 枠の簡易UI(PC含む): [✕閉じる][⋮メニュー]。左端に縦並び。各サイトのトップバー/チャット表示ボタン等と
+   重ならないよう、全枠でヘッダ2つ分(下記 top)下げて配置する(サイト別分岐はしない)。縦並びは端に寄せて
+   横方向の占有を減らし邪魔になりにくくするため。短い半幅タイルは下の .cq-narrow で横並び・上寄りに戻す。
+   普段は完全に消し(映像に何も重ねない)、ホバー/タップ(show-bar)/メニュー展開中だけ出す。
+   消えている間は pointer-events: none で映像操作を邪魔しない。表示時間は JS の BAR_HIDE_MS。 */
+.win-quick {
+  /* 左に置く。右端は配信サイト側のボタン(全画面・設定・シアター)と取り合いになりやすく、
+     スマホでは片手で持ったときに親指が届きにくい。 */
+  position: absolute; top: 100px; left: 6px; z-index: 7;
+  display: flex; flex-direction: column; gap: 6px;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+/* 自由配置(PC)は枠が大きく、上端から 100px だと ✕/⋮ だけが上に浮いて他の操作から離れる。
+   下端基準に変え、左も1つぶん内側へ入れる(位置の根拠は上の .win を参照)。
+   縦積みは枠が小さく、上端基準のままで映像の中ほどに来るのでそちらは触らない。 */
+body:not(.stack-mode) .win-quick {
+  top: auto;
+  bottom: var(--quick-bottom);
+  left: var(--quick-left);
+}
+/* 出す条件。:hover はマウスのある環境だけ(上の .win-resize-grip と同じ理由。タッチで :hover が
+   張り付くと、Kick の枠だけ ✕/⋮ が消えなくなる)。タッチは show-bar の時間切れで消える。 */
+.win.show-bar .win-quick,
+.win.menu-open .win-quick { opacity: 1; pointer-events: auto; }
+@media (hover: hover) {
+  .win:hover .win-quick { opacity: 1; pointer-events: auto; }
+}
+.win-quick > button {
+  /* ✕ と ⋮ は枠の上に重なる小さな的なので、指で外さない大きさにする。 */
+  width: 54px; height: 54px; border-radius: 12px; border: 1px solid #30363d;
+  background: rgba(13,17,23,0.85); color: #c9d1d9; font-size: 24px; cursor: pointer;
+  font-family: inherit; line-height: 1;
+}
+.win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
+.win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
+/* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。
+   bottom も戻さないと、上下とも指定されて縦に引き伸ばされる。 */
+.win.cq-narrow .win-quick { flex-direction: row; top: 6px; bottom: auto; left: 4px; gap: 4px; }
+.win.cq-narrow .win-quick > button { width: 46px; height: 46px; font-size: 19px; border-radius: 10px; }
+
+/* ===== 枠の操作(✕ / ⋮ / リサイズのつまみ)の見え方: 3段階 =====
+   出ているあいだも、ふだんは映像に溶けるすりガラスにしておき、近づくとボタンらしくなる。
+   出す/消す(opacity)は上のルールが担当で、ここは「出ている間の濃さ」だけを決める。
+     1. 遠い … 半透明のガラス板。映像の上に四角い板が常に乗っているように見せない
+     2. 近い … ✕/⋮ はひとまとまりなので、どちらかに寄れば両方はっきりさせる
+     3. 乗った … 押せる的として最も強く出す
+   マウスのある環境だけに当てる。タッチには hover が無く、薄いまま戻らなくなるため。
+   backdrop-filter は下の映像をぼかす演出。効かない環境(別プロセスの iframe 等)でも
+   半透明の板として成立するよう、地色と枠線だけで見えるようにしてある。 */
+@media (hover: hover) {
+  .win-quick > button,
+  .win-resize-grip {
+    background: rgba(22, 27, 34, 0.22);
+    border-color: rgba(240, 246, 252, 0.16);
+    color: rgba(240, 246, 252, 0.5);
+    box-shadow: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 明るい映像の上でも記号が沈まないように */
+    backdrop-filter: blur(7px) saturate(115%);
+    -webkit-backdrop-filter: blur(7px) saturate(115%);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .win-quick:hover > button {
+    background: rgba(13, 17, 23, 0.82);
+    border-color: rgba(240, 246, 252, 0.3);
+    color: #f0f6fc;
+  }
+  .win-quick > button:hover {
+    background: rgba(13, 17, 23, 0.95);
+    border-color: #58a6ff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+  .win-quick > button.q-close:hover {
+    background: rgba(60, 13, 17, 0.95); border-color: #f85149; color: #f85149;
+  }
+  .win-resize-grip:hover {
+    background: rgba(88, 166, 255, 0.3);
+    border-color: rgba(88, 166, 255, 0.9);
+    color: #f0f6fc;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* 長押しドラッグ: 浮いてる枠(.dragging)は指に直結。縦積みの並び替え中(reordering)は他タイルが
+   席をスルッと空ける(自由配置=free では他枠は動かないので reordering は付かない)。 */
+body.stack-mode.reordering { user-select: none; }
+body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
+.win.dragging {
+  transition: none; opacity: 0.92; transform: scale(1.02);
+  border-color: #58a6ff; box-shadow: 0 12px 32px rgba(0,0,0,0.8);
+  user-select: none; /* 移動中はテキスト選択させない(マウス) */
+}
+
+/* ⋮ のドロップダウンメニュー。開く時に JS(positionWinMenu)が position:fixed で画面内へ配置するので、
+   タイルの overflow:hidden で切れず、画面端・下端でもはみ出さない(高さ超過時はメニュー内スクロール)。 */
+.win-menu {
+  position: absolute; top: 50px; left: 0; display: none; z-index: 100001; /* ⋮ が左なのでメニューも左から開く */
+  flex-direction: column; gap: 2px; min-width: 230px;
+  overflow-y: auto; overscroll-behavior: contain;
+  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
+  padding: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+}
+.win.menu-open .win-menu { display: flex; }
+.win-menu button {
+  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  padding: 11px 12px; font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;
+  white-space: nowrap;
+}
+.win-menu button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu button:disabled { opacity: 0.35; cursor: default; }
+/* トグル項目: 左=項目名、右=現在値。区切り線でグループを分ける。 */
+.win-menu-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.win-menu-toggle .wm-val { flex: 0 0 auto; color: #8b949e; font-variant-numeric: tabular-nums; }
+.win-menu-toggle.on .wm-val { color: #3fb950; font-weight: bold; } /* ON は緑(弾幕など) */
+.win-menu-sep { flex: 0 0 auto; height: 1px; background: #30363d; margin: 5px 8px; }
+/* 説明の要らない操作は横一列に並べる。縦に積むと項目数ぶんメニューが伸び、
+   画面の小さいスマホでは端まで届かなくなる。 */
+.win-menu-row { display: flex; gap: 4px; }
+.win-menu-row > button {
+  flex: 1 1 0; min-width: 0;
+  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  padding: 11px 6px; font-family: inherit; font-size: 16px; text-align: center; cursor: pointer;
+}
+.win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu-row > button:disabled { opacity: 0.35; cursor: default; }
+.win-menu-row > button.on { color: #3fb950; } /* いま選ばれている側 */
+/* 縦に積む行。幅・高さは値を出さないだけで、並びは他の項目と揃える。 */
+.win-menu-row.col { flex-direction: column; gap: 2px; }
+.win-menu-row.col > button { padding: 11px 12px; font-size: 15px; text-align: left; }
+
+/* 「全画面」(PC含む): 枠を一時的に画面いっぱいへ(枠内のサイト操作・配信選び・ログイン用)。
+   inline の left/top/width/height に勝つため !important。解除は #stack-restore か同メニュー。 */
+.win.stack-max {
+  position: fixed !important; left: 0 !important; top: 0 !important;
+  width: 100vw !important; height: 100vh !important; height: 100dvh !important;
+  z-index: 99999 !important; border: none; border-radius: 0;
+}
+#stack-restore {
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 100005;
+  display: none; align-items: center; gap: 6px;
+  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 15px; cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  opacity: 1; transition: opacity 0.2s ease;
+}
+body.has-stack-max #stack-restore { display: inline-flex; }
+#stack-restore:hover { background: #30363d; border-color: #58a6ff; }
+
+/* カーソル自動非表示(body.idle)に連動して、常駐UI(≡ メニュー / ⛶ 全画面を終了)も一緒にフェードで消す。
+   没入感のため。ポインタを動かせば setupIdleHide の arm() が即 body.idle を外して復帰する。
+   pointer-events は残す(opacity だけ落とす)ので、消えていてもタップ/クリック一発で開ける。
+   このルールは後方に置き、toolbar-hidden / stack-mode の #toolbar-show{opacity:1}(同詳細度)に
+   ソース順で勝たせている。!important は使わない(将来の上書き耐性のため)。 */
+body.idle #toolbar-show,
+body.idle #stack-restore { opacity: 0; }
+
+/* 同じく idle 連動で、開いている機能パネル/ダイアログ(追加・配置・位置・一覧/ミキサー・弾幕設定・
+   ≡ メニュー本体・枠の映像調整)も一緒にフェードアウトする(視聴の没入用)。開いたまま放置したものが
+   一つでも残ると、そこだけ画面に浮いて没入が切れるので、出しっぱなしになりうるものは全部ここへ入れる。
+   パフォーマンス(#perf-panel)は常時監視に意味があるので除外。
+   ポインタを動かせば arm() が body.idle を外して復帰。消えている間は pointer-events:none で下へ抜ける。 */
+.mixer-panel, .dmk-panel, #main-menu, .win-adjust { transition: opacity 0.2s ease; }
+body.idle .pos-dialog-overlay.open,
+body.idle .mixer-panel,
+body.idle #main-menu,
+body.idle .win-adjust,
+body.idle .dmk-panel { opacity: 0; pointer-events: none; }
+/* ≡ メニューの透明バックドロップも一緒に無効化する。メニューが見えていないのに
+   「どこをクリックしても閉じるだけ」になると、枠に触れず操作を取りこぼす。 */
+body.idle #main-menu-backdrop { pointer-events: none; }
+/* 追加/配置は overlay 透明・中パネルのみ操作可なので、中パネルの操作も idle 中は無効化する。 */
+body.idle #add-dialog.pos-dialog-overlay.open .pos-dialog,
+body.idle #layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: none; }
+
+/* スマホ(縦積み)では「配置」は使わない(整列/整形/座標保存は自由配置=PC向け)。≡メニューから隠す。
+   タッチPC(coarse だが広い=非 stack)では配置は使えるので、メディアではなく body.stack-mode で判定する。 */
+body.stack-mode #mm-layout { display: none; }
+
+/* ===== スマホ/タッチ環境 ===== */
+/* 主ポインタが指(pointer: coarse)か画面が狭いときは、文字とタップ目標をひと回り大きくする。 */
+@media (pointer: coarse), (max-width: 700px) {
+  #toolbar { gap: 8px; padding: 12px; }
+  .tb-btn { font-size: 17px; padding: 13px 18px; }
+  .tb-item { font-size: 16px; }
+  #count { font-size: 18px; }
+  #master-vol { width: 130px; height: 30px; }
+  #toolbar-show { font-size: 17px; padding: 14px 20px; }
+  body.tb-vertical #toolbar { width: 280px; }
+
+  .empty-title { font-size: 20px; }
+  .empty-hint { font-size: 15px; }
+  #empty-add-btn { font-size: 18px; padding: 15px 30px; }
+
+  .pos-dialog:not(.pos-dialog-movable) { padding: 24px; } /* 移動可能ダイアログは head/body 構造で padding を持つので対象外(二重パディング防止) */
+  .pos-dialog-title { font-size: 17px; }
+  .pos-dialog-close { font-size: 16px; padding: 12px 26px; }
+  .pos-grid { grid-template-columns: repeat(3, 78px); grid-template-rows: repeat(3, 66px); }
+  .pos-pick { font-size: 22px; }
+  .pos-pick span { font-size: 13px; }
+  .add-sites .site-chip { font-size: 17px; padding: 14px 20px; }
+  .add-url-row .tb-input { font-size: 16px; padding: 12px 14px; }
+
+  /* ヘッダ(タイトル・✕・マスタ見出し)はパフォーマンスに合わせ、スマホでも拡大しない。
+     行のコントロール(枠名/👁/音量)は実際に操作するのでタッチ向けに拡大したまま残す。 */
+  .mixer-row-label { font-size: 15px; padding: 9px 8px; }
+  .mixer-row-eye { width: 44px; height: 44px; font-size: 20px; }
+  .mixer-master input[type="range"], .mixer-row-vol { height: 30px; }
+  /* 弾幕設定: タッチでは各コントロールを大きく。はみ出す時はパネル内スクロール(小画面対策)。 */
+  .dmk-panel { width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow-y: auto; }
+  .dmk-head { padding: 14px; }
+  .dmk-title { font-size: 15px; }
+  .dmk-x { font-size: 20px; padding: 4px 10px; }
+  /* 映像調整の ✕ も同じ大きさに(タッチPC=coarse でも幅があれば縦積みにならず、この panel は出る)。 */
+  .adj-x { font-size: 20px; padding: 4px 10px; }
+  .dmk-scope-row, .dmk-onoff { padding: 0 14px 10px; }
+  .dmk-rows { gap: 12px; padding: 6px 14px 12px; }
+  .dmk-row { gap: 12px; }
+  .dmk-label { flex-basis: 92px; font-size: 14px; }
+  .dmk-val { flex-basis: 52px; font-size: 14px; }
+  .dmk-group { font-size: 13px; padding-top: 12px; }
+  .dmk-row input[type="range"] { height: 40px; } /* タッチで掴みやすく */
+  .dmk-scope, .dmk-toggle, .dmk-bulk { padding-top: 12px; padding-bottom: 12px; font-size: 15px; }
+  .dmk-revert { width: 40px; height: 40px; font-size: 17px; }
+  .dmk-presets { padding: 12px 14px 14px; }
+  .dmk-presets-head { font-size: 13px; }
+
+  .win-title { font-size: 15px; }
+  .win-grip { width: 30px; font-size: 26px; }
+  /* 44px × 6個(Kick)でも 390px 幅の枠に収まるよう、ボタン径と台形の余白を詰める */
+  .win-controls button { width: 44px; height: 44px; font-size: 22px; }
+  .win-vol input[type="range"] { height: 30px; }
+  .win-bar { padding: 0 16px; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 14px 100%); }
+
+  /* 描画負荷の軽減: ぼかし影とホバー遷移はスマホGPUに重いので省く(見た目より軽さ優先) */
+  .win, .win.show-bar { box-shadow: none; transition: none; }
+  .win-bar { filter: none; }
+}
+
+/* ===== スマホ(縦積み)ではメニュー・ダイアログを一回り小さくする ===== */
+/* PC の寸法をそのまま持ち込むと、画面の小さい端末では1枚で画面を覆ってしまい、
+   下の枠が見えないまま操作することになる。文字と余白を詰め、幅も画面基準にする。 */
+body.stack-mode #main-menu { min-width: 210px; gap: 1px; padding: 5px; border-radius: 10px; }
+body.stack-mode #main-menu button,
+body.stack-mode #main-menu a { padding: 9px 11px; font-size: 14px; gap: 8px; }
+body.stack-mode .mm-icon { font-size: 15px; }
+body.stack-mode .mm-sub { font-size: 11px; }
+
+body.stack-mode .win-menu { min-width: 196px; padding: 5px; border-radius: 8px; }
+body.stack-mode .win-menu button { padding: 8px 10px; font-size: 13.5px; }
+body.stack-mode .win-menu-row > button { padding: 9px 4px; font-size: 15px; }
+body.stack-mode .win-menu-row.col > button { padding: 8px 10px; font-size: 13.5px; }
+body.stack-mode .win-menu-toggle { gap: 10px; }
+body.stack-mode .win-menu-sep { margin: 3px 6px; }
+
+body.stack-mode .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+body.stack-mode #add-dialog .pos-dialog,
+body.stack-mode #layout-dialog .pos-dialog,
+body.stack-mode #cookie-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+body.stack-mode .pos-dialog-body { padding: 12px; }
+body.stack-mode .pos-dialog-title { font-size: 14px; }
+/* サイトのボタンだけは縮めない。2×2 で4つしかなく、縮めても画面はほとんど稼げない一方、
+   指で押す的としては小さすぎて隣を押してしまう(実機で誤タップ多発)。高さ 48px 前後を確保し、
+   すき間も広めに取って、隣との押し間違いを減らす。 */
+body.stack-mode .add-sites { gap: 12px; margin-bottom: 12px; }
+body.stack-mode .add-sites .site-chip { font-size: 15px; padding: 14px 12px; }
+
+/* 押しても枠を作らないサイト(mellow-fan / Kick)は、押し間違いを気にする対象ではないので
+   一段小さくして下段に落ち着かせる。2×2 の下の行がまとめて低くなる。
+   PC・タッチ・縦積みのどの指定より後に置いて、全部に効かせている。 */
+.add-sites .site-chip-off { font-size: 13px; padding: 8px 10px; }
+body.stack-mode .add-sites .site-chip-off { font-size: 13.5px; padding: 9px 10px; }
+
+/* 「映像調整」はスマホでは出さない。小さい画面でそこまで詰める場面が無く、行数だけ増える。 */
+body.stack-mode .win-menu .pc-only { display: none; }
+
+/* ===== 拡張機能ダイアログ ===== */
+#update-dialog .pos-dialog { width: 340px; max-width: calc(100% - 32px); }
+body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+.upd-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.upd-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: #8b949e; }
+.upd-row b { color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
+.upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }
