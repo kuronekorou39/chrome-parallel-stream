@@ -574,6 +574,19 @@ function mvInOwnFrame() {
       author: (n) => n.querySelector('[class*="user-name"], [class*="userName"]'),
       text: (n) => n.querySelector('[class*="message"], [class*="Message"], [class*="comment"]'),
       color: () => ''
+    } :
+    host.includes('kick.com') ? {
+      // Kick(popout チャット)。行に固定のクラスが無く、付いているのは Tailwind のユーティリティだけ
+      // なので、実測した構造から拾う(2026-08 時点):
+      //   #chatroom-messages > (仮想リストの入れ物) > div.…px-2…   ← これが1行
+      //     span(時刻) / button[data-prevent-expand](投稿者。色は style に入る) / span.…font-normal…(本文)
+      // 一覧の入れ物 #chatroom-messages は id なので、ここが変わらない限り追従できる。
+      // 時刻は font-semibold、区切りの「:」は font-bold なので、本文だけが font-normal で拾える。
+      sel: 'div[class*="px-2"]',
+      containers: ['#chatroom-messages'],
+      author: (n) => n.querySelector('button[data-prevent-expand]'),
+      text: (n) => n.querySelector('span[class*="font-normal"]'),
+      color: (n) => { const a = n.querySelector('button[data-prevent-expand]'); return a ? a.style.color : ''; }
     } : null;
 
   let dmkOn = false;

@@ -348,7 +348,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.56';
+const EXPECTED_EXT_VERSION = '0.9.59';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -838,10 +838,16 @@ function createWindow(url, opts = {}) {
 
     const channel = kickChannelOf(url);
     if (channel) {
+      // 他サイトと同じ「入れ物 + iframe」にする。畳んでいる間も弾幕の取得元として生かすには、
+      // 入れ物側を 0 にして中の iframe を実寸のまま切り落とす必要があるため(chat-feed)。
+      // iframe を直接置いていた頃は、畳む = display:none しかなく、弾幕も一緒に止まっていた。
+      const wrap = document.createElement('div');
+      wrap.className = 'win-chat-slot win-chat-wrap';
       const chat = document.createElement('iframe');
-      chat.className = 'win-chat win-chat-slot'; // Kick は一覧ごと出すので入れ物は要らない
+      chat.className = 'win-chat';
       chat.allow = IFRAME_ALLOW;
-      body.appendChild(chat);
+      wrap.appendChild(chat);
+      body.appendChild(wrap);
       chatFrame = chat;
       // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
       if (!opts.startHidden && !opts.deferLoad) {
@@ -1297,8 +1303,8 @@ function relayoutStack() {
 }
 
 // 縦積みでチャットに足す高さ。
-// Twitch / YouTube は弾幕でコメントが読めるので、一覧まで出す必要がない。入力欄だけを残す
-// (CSS 側で枠の下端に合わせて切り出す)。Kick は弾幕の対象外なので一覧が要る。
+// コメントは弾幕で読めるので、一覧まで出す必要がない。入力欄だけを残す
+// (CSS 側で枠の下端に合わせて切り出す)。全サイト共通(Kick も 0.9.58 から弾幕に対応)。
 // 半幅(横に2つ)のときは、そもそも入力欄が使える大きさにならないので出さない。
 function stackChatH(win) {
   if (!win.body) return 0;
@@ -1306,7 +1312,7 @@ function stackChatH(win) {
   if (win.span === 'half') return 0;
   // 「高さ」で縦長を選んだ枠は、増えたぶんをチャットにも回して一覧まで出す。
   // 16:9 のままなら入力欄だけ(コメントは弾幕で読める)。これで高さの選択が効くようになる。
-  if (win.video || isTall(win)) return STACK_CHAT_H;
+  if (isTall(win)) return STACK_CHAT_H;
   return STACK_CHAT_INPUT_H;
 }
 
@@ -1861,10 +1867,11 @@ function buildQuickControls(win) {
   win.menuDown = mkIcon(win.menuSizeRow, '▼ 下へ', 'ひとつ下へ移動', () => moveWin(win, 1), true);
   mkSep();
 
-  // ② 弾幕。on は永続なので保存(Kickは対象外)。
-  if (!win.video) win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
-  if (!win.video) mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
-  if (!win.video) mkSep();
+  // ② 弾幕。on は永続なので保存。
+  // Kick も 0.9.54 で content script が入り、チャットを読めるようになったので対象に含める。
+  win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
+  mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
+  mkSep();
 
   // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
   // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
@@ -2252,7 +2259,7 @@ function dmkEditValue(key, value) {
 function applyDanmakuSettings() {
   wins.forEach((w) => { if (w.danmaku.layer) w.danmaku.layer.style.opacity = dmkSettings(w).opacity / 100; });
 }
-// 適用先ドロップダウンの選択肢を「全体の既定 + 弾幕対象の各枠(Kick以外)」で作り直し、現在の対象を選択。
+// 適用先ドロップダウンの選択肢を「全体の既定 + 各枠」で作り直し、現在の対象を選択。
 // 個別設定のある枠には ● を付けて分かるようにする。対象枠が閉じられていたら全体へ戻す。
 function populateDmkScope() {
   const sel = document.getElementById('dmk-scope');
@@ -2262,7 +2269,7 @@ function populateDmkScope() {
   const og = document.createElement('option');
   og.value = 'global'; og.textContent = '全体の既定';
   sel.appendChild(og);
-  wins.filter((w) => !w.video).forEach((w) => {
+  wins.forEach((w) => {
     const o = document.createElement('option');
     o.value = String(w.id);
     o.textContent = winLabel(w) + (dmkHasDiff(w) ? ' ●' : ''); // ● = 全体と違う個別設定あり
@@ -2356,7 +2363,7 @@ function renderDmkOnOff() {
 }
 function setAllDanmaku(on) {
   danmakuDefaultOn = on; // 次に追加される枠にも効かせる
-  wins.filter((w) => !w.video).forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
+  wins.forEach((w) => { if (!!w.danmaku.on !== on) toggleDanmaku(w); });
   syncMainMenuToggles();
   saveLineup();
 }
@@ -2434,7 +2441,7 @@ function openDanmakuPanel(win) {
     panel.hidden = true;
     return;
   }
-  dmkPanelWin = (win && !win.video) ? win : null; // Kick は弾幕対象外なので全体扱い
+  dmkPanelWin = win || null;
   if (win) focusWindow(win);
   panel.hidden = false;
   raisePanel(panel);
@@ -2849,6 +2856,72 @@ function tileAll() {
   saveLineup(); // 整列後の配置を保存(復元中の初回フォールバックでは restoring で抑止)
 }
 
+// 音量の大きい枠ほど大きく並べ直す。「主に聞いている配信が主役、他は横目で追う」を
+// そのまま画面にする。音量は既に自分で決めているので、大きさを決め直す手間が要らない。
+//
+// 決め方: 大きさは音量だけで決める(面積 ∝ 音量。辺はその平方根)。枠は全部 16:9 のまま。
+// 音量の大きい順に横へ詰め、幅を超えたら次の行へ。全体の倍率だけを二分探索で決めて画面に収める。
+// 行を横幅いっぱいに引き伸ばす方式(写真の敷き詰め)も試したが、行ごとに倍率が変わるせいで
+// 「同じ音量なのに大きさが違う」が起きるので採らない。面積を音量に正確に比例させるほうを優先し、
+// 余りは中央寄せで余白として見せる(隙間なく敷き詰めることとは両立しない)。
+const VOL_LAYOUT_FLOOR = 0.25;   // 音量0の枠の重み。0にすると消えてしまうので下限を置く
+const VOL_LAYOUT_ASPECT = 16 / 9; // 配信は横長。枠はこの比を保つ
+function layoutByVolume() {
+  if (stackMode) { relayoutStack(); return; } // 縦積みは全幅固定なので大きさを変えられない
+  const vis = wins.filter((w) => !w.hidden);
+  if (!vis.length) return;
+  const gap = 6;
+  const W = stage.clientWidth - gap * 2;
+  const H = stage.clientHeight - gap * 2;
+  // 重みは「枠ごとの音量」。マスタは全枠に同じだけ掛かるので大小関係に影響しない。
+  const items = vis
+    .map((win) => ({ win, r: Math.sqrt(Math.max(VOL_LAYOUT_FLOOR, win.vol != null ? win.vol : WIN_VOLUME_DEFAULT)) }))
+    .sort((a, b) => b.r - a.r);
+
+  // 画面に収まる範囲でいちばん大きい倍率を探す(行の折り返しが飛び飛びに変わるので二分探索)。
+  let lo = 10, hi = Math.max(H, W), best = null;
+  for (let i = 0; i < 30; i++) {
+    const base = (lo + hi) / 2;
+    const p = packVolumeRows(items, W, gap, base);
+    if (p.totalH <= H && p.rows.every((row) => row.w <= W)) { best = { rows: p.rows, totalH: p.totalH, base }; lo = base; }
+    else { hi = base; }
+  }
+  if (!best) { const p = packVolumeRows(items, W, gap, 60); best = { rows: p.rows, totalH: p.totalH, base: 60 }; }
+
+  let y = gap + Math.max(0, (H - best.totalH) / 2); // 余りは上下に散らす
+  best.rows.forEach((row) => {
+    const rowH = Math.max(...row.items.map((it) => best.base * it.r));
+    let x = gap + Math.max(0, (W - row.w) / 2); // 行は横中央へ
+    row.items.forEach((it) => {
+      const h = best.base * it.r;
+      const w = h * VOL_LAYOUT_ASPECT;
+      it.win.maximized = false;
+      // setRect が最小サイズ(MIN_W/MIN_H)で下限を切るので、音量が小さすぎる枠も潰れない
+      // (そのぶん面積の比例は崩れるが、読めない大きさで並べても意味が無い)。
+      setRect(it.win, Math.round(x), Math.round(y + (rowH - h) / 2), Math.round(w), Math.round(h));
+      x += w + gap;
+    });
+    y += rowH + gap;
+  });
+  saveLineup();
+}
+
+// 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
+function packVolumeRows(items, W, gap, base) {
+  const rows = [];
+  let cur = [], curW = 0;
+  for (const it of items) {
+    const w = base * it.r * VOL_LAYOUT_ASPECT;
+    const next = curW ? curW + gap + w : w;
+    if (cur.length && next > W) { rows.push({ items: cur, w: curW }); cur = [it]; curW = w; }
+    else { cur.push(it); curW = next; }
+  }
+  if (cur.length) rows.push({ items: cur, w: curW });
+  let totalH = 0;
+  rows.forEach((row, i) => { totalH += Math.max(...row.items.map((it) => base * it.r)) + (i ? gap : 0); });
+  return { rows, totalH };
+}
+
 // ログインCookie(SameSite)を埋め込みフレームへ送れるよう background で緩めてから
 // src を読み込む。これでフレーム内でログイン状態になり、チャット投稿などができる。
 // 🍪 ログインCookie ダイアログ。切り替えと「元に戻す」を置く。
@@ -2977,12 +3050,12 @@ function toggleChat(win) {
 //   生かす(chat-feed) … 出さないが弾幕が ON。チャットは弾幕の取得元なので、消さずに実寸のまま
 //                        切り落として残す(display:none にするとサイトがコメントを描かなくなる)
 //   止める(どちらも無し)… 描かせない。読み込み自体はしてあるので、いつでも出せる
-// Kick は弾幕の対象外(コメントは一覧でしか読めない)なので「生かす」は無い。
+// Kick も同じ扱い(入れ物 + iframe の構造に揃えてあるので切り落としが効く)。
 function syncChatVisibility(win) {
   if (!win.body) return;
   const usable = hasChatContent(win);
   const show = usable && !!win.chatOn && !win.el.classList.contains('cq-hide-chat');
-  const feed = usable && !show && !!win.danmaku.on && !win.video;
+  const feed = usable && !show && !!win.danmaku.on;
   win.body.classList.toggle('chat-on', show);
   win.body.classList.toggle('chat-feed', feed);
   // 枠側にも出しておく。リサイズのつまみは枠の直下にあり、チャットが右に出ている間は
@@ -3139,6 +3212,22 @@ function reloadWindow(win) {
     if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
     setupKickVideo(win.video, win.url, media);
   }
+  // チャットは映像とは別のフレームなので、映像だけ作り直しても止まったままになる。
+  // 「再読み込み」を押す場面はたいていチャットが固まった時なので、こちらも読み直す。
+  reloadChatFrame(win);
+}
+
+// チャット列のフレームだけを読み直す。src を入れ直すと、ログインCookieを通す経路
+// (loadFrameWithLogin)も含めて最初からやり直せる。
+function reloadChatFrame(win) {
+  const chat = win.chatFrame;
+  if (!chat) return;
+  const src = chat.getAttribute('src');
+  if (!src || src === 'about:blank') return; // まだ中身を持っていない(チャット無しの枠)
+  const domain = loginDomainOf(hostOf(src));
+  chat.src = 'about:blank';
+  if (domain) loadFrameWithLogin(chat, domain, src);
+  else chat.src = src;
 }
 
 // 元サイトを新しいタブで開く。フル機能を本物のサイトで使いたい時の導線。
@@ -3796,6 +3885,8 @@ function setupLayoutDialog() {
   if (tile) tile.addEventListener('click', () => tileAll());
   const snap = document.getElementById('layout-snap');
   if (snap) snap.addEventListener('click', () => snapLayout());
+  const byVol = document.getElementById('layout-volume');
+  if (byVol) byVol.addEventListener('click', () => layoutByVolume());
   const nameInput = document.getElementById('layout-name');
   const save = document.getElementById('layout-save');
   const doSave = async () => {

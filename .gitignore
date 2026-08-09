@@ -21,3 +21,6 @@ Screenshot_*.png
 
 # リリースの作業フォルダ(zip だけをリポジトリに置く)
 dist/parallel-stream-*/
+
+# 確認用ページを作るときの作業フォルダ(tools/publish.mjs が使う。すぐ消す)
+.publish-dev/
