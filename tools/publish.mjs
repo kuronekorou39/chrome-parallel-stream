@@ -32,22 +32,43 @@ if (git('status', '--porcelain')) {
   process.exit(1);
 }
 
-if (mode === 'release') {
-  console.log('main を release へ進めます(利用者に公開されます)。');
-  execFileSync('git', ['push', 'origin', 'main:release'], { cwd: ROOT, stdio: 'inherit' });
-  console.log(`\n公開しました: ${PAGES}/multiview.html`);
-  console.log('反映まで1分ほどかかります。');
-  process.exit(0);
-}
+// 公開する版(manifest.json の version)。コミットメッセージに入れて、release の履歴だけ見ても
+// 「どの版を配ったか」が分かるようにする。
+const version = JSON.parse(execFileSync('git', ['show', 'main:manifest.json'], { cwd: ROOT, encoding: 'utf8' })).version;
 
-// dev: 公開中の release を別フォルダへ取り出し、UI だけ写して push する。
-// ローカルの release ブランチは持たない(main から直接進める運用なので、持つと必ず古くなる)。
-// origin/release を切り離して取り出し、その上に積んで押し戻す。
+// 公開も確認用も、release を取り出して作る。単に main を push すると、確認用ページ(dev/)を
+// 載せたぶん枝分かれしていて弾かれるため。中身は main に置き換え、dev/ だけ残す。
 const work = p('.publish-dev');
 rmSync(work, { recursive: true, force: true });
 try { git('worktree', 'prune'); } catch (e) { /* noop */ }
 execFileSync('git', ['fetch', '--quiet', 'origin', 'release'], { cwd: ROOT, stdio: 'inherit' });
 execFileSync('git', ['worktree', 'add', '--quiet', '--detach', work, 'origin/release'], { cwd: ROOT, stdio: 'inherit' });
+
+if (mode === 'release') {
+  try {
+    console.log(`main(${version})を release へ進めます。利用者に公開されます。`);
+    execFileSync('git', ['read-tree', '--reset', '-u', 'main'], { cwd: work, stdio: 'inherit' }); // 中身を main に合わせる
+    try { execFileSync('git', ['checkout', 'origin/release', '--', 'dev'], { cwd: work }); } catch (e) { /* dev が無ければそのまま */ }
+    execFileSync('git', ['add', '-A'], { cwd: work, stdio: 'inherit' });
+    let staged = true;
+    try { execFileSync('git', ['diff', '--cached', '--quiet'], { cwd: work }); staged = false; } catch (e) { staged = true; }
+    if (!staged) {
+      console.log('公開中の内容は既に main と同じです。');
+    } else {
+      execFileSync('git', ['commit', '-m', `publish: ${version}`], { cwd: work, stdio: 'inherit' });
+      execFileSync('git', ['push', 'origin', 'HEAD:release'], { cwd: work, stdio: 'inherit' });
+    }
+    console.log(`\n公開しました: ${PAGES}/multiview.html`);
+    console.log('反映まで1分ほどかかります。');
+  } finally {
+    execFileSync('git', ['worktree', 'remove', '--force', work], { cwd: ROOT, stdio: 'inherit' });
+  }
+  process.exit(0);
+}
+
+// dev: 公開中の release に、作業中の UI だけを写して push する。
+// ローカルの release ブランチは持たない(main から直接進める運用なので、持つと必ず古くなる)。
+// origin/release を切り離して取り出し、その上に積んで押し戻す。
 try {
   const devDir = join(work, 'dev');
   mkdirSync(devDir, { recursive: true });
