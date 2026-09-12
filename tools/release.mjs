@@ -78,19 +78,19 @@ console.log(`版を上げます: ${cur} → ${next}`);
 
 manifest.version = next;
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-// ?v= と、ZIP への直リンクを版入りに揃える。
-// 直リンクを固定名(latest)のままにすると、落とすたびにブラウザが (1)(2) を付けてしまい、
-// どれが最新か分からなくなる。JS 側で後から差し替える作りにしていたが、押す方が速いと
-// 間に合わないので、配る HTML の時点で版入りにしておく。
-// リンク先は latest 固定のまま触らない。書き換えるのは「保存されるファイル名」だけ。
+// ?v= と、ZIP への直リンク(HTML / ext-bridge.js / README)を版入りに揃える。
+// リンク先そのものを版入りの zip にする。固定名(latest)にして download 属性で保存名だけ変える
+// 方式は、別オリジン(GitHub の README)からのリンクや一部のブラウザで効かず、latest 名のまま
+// 落ちて (1)(2) が付き、どれが最新か分からなくなった。
 const nameRe = /parallel-stream-\d+\.\d+\.\d+\.zip/g;
 const zipName2 = `parallel-stream-${next}.zip`;
 writeFileSync(
   htmlPath,
   readFileSync(htmlPath, 'utf8').replace(/\?v=\d+\.\d+\.\d+/g, `?v=${next}`).replace(nameRe, zipName2)
 );
-const bridgePath = p('ext-bridge.js');
-writeFileSync(bridgePath, readFileSync(bridgePath, 'utf8').replace(nameRe, zipName2));
+for (const f of ['ext-bridge.js', 'README.md']) {
+  writeFileSync(p(f), readFileSync(p(f), 'utf8').replace(nameRe, zipName2));
+}
 writeFileSync(
   jsPath,
   readFileSync(jsPath, 'utf8').replace(/EXPECTED_EXT_VERSION = '[\d.]+'/, `EXPECTED_EXT_VERSION = '${next}'`)
@@ -126,11 +126,12 @@ for (const f of PACK) {
 // 展開してしまい、拡張機能の読み込みが manifest 無しで失敗した(実機で発生)。
 // 平置きなら区切り自体が無いので起きない。版は zip のファイル名に入っているので、
 // 展開すればその名前のフォルダができる。
-// 置くのは固定名の1つだけ。配る URL は常に latest なので(版入りの URL を直接指すと、古いページを
-// 開いたままの利用者が消えた版を掴んで 404 になる)、版入りの zip はどこからも参照されない。
-// 版はダウンロード時の保存名(download 属性)で分かるようにしてあり、ファイル名として存在する
-// 必要は無い。過去の版が要るなら git から取り出せる。
-const zipName = 'parallel-stream-latest.zip';
+// 版入りの zip と、固定名(latest)の2つを置く。ページや README が指すのは版入りのほう
+// (落としたファイル名で版が分かり、前の版と名前が被らないので (1) も付かない)。
+// latest は外から固定 URL で取りたい向けに残す。版入りの zip は消さない。消すと、古いページを
+// 開いたままの利用者が 404 になる(実際に起きた)。中身は latest と同じバイト列なので、git の
+// 履歴上は同じ blob として共有され、残しても履歴は膨らまない。
+const zipName = zipName2;
 const zipPath = p('dist', zipName);
 execFileSync(
   'powershell.exe',
@@ -138,8 +139,10 @@ execFileSync(
   { stdio: 'inherit' }
 );
 
+cpSync(zipPath, p('dist', 'parallel-stream-latest.zip'));
 console.log(`\n配布物:`);
-console.log(`  dist/${zipName}(固定 URL。保存名は ${stageName}.zip になる)`);
+console.log(`  dist/${zipName}(ページ / README はこれを指す)`);
+console.log(`  dist/parallel-stream-latest.zip(同じ中身。固定 URL 用)`);
 console.log(`  中身は平置き。展開すると1つフォルダができ、それを拡張機能として読み込みます。`);
 
 // 展開して壊れないことを確かめる。区切り文字の事故は実機まで気づけないので、ここで止める。
@@ -166,13 +169,6 @@ if (!entries.includes('manifest.json')) {
   process.exit(1);
 }
 console.log(`  検査: ${entries.length} ファイル、すべて直下。manifest.json あり。`);
-
-// 版入りの zip を置いていた頃の名残を掃除する(参照が無いのに毎回リポジトリへ増えていく)。
-const olds = readdirSync(p('dist')).filter((f) => /^parallel-stream-\d+\.\d+\.\d+\.zip$/.test(f));
-for (const f of olds) {
-  rmSync(p('dist', f), { force: true });
-  console.log(`  版入りの古い zip を削除: ${f}`);
-}
 
 // zip を作る前の作業フォルダは、作った後は用が無い。放っておくと版のぶんだけ溜まり続けるので
 // (git は追跡していないが、手元のディスクと検索結果を汚す)、今回のもの以外は消す。

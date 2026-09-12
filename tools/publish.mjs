@@ -22,7 +22,8 @@ const UI_FILES = ['multiview.html', 'multiview.js', 'multiview.css', 'ext-bridge
 // 配布 ZIP も一緒に置く。ページからのリンクは相対なので、/dev/ からは /dev/dist/ を見に行く。
 // ここに置かないとリンクが 404 になるうえ、置くべきは公開版ではなく「このページに合う版」
 // (確認用ページは main の UI なので、拡張も main のものでないと版が食い違う)。
-const ZIP = 'dist/parallel-stream-latest.zip';
+// ページが指すのは版入りの zip なので、それを置く(latest も一緒に)。
+const ZIPS = (v) => [`dist/parallel-stream-${v}.zip`, 'dist/parallel-stream-latest.zip'];
 
 const mode = process.argv[2] === 'dev' ? 'dev' : 'release';
 const PAGES = 'https://kuronekorou39.github.io/chrome-parallel-stream';
@@ -76,9 +77,10 @@ try {
     if (!existsSync(p(f))) { console.error(`見つかりません: ${f}`); process.exit(1); }
     cpSync(p(f), join(devDir, f));
   }
-  if (existsSync(p(ZIP))) {
+  for (const z of ZIPS(version)) {
+    if (!existsSync(p(z))) continue;
     mkdirSync(join(devDir, 'dist'), { recursive: true });
-    cpSync(p(ZIP), join(devDir, ZIP));
+    cpSync(p(z), join(devDir, z));
   }
   // 変更の有無は add したあとの索引で見る。作業ツリーの比較だと、改行コードの正規化のせいで
   // 中身が同じでも「変更あり」に見えてしまう(実際に空コミットで失敗した)。

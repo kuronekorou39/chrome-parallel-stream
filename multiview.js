@@ -348,12 +348,12 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.61';
-// リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
-// 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
-// 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
-const EXT_ZIP_URL = 'dist/parallel-stream-latest.zip';
+const EXPECTED_EXT_VERSION = '0.9.62';
+// リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
+// リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
+// 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
 const EXT_ZIP_NAME = 'parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
+const EXT_ZIP_URL = 'dist/' + EXT_ZIP_NAME;
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -391,8 +391,8 @@ function checkExtVersion() {
         : '最新です。更新の必要はありません。';
   }
   if (updDl) {
-    updDl.href = EXT_ZIP_URL; // 常に存在する固定名(古いページからでも 404 にならない)
-    updDl.download = EXT_ZIP_NAME; // 保存名だけ版入りにする
+    updDl.href = EXT_ZIP_URL; // 版入りの zip(消さないので古いページからでも 404 にならない)
+    updDl.download = EXT_ZIP_NAME;
   }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
