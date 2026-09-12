@@ -122,8 +122,8 @@
         <button id="add-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
       </div>
       <div class="pos-dialog-body">
-        <!-- Twitch / YouTube / Kick は、押すとサイトのトップが枠で開く。枠の中で配信を選べば
-             そのまま視聴に切り替わるので、URL をコピーしてこなくてよい。
+        <!-- Twitch / YouTube / Kick / Prime Video / Disney+ は、押すとサイトのトップが枠で開く。
+             枠の中で見たいものを選べばそのまま視聴に切り替わるので、URL をコピーしてこなくてよい。
              mellow-fan は押しても枠を作らず、URL を貼ってほしい旨を出すだけ(普段使わないのに
              枠が出ると煩わしいため)。項目は残す。無いと対応しているのかが分からなくなる。 -->
         <div class="add-sites">
@@ -133,6 +133,8 @@
           <button class="site-chip site-chip-off" data-site="openrec" type="button"
                   data-note="mellow-fan は配信ページの URL を貼り付けてください。"
                   title="mellow-fan は配信ページの URL を貼り付けてください">mellow-fan</button>
+          <button class="site-chip" data-site="prime" type="button" title="Prime Video を開く">Prime Video</button>
+          <button class="site-chip" data-site="disney" type="button" title="Disney+ を開く">Disney+</button>
         </div>
         <div class="add-url-row">
           <input type="text" id="add-url" class="tb-input" placeholder="配信URL..." />

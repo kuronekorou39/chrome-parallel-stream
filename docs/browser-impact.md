@@ -5,15 +5,23 @@
 
 ## 1. 対象サイトの X-Frame-Options を除去します
 
-`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / mellow-fan(旧 OPENREC)への
+`rules.json` の declarativeNetRequest ルールで、Twitch / YouTube / Kick / mellow-fan(旧 OPENREC)/
+Prime Video(`amazon.co.jp` / `primevideo.com`)/ Disney+(`disneyplus.com`)への
 **サブフレームリクエスト**から `x-frame-options` を削除します。これを外さないと iframe への埋め込みが
 拒否され、マルチビューは成立しません。
 
 **CSP は除去しません。** 各サイトの応答ヘッダを実測したところ、埋め込みを拒否しているのは
-X-Frame-Options だけで、CSP に `frame-ancestors` を入れているサイトはありませんでした
+X-Frame-Options だけで(Disney+ は `DENY`、primevideo.com は `SAMEORIGIN`)、CSP に
+`frame-ancestors` を入れているサイトはありませんでした
 (`player.twitch.tv` は `frame-ancestors` に `parent=` の値をそのまま入れる仕様なので、
 正しい `parent` を渡していれば除去は不要)。CSP を外すと、そのサイトの `script-src` などの保護まで
 無効にしてしまうため、必要のないものは触りません。
+
+**`amazon.co.jp` について:** Prime Video 専用のドメインではなく、Amazon の買い物サイト全体と
+同一ドメインです。除去は下記のとおり発信元を自分の UI ページと対象サイト自身に限定してあるため、
+通常の買い物ページの表示には影響しませんが、対象がこのドメイン全体である点は理解してください。
+なお Prime Video / Disney+ の DRM(コンテンツ保護)には一切手を触れません。枠の iframe に
+`encrypted-media` の再生許可を渡しているだけで、再生できるのは自分のアカウントで視聴できるものだけです。
 
 例外は Kick のチャットだけで、Cloudflare 越しにヘッダを確認できていないため従来どおり CSP も
 除去しています(`rules.json` の2つ目のルール。確認でき次第やめます)。
@@ -26,13 +34,17 @@ X-Frame-Options だけで、CSP に `frame-ancestors` を入れているサイ�
 
 ## 2. 対象サイトの Cookie を `SameSite=None` に書き換えます
 
-枠の中でログイン状態を保つ(チャットに書き込む等)ために、`twitch.tv` / `mellow-fan.com`(旧 `openrec.tv`)/ `kick.com` の
-Cookie を `SameSite=None; Secure` へ再設定します。
+枠の中でログイン状態を保つ(チャットに書き込む・Prime Video / Disney+ を再生する等)ために、
+`twitch.tv` / `mellow-fan.com`(旧 `openrec.tv`)/ `kick.com` / `amazon.co.jp` / `primevideo.com` /
+`disneyplus.com` の Cookie を `SameSite=None; Secure` へ再設定します。
 
 **副作用:** この変更は拡張のページ内だけでなく、**ブラウザ全体に永続します**。以後これらのサイトへの
 クロスサイトリクエストにも Cookie が送られるため、CSRF に対する防御の一枚が外れます
 (対象サイト自身の CSRF トークンは有効なままです。また `rules.json` を自分のオリジン発に限定して
 あるため、無関係なサイトがこれらを iframe で埋め込むことは各サイトの X-Frame-Options が拒否します)。
+特に `amazon.co.jp` は買い物サイトと同一ドメインなので、この副作用が視聴以外(買い物側)にも
+及びます。気になる場合は「🍪 ログインCookie」を OFF にするか、下記の復元で元に戻してください
+(OFF だと枠内が未ログインになり、Prime Video は再生できなくなります)。
 
 **切り替えと復元:** ≡ メニューの「🍪 ログインCookie」から ON/OFF を切り替えられます(既定 ON)。
 OFF にすると以後 Cookie には触れません。同じ画面の「変更した Cookie を元に戻す」で、**変更前の

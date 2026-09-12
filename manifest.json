@@ -39,7 +39,10 @@
         "*://*.youtube.com/*",
         "*://*.openrec.tv/*",
         "*://*.mellow-fan.com/*",
-        "*://*.kick.com/*"
+        "*://*.kick.com/*",
+        "*://*.amazon.co.jp/*",
+        "*://*.primevideo.com/*",
+        "*://*.disneyplus.com/*"
       ],
       "js": [
         "stream-control.js"
