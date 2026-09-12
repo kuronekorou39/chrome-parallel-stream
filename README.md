@@ -1,7 +1,6 @@
 # Parallel Stream
 
 Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並べて同時に見るための Chrome 拡張機能です。
-プライムビデオ / Disney+ の動画も枠に出せます(実験的。自分のアカウントでログインして見られるものだけ)。
 
 ---
 
