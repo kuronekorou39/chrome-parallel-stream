@@ -18,10 +18,7 @@
         "youtube-nocookie.com",
         "kick.com",
         "openrec.tv",
-        "mellow-fan.com",
-        "amazon.co.jp",
-        "primevideo.com",
-        "disneyplus.com"
+        "mellow-fan.com"
       ],
       "requestDomains": [
         "twitch.tv",
@@ -29,10 +26,7 @@
         "youtube-nocookie.com",
         "kick.com",
         "openrec.tv",
-        "mellow-fan.com",
-        "amazon.co.jp",
-        "primevideo.com",
-        "disneyplus.com"
+        "mellow-fan.com"
       ]
     }
   },

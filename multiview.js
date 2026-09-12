@@ -104,14 +104,7 @@ const DMK_CONTROLS = [
 // 一致させること。ここに無いサイトは、サイト側の埋め込み拒否がそのまま効いて「接続拒否」になる。
 // 対象を増やすことは、そのドメインの埋め込み防御を利用者のブラウザで外すことを意味するので、
 // 安易に足さない(README の「この拡張がブラウザに与える影響」も合わせて更新すること)。
-const EMBEDDABLE_HOSTS = [
-  'twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv', 'mellow-fan.com',
-  // VOD(DRM)サービス。DRM は枠の中でもそのまま効く(IFRAME_ALLOW の encrypted-media で再生を許可
-  // しているだけで、保護を外してはいない)。amazon.co.jp は Prime Video 専用ではなく買い物サイトと
-  // 同一ドメインなので、剥がすのは自分のページ発のフレームだけ(rules.json の initiatorDomains)
-  // という前提を崩さないこと。
-  'amazon.co.jp', 'primevideo.com', 'disneyplus.com'
-];
+const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv', 'mellow-fan.com'];
 function isEmbeddableHost(host) {
   const h = String(host || '').toLowerCase();
   return EMBEDDABLE_HOSTS.some((d) => h === d || h.endsWith('.' + d));
@@ -130,14 +123,12 @@ function isAllowedFrameUrl(url) {
   }
 }
 
-// ツールバーのワンクリックで開く主要サイト(各サイトのトップを開き、枠内で見たいものを選ぶ)。
+// ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
   youtube: { url: 'https://www.youtube.com/' },
   kick: { url: 'https://kick.com/' },
-  openrec: { url: 'https://www.mellow-fan.com/' },
-  prime: { url: 'https://www.amazon.co.jp/gp/video/storefront/' },
-  disney: { url: 'https://www.disneyplus.com/' }
+  openrec: { url: 'https://www.mellow-fan.com/' }
 };
 
 const stage = document.getElementById('stage');
@@ -357,7 +348,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.60';
+const EXPECTED_EXT_VERSION = '0.9.61';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3034,12 +3025,6 @@ function loginDomainOf(host) {
   // Kick は配信を選ぶための一覧を枠で開く。ログイン状態でないとフォロー中が出ず、
   // 「自分が見たい配信を選ぶ」という用途が果たせない。
   if (host.includes('kick.com')) return 'kick.com';
-  // Prime Video(日本は amazon.co.jp)/ Disney+。未ログインだと何も再生できないので必須。
-  // Disney+ はトークンを localStorage にも持ち、枠内のストレージは分離されるため、Cookie を
-  // 通しても枠の中で一度ログインし直しが要ることがある(分離ストレージは永続するので一度で済む)。
-  if (host.includes('amazon.co.jp')) return 'amazon.co.jp';
-  if (host.includes('primevideo.com')) return 'primevideo.com';
-  if (host.includes('disneyplus.com')) return 'disneyplus.com';
   return null;
 }
 
@@ -3787,7 +3772,7 @@ function wireToolbar() {
     // 埋め込みを通すにはそのヘッダを剥がす必要があるが、対象を広げると無関係なサイトの
     // 埋め込み防御まで外すことになるため、ここで断る(rules.json の対象と一致させること)。
     if (!isEmbeddableHost(parsed.hostname)) {
-      note(parsed.hostname + ' は枠に表示できません。埋め込みを許可しているのは Twitch / YouTube / mellow-fan / Kick / Prime Video / Disney+ だけです。');
+      note(parsed.hostname + ' は枠に表示できません。埋め込みを許可しているのは Twitch / YouTube / mellow-fan / Kick だけです。');
       return;
     }
     note('');
@@ -4291,8 +4276,6 @@ function channelParts(url) {
       else name = segs[0] || '';
     } else if (host.includes('openrec') || host.includes('mellow-fan')) {
       name = segs[segs.length - 1] || '';
-    } else if (host.includes('amazon') || host.includes('primevideo') || host.includes('disneyplus')) {
-      name = segs[segs.length - 1] || ''; // 作品ID(detail/<ID> や video/<ID> の末尾)を出す
     } else if (host.startsWith('player.twitch')) {
       name = u.searchParams.get('channel') || u.searchParams.get('video') || '';
     } else {
@@ -4311,8 +4294,6 @@ function siteOf(url) {
   if (h.includes('youtube') || h === 'youtu.be') return { letter: 'Y', color: '#ff0033', name: 'YouTube' };
   if (h.includes('kick')) return { letter: 'K', color: '#53fc18', name: 'Kick' };
   if (h.includes('mellow-fan') || h.includes('openrec')) return { letter: 'M', color: '#ffd200', name: 'mellow-fan' };
-  if (h.includes('amazon') || h.includes('primevideo')) return { letter: 'P', color: '#00a8e1', name: 'Prime Video' };
-  if (h.includes('disneyplus')) return { letter: 'D', color: '#0063e5', name: 'Disney+' };
   return { letter: '•', color: '#6e7681', name: h || 'その他' };
 }
 
