@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.59" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.60" />
 </head>
 <body>
   <div id="toolbar">
@@ -26,6 +26,12 @@
   </div>
   <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
   <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る">⛶ 全画面を終了</button>
+  <!-- 右下の丸ボタン: よく使う「追加」「整列」への近道。機能は ≡メニューの同項目と同じ。
+       ≡ と同じく idle で消え、全画面中は隠す。縦積み(スマホ)では整列が無意味なので ＋ だけ出す。 -->
+  <div id="quick-actions">
+    <button id="qa-tile" type="button" title="全部をタイル状に整列">⊞</button>
+    <button id="qa-add" type="button" title="枠を追加">＋</button>
+  </div>
 
   <!-- ≡ から出す縦リストメニュー(右クリックメニュー風。PC/スマホ共通)。
        各項目はパネル/ダイアログを開くもので、既存ツールバーボタンの機能をそのまま呼ぶ。
@@ -244,7 +250,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.59"></script>
-  <script src="multiview.js?v=0.9.59"></script>
+  <script src="ext-bridge.js?v=0.9.60"></script>
+  <script src="multiview.js?v=0.9.60"></script>
 </body>
 </html>

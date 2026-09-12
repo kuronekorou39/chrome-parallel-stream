@@ -357,7 +357,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.59';
+const EXPECTED_EXT_VERSION = '0.9.60';
 // リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
 // 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
 // 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
@@ -3747,6 +3747,8 @@ function wireToolbar() {
     addDialog.classList.add('open');
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
+  document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
+  document.getElementById('qa-tile').addEventListener('click', () => tileAll()); // 右下の丸ボタン(⊞)
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
   document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
   // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので
