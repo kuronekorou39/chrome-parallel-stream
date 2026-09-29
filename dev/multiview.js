@@ -377,7 +377,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.65';
+const EXPECTED_EXT_VERSION = '0.9.66';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -425,22 +425,35 @@ function checkExtVersion() {
   }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
-  const el = document.createElement('div');
-  el.id = 'mv-ext-old';
-  el.innerHTML =
-    '<b>拡張機能が古いままです</b>' +
-    '<span>入っているのは ' + v + ' 、このページが想定しているのは ' + EXPECTED_EXT_VERSION + ' です。' +
-    'ソースを更新して chrome://extensions で再読み込みするか、下の ZIP を入れ直してください。</span>';
-  const dl = document.createElement('a');
-  dl.href = EXT_ZIP_URL;
-  dl.download = EXT_ZIP_NAME;
-  dl.textContent = 'ZIP をダウンロード';
-  el.appendChild(dl);
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = '閉じる';
+  // 拡張機能がないときの赤い帯(ext-bridge.js)と同じ形で、色だけ黄色にする。
+  // 最初は一言とダウンロードのボタンだけ。手順は押したあとに帯の中へ出す。
+  // 古いままでも使えはするので、こちらは閉じられるようにする。
+  const make = (tag, props, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props || {});
+    n.append(...kids);
+    return n;
+  };
+  const dl = make('a', { className: 'eo-btn eo-primary', href: EXT_ZIP_URL, download: EXT_ZIP_NAME, textContent: '新しい版をダウンロード' });
+  const how = make('button', { type: 'button', className: 'eo-how', textContent: '入れ替え方を見る' });
+  const done = make('button', { type: 'button', className: 'eo-btn eo-ghost', hidden: true, textContent: '入れ替えたので開き直す' });
+  const close = make('button', { type: 'button', className: 'eo-btn eo-ghost', textContent: '閉じる' });
+  const steps = make('ol', { hidden: true },
+    make('li', null, 'ダウンロードした ZIP を展開する'),
+    make('li', null, make('code', { textContent: 'chrome://extensions' }), ' を開き、古い Parallel Stream を削除する'),
+    make('li', null, '「パッケージ化されていない拡張機能を読み込む」で、展開したフォルダを選ぶ')
+  );
+  const openSteps = () => {
+    steps.hidden = false;
+    done.hidden = false;
+    how.hidden = true;
+  };
+  dl.addEventListener('click', openSteps);
+  how.addEventListener('click', openSteps);
+  done.addEventListener('click', () => location.reload());
+  const row = make('div', { className: 'eo-row' },
+    make('span', { textContent: '拡張機能の新しい版があります(' + v + ' → ' + EXPECTED_EXT_VERSION + ')。' }), dl, how, done, close);
+  const el = make('div', { id: 'mv-ext-old' }, row, steps);
   close.addEventListener('click', () => el.remove());
-  el.appendChild(close);
   (document.body || document.documentElement).appendChild(el);
 }
 window.addEventListener('mv-ext-ready', checkExtVersion);

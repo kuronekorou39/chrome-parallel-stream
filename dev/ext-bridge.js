@@ -18,7 +18,7 @@
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
   // リンク先は版入りのファイル名にする(download 属性で保存名だけ変える方式は、環境によって効かず
   // latest 名のまま落ちて (1)(2) が付く)。版入りの zip は release.mjs が消さずに残すので 404 にならない。
-  const ZIP_NAME = 'parallel-stream-0.9.65.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.66.zip'; // release.mjs が版に合わせて書き換える
   const ZIP_URL = 'dist/' + ZIP_NAME;
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
@@ -132,7 +132,7 @@
   // 最初に出すのは一言とダウンロードのボタンだけ。手順はボタンを押したあとに帯の中へ出す
   // (押す前から全部並べると、読む量に押されて入れてもらえない)。
   // chrome://extensions はウェブページからリンクにしても Chrome が遷移を拒否するため、
-  // クリックさせず「コピーして貼る」形で見せる。
+  // クリックさせず、選択してコピーできる文字として見せる。
   const NOTICE_CSS = [
     '#mv-no-ext{position:fixed;left:0;right:0;top:0;z-index:2147483647;padding:12px 18px;max-height:70vh;overflow:auto;',
     'background:#1b0d0f;color:#ffdcd9;border-bottom:1px solid #f85149;box-shadow:0 4px 18px rgba(0,0,0,0.6);',
@@ -149,8 +149,6 @@
     '#mv-no-ext li{margin-bottom:4px}',
     '#mv-no-ext code{padding:1px 6px;border-radius:4px;background:#000;color:#ffd9d5;',
     'font-family:ui-monospace,Consolas,monospace;user-select:all}',
-    '#mv-no-ext .ne-copy{margin-left:6px;padding:0 8px;border-radius:4px;border:1px solid #5a2326;background:#000;',
-    'color:#ffdcd9;font:inherit;font-size:12px;cursor:pointer}',
     '#mv-no-ext [hidden]{display:none}'
   ].join('');
   // 手順を開いたことはタブの中だけで覚える。入れ終えて戻ってきたときの開き直しを挟んでも、
@@ -175,14 +173,9 @@
     const zip = make('a', { className: 'ne-btn ne-primary', href: ZIP_URL, download: ZIP_NAME, textContent: '拡張機能をダウンロード' });
     const how = make('button', { type: 'button', className: 'ne-how', textContent: '入れ方を見る' });
 
-    const copy = make('button', { type: 'button', className: 'ne-copy', textContent: 'コピー' });
-    copy.addEventListener('click', () => {
-      if (!navigator.clipboard) return;
-      navigator.clipboard.writeText('chrome://extensions').then(() => { copy.textContent = 'コピーしました'; }, () => {});
-    });
     const steps = make('ol', { hidden: true },
       make('li', null, 'ダウンロードした ZIP を展開する'),
-      make('li', null, make('code', { textContent: 'chrome://extensions' }), copy, ' を開き、デベロッパーモードを ON にする'),
+      make('li', null, make('code', { textContent: 'chrome://extensions' }), ' を開き、デベロッパーモードを ON にする'),
       make('li', null, '「パッケージ化されていない拡張機能を読み込む」で、展開したフォルダを選ぶ')
     );
     const done = make('button', { type: 'button', className: 'ne-btn ne-ghost', hidden: true, textContent: '入れたので開き直す' });
