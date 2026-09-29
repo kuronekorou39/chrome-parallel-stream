@@ -18,7 +18,7 @@
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
   // リンク先は版入りのファイル名にする(download 属性で保存名だけ変える方式は、環境によって効かず
   // latest 名のまま落ちて (1)(2) が付く)。版入りの zip は release.mjs が消さずに残すので 404 にならない。
-  const ZIP_NAME = 'parallel-stream-0.9.64.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.65.zip'; // release.mjs が版に合わせて書き換える
   const ZIP_URL = 'dist/' + ZIP_NAME;
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
@@ -128,35 +128,29 @@
 
   // ---- 拡張機能が入っていないときの案内 ----
   // このページは UI だけで、枠の埋め込みも枠内の音量・弾幕も拡張機能側が担っている。
-  // 初めて URL で来た人が最初に見る画面なので、警告ではなく「始め方」として見せる。
-  // 最初に出すのは一言とダウンロードのボタンだけ。手順はボタンを押したあとに出す
+  // 拡張が無いと枠が真っ白なまま理由も分からないので、画面の上端に赤い帯で知らせる。
+  // 最初に出すのは一言とダウンロードのボタンだけ。手順はボタンを押したあとに帯の中へ出す
   // (押す前から全部並べると、読む量に押されて入れてもらえない)。
   // chrome://extensions はウェブページからリンクにしても Chrome が遷移を拒否するため、
   // クリックさせず「コピーして貼る」形で見せる。
   const NOTICE_CSS = [
-    '#mv-no-ext{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;',
-    'padding:16px;background:rgba(1,4,9,0.78);font:14px/1.7 system-ui,sans-serif;color:#c9d1d9;overflow:auto}',
-    '#mv-no-ext .ne-card{width:100%;max-width:420px;margin:auto;padding:28px 28px 24px;border-radius:14px;',
-    'border:1px solid #30363d;background:#0d1117;box-shadow:0 16px 48px rgba(0,0,0,0.6);text-align:center}',
-    '#mv-no-ext .ne-icon{display:inline-grid;grid-template-columns:repeat(2,18px);gap:4px;margin-bottom:14px}',
-    '#mv-no-ext .ne-icon span{height:12px;border-radius:3px;background:#58a6ff}',
-    '#mv-no-ext .ne-icon span:nth-child(2),#mv-no-ext .ne-icon span:nth-child(3){opacity:0.45}',
-    '#mv-no-ext h1{margin:0 0 6px;font-size:18px;font-weight:600;color:#f0f6fc}',
-    '#mv-no-ext p{margin:0 0 18px;color:#8b949e}',
-    '#mv-no-ext .ne-btn{display:block;width:100%;padding:11px 16px;border-radius:8px;border:1px solid transparent;',
-    'font:inherit;font-weight:600;text-decoration:none;cursor:pointer}',
-    '#mv-no-ext .ne-primary{background:#1f6feb;color:#fff}',
-    '#mv-no-ext .ne-primary:hover{background:#388bfd}',
-    '#mv-no-ext .ne-ghost{background:transparent;border-color:#30363d;color:#c9d1d9}',
-    '#mv-no-ext .ne-ghost:hover{background:#161b22}',
-    '#mv-no-ext .ne-how{margin-top:12px;padding:0;border:0;background:none;color:#8b949e;font:inherit;font-size:13px;',
-    'text-decoration:underline;cursor:pointer}',
-    '#mv-no-ext ol{margin:20px 0 18px;padding:16px 0 0 1.4em;border-top:1px solid #21262d;text-align:left;font-size:13px}',
-    '#mv-no-ext li{margin-bottom:8px;padding-left:2px}',
-    '#mv-no-ext code{padding:2px 6px;border-radius:4px;background:#161b22;color:#f0f6fc;',
+    '#mv-no-ext{position:fixed;left:0;right:0;top:0;z-index:2147483647;padding:12px 18px;max-height:70vh;overflow:auto;',
+    'background:#1b0d0f;color:#ffdcd9;border-bottom:1px solid #f85149;box-shadow:0 4px 18px rgba(0,0,0,0.6);',
+    'font:14px/1.7 system-ui,sans-serif}',
+    '#mv-no-ext .ne-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 14px}',
+    '#mv-no-ext .ne-btn{padding:6px 16px;border-radius:6px;border:1px solid #f85149;font:inherit;font-weight:bold;',
+    'text-decoration:none;cursor:pointer}',
+    '#mv-no-ext .ne-primary{background:#f85149;color:#fff}',
+    '#mv-no-ext .ne-primary:hover{background:#ff6a63}',
+    '#mv-no-ext .ne-ghost{background:transparent;color:#ffdcd9}',
+    '#mv-no-ext .ne-ghost:hover{background:#3a1518}',
+    '#mv-no-ext .ne-how{padding:0;border:0;background:none;color:#ff9c94;font:inherit;text-decoration:underline;cursor:pointer}',
+    '#mv-no-ext ol{max-width:620px;margin:10px auto 0;padding:10px 0 0 1.4em;border-top:1px solid #5a2326;font-size:13px}',
+    '#mv-no-ext li{margin-bottom:4px}',
+    '#mv-no-ext code{padding:1px 6px;border-radius:4px;background:#000;color:#ffd9d5;',
     'font-family:ui-monospace,Consolas,monospace;user-select:all}',
-    '#mv-no-ext .ne-copy{margin-left:6px;padding:1px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;',
-    'color:#c9d1d9;font:inherit;font-size:12px;cursor:pointer}',
+    '#mv-no-ext .ne-copy{margin-left:6px;padding:0 8px;border-radius:4px;border:1px solid #5a2326;background:#000;',
+    'color:#ffdcd9;font:inherit;font-size:12px;cursor:pointer}',
     '#mv-no-ext [hidden]{display:none}'
   ].join('');
   // 手順を開いたことはタブの中だけで覚える。入れ終えて戻ってきたときの開き直しを挟んでも、
@@ -175,11 +169,9 @@
     const reopen = () => location.replace(ENTRY_URL);
 
     const style = make('style', { textContent: NOTICE_CSS });
-    const icon = make('div', { className: 'ne-icon' }, make('span'), make('span'), make('span'), make('span'));
-    icon.setAttribute('aria-hidden', 'true');
     const lead = received
-      ? '拡張機能を入れると、受け取った配信が1画面に並びます。'
-      : '拡張機能を入れると、配信を1画面に並べて見られます。';
+      ? '拡張機能を入れると、受け取った配信が並びます。'
+      : '拡張機能を入れると、配信を並べて見られます。';
     const zip = make('a', { className: 'ne-btn ne-primary', href: ZIP_URL, download: ZIP_NAME, textContent: '拡張機能をダウンロード' });
     const how = make('button', { type: 'button', className: 'ne-how', textContent: '入れ方を見る' });
 
@@ -214,9 +206,8 @@
       if (document.visibilityState === 'visible' && !steps.hidden) reopen();
     });
 
-    const card = make('div', { className: 'ne-card' },
-      icon, make('h1', { textContent: 'Parallel Stream' }), make('p', { textContent: lead }), zip, how, steps, done);
-    const el = make('div', { id: 'mv-no-ext' }, style, card);
+    const row = make('div', { className: 'ne-row' }, make('span', { textContent: lead }), zip, how, done);
+    const el = make('div', { id: 'mv-no-ext' }, style, row, steps);
     (document.body || document.documentElement).appendChild(el);
   }
 
