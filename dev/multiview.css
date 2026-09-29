@@ -791,6 +791,11 @@ body.stack-mode #qa-tile { display: none; }
 #main-menu a:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
 #main-menu button.on { color: #3fb950; }
 #main-menu a { text-decoration: none; }
+#main-menu button[hidden] { display: none; }
+/* 保守用のアイコンだけの列。薄くしておき、乗せたときだけはっきり見せる。 */
+.mm-tools { display: flex; gap: 2px; }
+#main-menu .mm-tools button { padding: 8px 10px; opacity: 0.55; }
+#main-menu .mm-tools button:hover { opacity: 1; }
 .mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
 /* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
 .mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
