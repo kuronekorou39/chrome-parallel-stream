@@ -377,7 +377,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.68';
+const EXPECTED_EXT_VERSION = '0.9.69';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -406,6 +406,8 @@ function checkExtVersion() {
     item.hidden = !old;
     item.title = '拡張機能の新しい版があります';
   }
+  const ver = document.getElementById('mm-ver');
+  if (ver) ver.textContent = v || '';
   // ダイアログの中身も同じ情報で埋めておく(開いたときに作らない)。
   const cur = document.getElementById('upd-cur');
   const latest = document.getElementById('upd-latest');
@@ -3860,7 +3862,7 @@ function wireToolbar() {
 
 // ====== スマホ用メインメニュー(縦リスト) ======
 // スマホ(縦積み)ではツールバーのバー表示をやめ、≡ から右クリックメニュー風の縦リストを出す。
-// 項目: 追加・配置・一覧・パフォーマンス・弾幕設定(音量/並びはミキサー、軽量は各枠のバッジ)。
+// 項目: 配置・一覧・弾幕・チャット・パフォーマンス・ログインCookie(追加は右下の ＋、音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
 // ≡メニューの「弾幕」「チャット」に現在の全体既定を出す(値 + ON のときは緑)。
@@ -3906,7 +3908,6 @@ function setupMainMenu() {
       if (stackMode) toggleMainMenu(false);
       fn();
     });
-  act('mm-add', () => document.getElementById('add-open-btn').click());
   act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   // 弾幕/チャットは全枠まとめて切り替え、そのまま次に追加する枠の既定にもなる。
