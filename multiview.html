@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.68" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.69" />
 </head>
 <body>
   <div id="toolbar">
@@ -35,27 +35,32 @@
 
   <!-- ≡ から出す縦リストメニュー(右クリックメニュー風。PC/スマホ共通)。
        各項目はパネル/ダイアログを開くもので、既存ツールバーボタンの機能をそのまま呼ぶ。
-       アイコンは固定幅の .mm-icon 列に入れ、絵文字/＋の幅差でラベル開始位置がずれないように揃える。
+       アイコンは線画の SVG(絵文字は OS で見た目が変わり、色が付いて目を引くため使わない)。
+       固定幅の .mm-icon 列に入れ、ラベルの開始位置を揃える。
+       「追加」は右下の ＋ に常に出ているので、ここには置かない。
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
-    <!-- 上は「見るための操作」、下は「設定・保守」。使う頻度が違うので区切る。 -->
-    <button id="mm-add" type="button"><span class="mm-icon">＋</span><span class="mm-label">追加</span></button>
-    <button id="mm-layout" type="button"><span class="mm-icon">📐</span><span class="mm-label">配置</span></button>
-    <button id="mm-mixer" type="button"><span class="mm-icon">🎚</span><span class="mm-label">一覧</span></button>
+    <!-- 上は「見るための操作」、下は「保守」。使う頻度が違うので区切る。 -->
+    <button id="mm-layout" type="button"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/></svg></span><span class="mm-label">配置</span></button>
+    <button id="mm-mixer" type="button"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3v7M5 14v7M12 3v3M12 10v11M19 3v10M19 17v4M2.5 12h5M9.5 8h5M16.5 15h5"/></svg></span><span class="mm-label">一覧</span></button>
     <!-- 弾幕とチャットは「全枠まとめて + 次に足す枠の既定」。枠ごとの切替は各枠の ⋮ から。
-         右の値が現在の既定で、押すと全枠がその通りに切り替わる。 -->
-    <button id="mm-danmaku-all" type="button"><span class="mm-icon">🌠</span><span class="mm-label">弾幕</span><span class="mm-sub" id="mm-danmaku-all-val"></span></button>
-    <button id="mm-chat-all" type="button"><span class="mm-icon">💬</span><span class="mm-label">チャット</span><span class="mm-sub" id="mm-chat-all-val"></span></button>
-    <button id="mm-danmaku" type="button"><span class="mm-icon">⚙</span><span class="mm-label">弾幕設定</span></button>
+         右の値が現在の既定で、押すと全枠がその通りに切り替わる。弾幕の設定は同じ行の右端から開く。 -->
+    <div class="mm-row">
+      <button id="mm-danmaku-all" type="button"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h10M9 12h12M5 17h9"/></svg></span><span class="mm-label">弾幕</span><span class="mm-sub" id="mm-danmaku-all-val"></span></button>
+      <button id="mm-danmaku" class="mm-side" type="button" title="弾幕設定" aria-label="弾幕設定"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.2" stroke-width="3.2" stroke-dasharray="3.2 3.24" stroke-linecap="butt"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.2"/></svg></span></button>
+    </div>
+    <button id="mm-chat-all" type="button"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/></svg></span><span class="mm-label">チャット</span><span class="mm-sub" id="mm-chat-all-val"></span></button>
     <div class="mm-sep"></div>
     <!-- 拡張機能の更新。新しい版があるときだけ出す(最新のときは用が無いので出さない)。
          押すと即ダウンロードではなく、版と入れ方を確認できるダイアログを開く。 -->
-    <button id="mm-update" type="button" hidden><span class="mm-icon">⬇</span><span class="mm-label">拡張機能</span><span class="mm-sub" id="mm-update-ver"></span></button>
-    <!-- めったに使わない保守用。目立たせないよう、ラベル無しのアイコンだけを横に並べる。 -->
+    <button id="mm-update" type="button" hidden><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg></span><span class="mm-label">拡張機能</span><span class="mm-sub" id="mm-update-ver"></span></button>
+    <!-- めったに使わない保守用。目立たせないよう、ラベル無しのアイコンだけを横に並べる。
+         右端は入っている拡張機能の版(不具合の報告を受けたときに、どの版かを聞けるように)。 -->
     <div class="mm-tools">
-      <button id="mm-perf" type="button" title="パフォーマンス" aria-label="パフォーマンス"><span class="mm-icon">📊</span></button>
-      <button id="mm-cookie" type="button" title="ログインCookie" aria-label="ログインCookie"><span class="mm-icon">🍪</span></button>
+      <button id="mm-perf" type="button" title="パフォーマンス" aria-label="パフォーマンス"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-8M12 20V4M19 20v-5"/></svg></span></button>
+      <button id="mm-cookie" type="button" title="ログインCookie" aria-label="ログインCookie"><span class="mm-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 11h.01M10 15h.01M15 16h.01" stroke-width="2.6"/></svg></span></button>
+      <span id="mm-ver" class="mm-ver" title="入っている拡張機能の版"></span>
     </div>
   </div>
 
@@ -100,7 +105,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.68.zip" download="parallel-stream-0.9.68.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.69.zip" download="parallel-stream-0.9.69.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -251,7 +256,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.68"></script>
-  <script src="multiview.js?v=0.9.68"></script>
+  <script src="ext-bridge.js?v=0.9.69"></script>
+  <script src="multiview.js?v=0.9.69"></script>
 </body>
 </html>
