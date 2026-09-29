@@ -123,6 +123,27 @@ function isAllowedFrameUrl(url) {
   }
 }
 
+// 別サイトのリンクから渡された配信 URL を取り出す(?add=<配信URL> を、配信の数だけ並べて渡す)。
+// 枠に表示できない URL と重複は捨て、枠数の上限で切る。
+function addedUrlsFrom(search) {
+  const urls = [];
+  new URLSearchParams(search).getAll('add').forEach((raw) => {
+    const url = String(raw || '').trim();
+    if (isAllowedFrameUrl(url) && !urls.includes(url)) urls.push(url);
+  });
+  return urls.slice(0, MAX_WINDOWS);
+}
+
+// 受け取った ?add= を URL から消す。残したままだと、再読み込みのたびに並びを置き換えてしまう。
+// ほかのパラメータ(?dev=1)とハッシュ(#stack)は残す。
+function dropAddedUrls() {
+  const params = new URLSearchParams(location.search);
+  if (!params.has('add')) return;
+  params.delete('add');
+  const query = params.toString();
+  history.replaceState(null, '', location.pathname + (query ? '?' + query : '') + location.hash);
+}
+
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -231,7 +252,14 @@ let stackMode = false;
   // 新フォーマット(wins: 位置・サイズ付き)を優先して位置ごと復元。旧フォーマット(urls のみ)は
   // 初回だけ整列にフォールバック。以後は移動・リサイズのたびに保存されるので勝手に整列し直さない。
   let deferred = []; // 表示するが中身は順次読み込む枠(更新時の同時読込を避ける)
-  if (Array.isArray(saved.wins) && saved.wins.length) {
+  // 別サイトのリンク(?add=)から開かれたときは、前回の並びを復元せず、渡された配信に置き換える。
+  // 音量や弾幕などの全体の設定は、上で読んだ前回のものをそのまま使う。
+  const added = addedUrlsFrom(location.search);
+  dropAddedUrls();
+  if (added.length) {
+    deferred = added.map((u) => createWindow(u, { silent: true, deferLoad: true })).filter(Boolean);
+    tileAll();
+  } else if (Array.isArray(saved.wins) && saved.wins.length) {
     deferred = restoreLineup(saved); // マスタ音量・各枠を復元し、表示すべき枠の配列を受け取る
   } else {
     const urls = (saved.urls || []).map((u) => (u || '').trim()).filter((u) => u.length > 0).slice(0, MAX_WINDOWS);
@@ -239,6 +267,7 @@ let stackMode = false;
     if (urls.length) tileAll(); // 旧データの初回だけ整列(以後は位置を保存・復元)
   }
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
+  if (added.length) saveLineup(); // 置き換えた並びを、次に開いたときの「前回の状態」にする
   updateCount();
   // 復元した枠は silent で作る(= 1枠ごとには一覧を描き直さない)ので、ここで一度だけ作り直す。
   // これが無いと、1枠目が出来た時点で自動表示した枠一覧が「1件」のまま止まる。
@@ -348,12 +377,12 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.59';
-// リンク先は常に存在する固定名にする。版入りの URL を直接指すと、古いページを開いたままの
-// 利用者が、既に消えた版を掴んで 404 になる(実際に起きた)。
-// 保存されるファイル名だけ download 属性で版入りにする。これで (1)(2) も付かない。
-const EXT_ZIP_URL = 'dist/parallel-stream-latest.zip';
+const EXPECTED_EXT_VERSION = '0.9.63';
+// リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
+// リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
+// 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
 const EXT_ZIP_NAME = 'parallel-stream-' + EXPECTED_EXT_VERSION + '.zip';
+const EXT_ZIP_URL = 'dist/' + EXT_ZIP_NAME;
 
 function cmpVersion(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -391,8 +420,8 @@ function checkExtVersion() {
         : '最新です。更新の必要はありません。';
   }
   if (updDl) {
-    updDl.href = EXT_ZIP_URL; // 常に存在する固定名(古いページからでも 404 にならない)
-    updDl.download = EXT_ZIP_NAME; // 保存名だけ版入りにする
+    updDl.href = EXT_ZIP_URL; // 版入りの zip(消さないので古いページからでも 404 にならない)
+    updDl.download = EXT_ZIP_NAME;
   }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
@@ -3732,6 +3761,8 @@ function wireToolbar() {
     addDialog.classList.add('open');
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
+  document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
+  document.getElementById('qa-tile').addEventListener('click', () => tileAll()); // 右下の丸ボタン(⊞)
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
   document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
   // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので

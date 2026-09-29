@@ -739,6 +739,26 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
   top: auto; right: auto; bottom: 8px; left: 10px;
 }
 
+/* 右下の丸ボタン(追加/整列の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)。
+   全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは整列が無意味なので ⊞ を隠す。 */
+#quick-actions {
+  position: fixed; right: 12px; bottom: 12px; z-index: 100001;
+  display: flex; flex-direction: row; gap: 10px;
+  transition: opacity 0.2s ease;
+}
+#quick-actions > button {
+  width: 50px; height: 50px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  font-family: inherit; font-size: 24px; line-height: 1; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+}
+#quick-actions > button:hover { background: #30363d; border-color: #58a6ff; color: #f0f6fc; }
+#qa-add { background: rgba(31,111,235,0.92); border-color: #388bfd; color: #fff; }
+#qa-add:hover { background: #388bfd; border-color: #58a6ff; }
+body.has-stack-max #quick-actions { display: none; }
+body.stack-mode #qa-tile { display: none; }
+
 /* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
    backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */
 /* メニューを出しっぱなしにできるよう、backdrop は浮動パネル(90000台)より下に置く。これでメニューから
@@ -909,14 +929,13 @@ body:not(.stack-mode) .win-quick {
 .win.cq-narrow .win-quick > button { width: 46px; height: 46px; font-size: 19px; border-radius: 10px; }
 
 /* ===== 枠の操作(✕ / ⋮ / リサイズのつまみ)の見え方: 3段階 =====
-   出ているあいだも、ふだんは映像に溶けるすりガラスにしておき、近づくとボタンらしくなる。
+   出ているあいだも、ふだんは映像に溶ける半透明の板にしておき、近づくとボタンらしくなる。
    出す/消す(opacity)は上のルールが担当で、ここは「出ている間の濃さ」だけを決める。
-     1. 遠い … 半透明のガラス板。映像の上に四角い板が常に乗っているように見せない
+     1. 遠い … 半透明の板。映像の上に四角い板が常に乗っているように見せない
      2. 近い … ✕/⋮ はひとまとまりなので、どちらかに寄れば両方はっきりさせる
      3. 乗った … 押せる的として最も強く出す
    マウスのある環境だけに当てる。タッチには hover が無く、薄いまま戻らなくなるため。
-   backdrop-filter は下の映像をぼかす演出。効かない環境(別プロセスの iframe 等)でも
-   半透明の板として成立するよう、地色と枠線だけで見えるようにしてある。 */
+   下の映像はぼかさず、地色と枠線の半透明だけで見せる。 */
 @media (hover: hover) {
   .win-quick > button,
   .win-resize-grip {
@@ -925,8 +944,6 @@ body:not(.stack-mode) .win-quick {
     color: rgba(240, 246, 252, 0.5);
     box-shadow: none;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 明るい映像の上でも記号が沈まないように */
-    backdrop-filter: blur(7px) saturate(115%);
-    -webkit-backdrop-filter: blur(7px) saturate(115%);
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
   .win-quick:hover > button {
@@ -1021,6 +1038,7 @@ body.has-stack-max #stack-restore { display: inline-flex; }
    このルールは後方に置き、toolbar-hidden / stack-mode の #toolbar-show{opacity:1}(同詳細度)に
    ソース順で勝たせている。!important は使わない(将来の上書き耐性のため)。 */
 body.idle #toolbar-show,
+body.idle #quick-actions,
 body.idle #stack-restore { opacity: 0; }
 
 /* 同じく idle 連動で、開いている機能パネル/ダイアログ(追加・配置・位置・一覧/ミキサー・弾幕設定・
@@ -1054,6 +1072,7 @@ body.stack-mode #mm-layout { display: none; }
   #count { font-size: 18px; }
   #master-vol { width: 130px; height: 30px; }
   #toolbar-show { font-size: 17px; padding: 14px 20px; }
+  #quick-actions > button { width: 58px; height: 58px; font-size: 27px; }
   body.tb-vertical #toolbar { width: 280px; }
 
   .empty-title { font-size: 20px; }
