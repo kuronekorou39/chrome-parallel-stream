@@ -801,6 +801,7 @@ body.stack-mode #qa-tile { display: none; }
 .mm-row { display: flex; gap: 2px; }
 .mm-row > button:first-child { flex: 1 1 auto; }
 #main-menu .mm-side { padding-left: 10px; padding-right: 10px; color: #7d8590; }
+#main-menu span.mm-side { display: flex; }
 .mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
 /* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
 .mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
