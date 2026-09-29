@@ -377,7 +377,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.67';
+const EXPECTED_EXT_VERSION = '0.9.68';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -396,14 +396,15 @@ function cmpVersion(a, b) {
 
 function checkExtVersion() {
   const v = MV.extVersion;
-  // メニューには常に版を出す(古いときだけでなく、最新であることも分かるように)。
+  // メニューの「拡張機能」は、新しい版があるときだけ出す。
   const sub = document.getElementById('mm-update-ver');
   const item = document.getElementById('mm-update');
   const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
   if (sub && item) {
-    sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
+    sub.textContent = old ? v + ' → ' + EXPECTED_EXT_VERSION : '';
     item.classList.toggle('is-old', !!old);
-    item.title = old ? '拡張機能が古いままです' : '拡張機能の版と更新方法';
+    item.hidden = !old;
+    item.title = '拡張機能の新しい版があります';
   }
   // ダイアログの中身も同じ情報で埋めておく(開いたときに作らない)。
   const cur = document.getElementById('upd-cur');

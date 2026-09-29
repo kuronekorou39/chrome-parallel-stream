@@ -18,7 +18,7 @@
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
   // リンク先は版入りのファイル名にする(download 属性で保存名だけ変える方式は、環境によって効かず
   // latest 名のまま落ちて (1)(2) が付く)。版入りの zip は release.mjs が消さずに残すので 404 にならない。
-  const ZIP_NAME = 'parallel-stream-0.9.67.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.68.zip'; // release.mjs が版に合わせて書き換える
   const ZIP_URL = 'dist/' + ZIP_NAME;
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
