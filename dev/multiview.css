@@ -12,6 +12,14 @@ body { display: flex; flex-direction: column; }
 /* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
 body.idle, body.idle * { cursor: none !important; }
 
+/* ===== アイコン(線画の SVG。定義は multiview.js の ICON_PATHS) ===== */
+/* 大きさは文字に合わせ、色は文字色に従う。文字と並べるときは .ic-text との間を少し空ける。 */
+.ic {
+  width: 1.1em; height: 1.1em; vertical-align: -0.18em; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.ic + .ic-text { margin-left: 0.4em; }
+
 /* ===== ツールバー ===== */
 /* 別レイヤーで上に重ねる(フローに入れない)。これで出し入れしてもステージ=全画面が
    変わらず、中の窓が動かない。背後が透けて見えるよう半透明にする(ボタン類は各自不透明)。 */
@@ -809,10 +817,7 @@ body.stack-mode #qa-tile { display: none; }
 #mm-update.is-old .mm-sub { color: #e3b341; font-weight: bold; }
 /* アイコン列を固定幅にして、ラベル開始位置を揃える。アイコンは線画で、色は文字色に従う。 */
 .mm-icon { flex: 0 0 1.6em; display: flex; justify-content: center; font-size: 17px; line-height: 1; }
-.mm-icon svg {
-  width: 1.05em; height: 1.05em; fill: none; stroke: currentColor;
-  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-}
+.mm-icon .ic { width: 1.05em; height: 1.05em; vertical-align: 0; }
 .mm-label { flex: 1 1 auto; }
 
 /* ===== スクロールバー ===== */
