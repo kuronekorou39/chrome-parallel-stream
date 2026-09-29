@@ -10,13 +10,15 @@
   'use strict';
 
   const HOSTED_URL = 'https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html';
-  const REPO_URL = 'https://github.com/kuronekorou39/chrome-parallel-stream';
+  // 開かれたときの URL。multiview.js は受け取った ?add= を URL から消すので、拡張機能を入れた
+  // あとに開き直す先として、消される前のものを控えておく(渡された配信を失わないため)。
+  const ENTRY_URL = location.href;
   // リポジトリ全体ではなく、拡張機能のファイルだけを詰めた配布物を指す。
   // 展開したフォルダがそのまま拡張機能になるので、入れ子を掘る必要がない
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
   // リンク先は版入りのファイル名にする(download 属性で保存名だけ変える方式は、環境によって効かず
   // latest 名のまま落ちて (1)(2) が付く)。版入りの zip は release.mjs が消さずに残すので 404 にならない。
-  const ZIP_NAME = 'parallel-stream-0.9.63.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-0.9.64.zip'; // release.mjs が版に合わせて書き換える
   const ZIP_URL = 'dist/' + ZIP_NAME;
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
@@ -125,76 +127,96 @@
   };
 
   // ---- 拡張機能が入っていないときの案内 ----
-  // このページは UI だけで、枠の埋め込み(CSP/X-Frame-Options の除去)も枠内の音量・弾幕も
-  // 拡張機能側が担っている。拡張が無いと枠が真っ白なまま理由も分からないので、手順ごと明示する。
+  // このページは UI だけで、枠の埋め込みも枠内の音量・弾幕も拡張機能側が担っている。
+  // 初めて URL で来た人が最初に見る画面なので、警告ではなく「始め方」として見せる。
+  // 最初に出すのは一言とダウンロードのボタンだけ。手順はボタンを押したあとに出す
+  // (押す前から全部並べると、読む量に押されて入れてもらえない)。
   // chrome://extensions はウェブページからリンクにしても Chrome が遷移を拒否するため、
   // クリックさせず「コピーして貼る」形で見せる。
+  const NOTICE_CSS = [
+    '#mv-no-ext{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;',
+    'padding:16px;background:rgba(1,4,9,0.78);font:14px/1.7 system-ui,sans-serif;color:#c9d1d9;overflow:auto}',
+    '#mv-no-ext .ne-card{width:100%;max-width:420px;margin:auto;padding:28px 28px 24px;border-radius:14px;',
+    'border:1px solid #30363d;background:#0d1117;box-shadow:0 16px 48px rgba(0,0,0,0.6);text-align:center}',
+    '#mv-no-ext .ne-icon{display:inline-grid;grid-template-columns:repeat(2,18px);gap:4px;margin-bottom:14px}',
+    '#mv-no-ext .ne-icon span{height:12px;border-radius:3px;background:#58a6ff}',
+    '#mv-no-ext .ne-icon span:nth-child(2),#mv-no-ext .ne-icon span:nth-child(3){opacity:0.45}',
+    '#mv-no-ext h1{margin:0 0 6px;font-size:18px;font-weight:600;color:#f0f6fc}',
+    '#mv-no-ext p{margin:0 0 18px;color:#8b949e}',
+    '#mv-no-ext .ne-btn{display:block;width:100%;padding:11px 16px;border-radius:8px;border:1px solid transparent;',
+    'font:inherit;font-weight:600;text-decoration:none;cursor:pointer}',
+    '#mv-no-ext .ne-primary{background:#1f6feb;color:#fff}',
+    '#mv-no-ext .ne-primary:hover{background:#388bfd}',
+    '#mv-no-ext .ne-ghost{background:transparent;border-color:#30363d;color:#c9d1d9}',
+    '#mv-no-ext .ne-ghost:hover{background:#161b22}',
+    '#mv-no-ext .ne-how{margin-top:12px;padding:0;border:0;background:none;color:#8b949e;font:inherit;font-size:13px;',
+    'text-decoration:underline;cursor:pointer}',
+    '#mv-no-ext ol{margin:20px 0 18px;padding:16px 0 0 1.4em;border-top:1px solid #21262d;text-align:left;font-size:13px}',
+    '#mv-no-ext li{margin-bottom:8px;padding-left:2px}',
+    '#mv-no-ext code{padding:2px 6px;border-radius:4px;background:#161b22;color:#f0f6fc;',
+    'font-family:ui-monospace,Consolas,monospace;user-select:all}',
+    '#mv-no-ext .ne-copy{margin-left:6px;padding:1px 8px;border-radius:4px;border:1px solid #30363d;background:#161b22;',
+    'color:#c9d1d9;font:inherit;font-size:12px;cursor:pointer}',
+    '#mv-no-ext [hidden]{display:none}'
+  ].join('');
+  // 手順を開いたことはタブの中だけで覚える。入れ終えて戻ってきたときの開き直しを挟んでも、
+  // まだ入っていなければ同じ手順の表示に戻すため。
+  const NOTICE_OPEN_KEY = 'mvNoExtSteps';
+
   function showMissingExtensionNotice() {
     if (document.getElementById('mv-no-ext')) return;
 
-    const el = document.createElement('div');
-    el.id = 'mv-no-ext';
-    el.style.cssText = [
-      'position:fixed', 'left:0', 'right:0', 'top:0', 'z-index:2147483647',
-      'background:#1b0d0f', 'color:#ffdcd9', 'border-bottom:1px solid #f85149',
-      'font:13px/1.7 system-ui,sans-serif', 'padding:14px 18px',
-      'max-height:70vh', 'overflow:auto', 'box-shadow:0 4px 18px rgba(0,0,0,0.6)'
-    ].join(';');
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'max-width:760px;margin:0 auto';
-
-    const h = document.createElement('div');
-    h.textContent = '⚠ 拡張機能「Parallel Stream」が必要です';
-    h.style.cssText = 'font-size:15px;font-weight:bold;color:#ff9c94;margin-bottom:6px';
-
-    const lead = document.createElement('div');
-    lead.textContent =
-      'このページは操作画面だけです。配信サイトの埋め込み、枠ごとの音量、弾幕は拡張機能が行うため、' +
-      '入れていないと枠が1つも表示されず、設定も保存されません。';
-    lead.style.cssText = 'margin-bottom:10px';
-
-    const code = (t) => {
-      const c = document.createElement('code');
-      c.textContent = t;
-      c.style.cssText =
-        'background:#000;color:#ffd9d5;padding:1px 6px;border-radius:4px;' +
-        'font-family:ui-monospace,Consolas,monospace;user-select:all';
-      return c;
+    const make = (tag, props, ...kids) => {
+      const n = Object.assign(document.createElement(tag), props || {});
+      n.append(...kids);
+      return n;
     };
+    const received = new URLSearchParams(new URL(ENTRY_URL).search).has('add');
+    const reopen = () => location.replace(ENTRY_URL);
 
-    const ol = document.createElement('ol');
-    ol.style.cssText = 'margin:0 0 10px;padding-left:1.4em';
-    const li = (...nodes) => {
-      const l = document.createElement('li');
-      l.append(...nodes);
-      l.style.marginBottom = '3px';
-      ol.appendChild(l);
+    const style = make('style', { textContent: NOTICE_CSS });
+    const icon = make('div', { className: 'ne-icon' }, make('span'), make('span'), make('span'), make('span'));
+    icon.setAttribute('aria-hidden', 'true');
+    const lead = received
+      ? '拡張機能を入れると、受け取った配信が1画面に並びます。'
+      : '拡張機能を入れると、配信を1画面に並べて見られます。';
+    const zip = make('a', { className: 'ne-btn ne-primary', href: ZIP_URL, download: ZIP_NAME, textContent: '拡張機能をダウンロード' });
+    const how = make('button', { type: 'button', className: 'ne-how', textContent: '入れ方を見る' });
+
+    const copy = make('button', { type: 'button', className: 'ne-copy', textContent: 'コピー' });
+    copy.addEventListener('click', () => {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText('chrome://extensions').then(() => { copy.textContent = 'コピーしました'; }, () => {});
+    });
+    const steps = make('ol', { hidden: true },
+      make('li', null, 'ダウンロードした ZIP を展開する'),
+      make('li', null, make('code', { textContent: 'chrome://extensions' }), copy, ' を開き、デベロッパーモードを ON にする'),
+      make('li', null, '「パッケージ化されていない拡張機能を読み込む」で、展開したフォルダを選ぶ')
+    );
+    const done = make('button', { type: 'button', className: 'ne-btn ne-ghost', hidden: true, textContent: '入れたので開き直す' });
+    done.addEventListener('click', reopen);
+
+    const openSteps = () => {
+      steps.hidden = false;
+      done.hidden = false;
+      how.hidden = true;
+      try { sessionStorage.setItem(NOTICE_OPEN_KEY, '1'); } catch (e) { /* noop */ }
     };
+    zip.addEventListener('click', openSteps);
+    how.addEventListener('click', openSteps);
+    let wasOpen = false;
+    try { wasOpen = sessionStorage.getItem(NOTICE_OPEN_KEY) === '1'; } catch (e) { /* noop */ }
+    if (wasOpen) openSteps();
 
-    const zip = document.createElement('a');
-    zip.href = ZIP_URL;
-    zip.download = ZIP_NAME;
-    zip.textContent = 'ZIP をダウンロード';
-    zip.style.cssText = 'color:#ff9c94;font-weight:bold';
-    li(zip, ' して展開する(展開したフォルダがそのまま拡張機能です)');
-    li('Chrome のアドレスバーに ', code('chrome://extensions'), ' を貼って開き、「デベロッパーモード」を ON');
-    li('「パッケージ化されていない拡張機能を読み込む」を押し、展開したフォルダ(', code('manifest.json'), ' がある場所)を選ぶ');
-    li('このページを再読み込みする');
+    // 拡張機能は、入れた時点で開いていたタブには効かない(開き直して初めて繋がる)。
+    // 手順の途中で別のタブやフォルダへ行き、戻ってきたら開き直して確かめる。
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && !steps.hidden) reopen();
+    });
 
-    const more = document.createElement('a');
-    more.href = REPO_URL + '#インストール';
-    more.target = '_blank';
-    more.rel = 'noopener';
-    more.textContent = '詳しい説明とこの拡張がブラウザに与える影響';
-    more.style.color = '#ff9c94';
-
-    const foot = document.createElement('div');
-    foot.style.cssText = 'font-size:12px;opacity:0.85';
-    foot.append(more);
-
-    wrap.append(h, lead, ol, foot);
-    el.appendChild(wrap);
+    const card = make('div', { className: 'ne-card' },
+      icon, make('h1', { textContent: 'Parallel Stream' }), make('p', { textContent: lead }), zip, how, steps, done);
+    const el = make('div', { id: 'mv-no-ext' }, style, card);
     (document.body || document.documentElement).appendChild(el);
   }
 
