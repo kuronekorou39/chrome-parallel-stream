@@ -377,7 +377,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.66';
+const EXPECTED_EXT_VERSION = '0.9.67';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -457,6 +457,10 @@ function checkExtVersion() {
   (document.body || document.documentElement).appendChild(el);
 }
 window.addEventListener('mv-ext-ready', checkExtVersion);
+// 拡張機能の応答が、このファイルの読み込みより先に届くことがある(版が上がった直後は
+// このファイルがキャッシュに無く、取得に時間がかかるため)。そのときは合図を取り逃しているので、
+// ここで確かめる。版が上がった直後こそ案内が要る場面なので、逃すと誰にも出ない。
+if (MV.extVersion) checkExtVersion();
 
 // 右クリックは枠の移動に割り当てているので、このページではブラウザのメニューを出さない。
 // 枠の上だけ抑止していたが、枠の外・余白・パネルの上では出てしまい、操作の途中で邪魔になっていた。
