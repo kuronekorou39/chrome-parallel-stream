@@ -12,6 +12,14 @@ body { display: flex; flex-direction: column; }
 /* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
 body.idle, body.idle * { cursor: none !important; }
 
+/* ===== アイコン(線画の SVG。定義は multiview.js の ICON_PATHS) ===== */
+/* 大きさは文字に合わせ、色は文字色に従う。文字と並べるときは .ic-text との間を少し空ける。 */
+.ic {
+  width: 1.1em; height: 1.1em; vertical-align: -0.18em; flex: 0 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.ic + .ic-text { margin-left: 0.4em; }
+
 /* ===== ツールバー ===== */
 /* 別レイヤーで上に重ねる(フローに入れない)。これで出し入れしてもステージ=全画面が
    変わらず、中の窓が動かない。背後が透けて見えるよう半透明にする(ボタン類は各自不透明)。 */
@@ -423,20 +431,27 @@ body.panel-dragging iframe { pointer-events: none; }
 @keyframes win-spin { to { transform: rotate(360deg); } }
 .win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
 
-/* 拡張機能が古いときの注意。操作の邪魔をしないよう下端に出し、閉じられるようにする。 */
+/* 拡張機能が古いときの案内。拡張機能がないときの赤い帯(ext-bridge.js)と同じ形の、黄色い帯。 */
 #mv-ext-old {
-  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 2147483000;
-  max-width: min(92vw, 560px); display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
-  padding: 12px 16px; border-radius: 10px; border: 1px solid #8a6d1f; background: #2a2313; color: #f0e6c8;
-  font-size: 13px; line-height: 1.6; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  position: fixed; left: 0; right: 0; top: 0; z-index: 2147483000;
+  padding: 12px 18px; max-height: 70vh; overflow: auto;
+  background: #2a2313; color: #f0e6c8; border-bottom: 1px solid #d29922;
+  font: 14px/1.7 system-ui, sans-serif; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
 }
-#mv-ext-old b { flex: 0 0 100%; font-size: 14px; }
-#mv-ext-old span { flex: 1 1 260px; }
-#mv-ext-old a { color: #ffd479; font-weight: bold; text-decoration: underline; }
-#mv-ext-old button {
-  padding: 6px 14px; border-radius: 6px; border: 1px solid #6b5a2a; background: #3a3120; color: #f0e6c8; cursor: pointer;
+#mv-ext-old .eo-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; }
+#mv-ext-old .eo-btn {
+  padding: 6px 16px; border-radius: 6px; border: 1px solid #d29922;
+  font: inherit; font-weight: bold; text-decoration: none; cursor: pointer;
 }
-#mv-ext-old button:hover { background: #4a3f28; }
+#mv-ext-old .eo-primary { background: #d29922; color: #1c1600; }
+#mv-ext-old .eo-primary:hover { background: #e3b341; }
+#mv-ext-old .eo-ghost { background: transparent; color: #f0e6c8; }
+#mv-ext-old .eo-ghost:hover { background: #3a3120; }
+#mv-ext-old .eo-how { padding: 0; border: 0; background: none; color: #ffd479; font: inherit; text-decoration: underline; cursor: pointer; }
+#mv-ext-old ol { max-width: 620px; margin: 10px auto 0; padding: 10px 0 0 1.4em; border-top: 1px solid #5c4a1a; font-size: 13px; }
+#mv-ext-old li { margin-bottom: 4px; }
+#mv-ext-old code { padding: 1px 6px; border-radius: 4px; background: #000; color: #ffe9b0; font-family: ui-monospace, Consolas, monospace; user-select: all; }
+#mv-ext-old [hidden] { display: none; }
 
 /* 映像(左)+ チャット(右)の2分割。Kick と YouTube(埋め込み)の枠で使う。 */
 .win-body.split-chat { display: flex; }
@@ -784,13 +799,25 @@ body.stack-mode #qa-tile { display: none; }
 #main-menu a:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
 #main-menu button.on { color: #3fb950; }
 #main-menu a { text-decoration: none; }
+#main-menu button[hidden] { display: none; }
+/* 保守用のアイコンだけの列。薄くしておき、乗せたときだけはっきり見せる。 */
+.mm-tools { display: flex; align-items: center; gap: 2px; }
+#main-menu .mm-tools button { padding: 8px 10px; opacity: 0.55; }
+#main-menu .mm-tools button:hover { opacity: 1; }
+.mm-ver { margin-left: auto; padding-right: 10px; font-size: 11px; color: #6e7681; }
+/* 切替の項目と、その設定を開く小さなボタンを1行に並べる(弾幕 + 弾幕設定)。 */
+.mm-row { display: flex; gap: 2px; }
+.mm-row > button:first-child { flex: 1 1 auto; }
+#main-menu .mm-side { padding-left: 10px; padding-right: 10px; color: #7d8590; }
+#main-menu span.mm-side { display: flex; }
 .mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
 /* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
 .mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
 #mm-update.is-old { color: #e3b341; }
 #mm-update.is-old .mm-sub { color: #e3b341; font-weight: bold; }
-/* アイコン列を固定幅にして、絵文字/＋の幅差でラベル開始位置がずれないように揃える。 */
-.mm-icon { flex: 0 0 1.6em; text-align: center; font-size: 17px; line-height: 1; }
+/* アイコン列を固定幅にして、ラベル開始位置を揃える。アイコンは線画で、色は文字色に従う。 */
+.mm-icon { flex: 0 0 1.6em; display: flex; justify-content: center; font-size: 17px; line-height: 1; }
+.mm-icon .ic { width: 1.05em; height: 1.05em; vertical-align: 0; }
 .mm-label { flex: 1 1 auto; }
 
 /* ===== スクロールバー ===== */

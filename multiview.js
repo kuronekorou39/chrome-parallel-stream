@@ -144,6 +144,67 @@ function dropAddedUrls() {
   history.replaceState(null, '', location.pathname + (query ? '?' + query : '') + location.hash);
 }
 
+// ====== アイコン ======
+// 絵文字は使わず、線画の SVG に揃える(絵文字は OS で見た目が変わり、色が付いて目を引くため)。
+// どれも 24x24 の枠に線で描いた単純な図形。色は文字色に従う(CSS の .ic)。
+const ICON_PATHS = {
+  layout: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12"/>',
+  grid: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M3 12h18"/>',
+  sparkle: '<path d="M12 3l2.2 6.8L21 12l-6.8 2.2L12 21l-2.2-6.8L3 12l6.8-2.2z"/>',
+  mixer: '<path d="M5 3v7M5 14v7M12 3v3M12 10v11M19 3v10M19 17v4M2.5 12h5M9.5 8h5M16.5 15h5"/>',
+  adjust: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  danmaku: '<path d="M3 7h10M9 12h12M5 17h9"/>',
+  chat: '<path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1z"/>',
+  gear: '<circle cx="12" cy="12" r="8.2" stroke-width="3.2" stroke-dasharray="3.2 3.24" stroke-linecap="butt"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2.2"/>',
+  update: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
+  perf: '<path d="M5 20v-8M12 20V4M19 20v-5"/>',
+  cookie: '<circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 11h.01M10 15h.01M15 16h.01" stroke-width="2.6"/>',
+  'vol-on': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+  'vol-off': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9.5l5 5M22 9.5l-5 5"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  reload: '<path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4.5h-4.5"/>',
+  revert: '<path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5"/>',
+  fullscreen: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  back: '<path d="M19 12H5M11 6l-6 6 6 6"/>',
+  forward: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  up: '<path d="M12 19V5M6 11l6-6 6 6"/>',
+  down: '<path d="M12 5v14M6 13l6 6 6-6"/>',
+  width: '<path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/>',
+  height: '<path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  'eye-off': '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><path d="M4 4l16 16"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
+  contrast: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
+  drop: '<path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.5 6-11z"/>'
+};
+// 軽量プレイヤーの印。title 属性や <option> には SVG を置けないので、ここだけ文字にする
+// (U+FE0E を付けて、絵文字ではなく単色の文字として出す)。
+const LIGHT_MARK = '\u26A1\uFE0E ';
+
+function iconEl(name) {
+  const t = document.createElement('template');
+  t.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + (ICON_PATHS[name] || '') + '</svg>';
+  return t.content.firstChild;
+}
+
+// 要素の中身を「アイコン + 文字」にする。label が ':名前: 文字' の形ならアイコン付き、
+// ':名前:' だけならアイコンのみ、それ以外はただの文字として入れる。
+function putLabel(el, label) {
+  const m = /^:([a-z-]+):\s*(.*)$/.exec(label);
+  if (!m) { el.textContent = label; return; }
+  el.replaceChildren(iconEl(m[1]));
+  if (m[2]) {
+    const text = document.createElement('span');
+    text.className = 'ic-text';
+    text.textContent = m[2];
+    el.appendChild(text);
+  }
+}
+
+// HTML に置いた目印(<i data-ic="名前">)を SVG に差し替える。
+document.querySelectorAll('i[data-ic]').forEach((el) => el.replaceWith(iconEl(el.dataset.ic)));
+
 // ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
 const SITES = {
   twitch: { url: 'https://www.twitch.tv/' },
@@ -377,7 +438,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.63';
+const EXPECTED_EXT_VERSION = '0.9.71';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -396,15 +457,18 @@ function cmpVersion(a, b) {
 
 function checkExtVersion() {
   const v = MV.extVersion;
-  // メニューには常に版を出す(古いときだけでなく、最新であることも分かるように)。
+  // メニューの「拡張機能」は、新しい版があるときだけ出す。
   const sub = document.getElementById('mm-update-ver');
   const item = document.getElementById('mm-update');
   const old = v && cmpVersion(v, EXPECTED_EXT_VERSION) < 0;
   if (sub && item) {
-    sub.textContent = !v ? '' : old ? v + ' → ' + EXPECTED_EXT_VERSION : v + '(最新)';
+    sub.textContent = old ? v + ' → ' + EXPECTED_EXT_VERSION : '';
     item.classList.toggle('is-old', !!old);
-    item.title = old ? '拡張機能が古いままです' : '拡張機能の版と更新方法';
+    item.hidden = !old;
+    item.title = '拡張機能の新しい版があります';
   }
+  const ver = document.getElementById('mm-ver');
+  if (ver) ver.textContent = v || '';
   // ダイアログの中身も同じ情報で埋めておく(開いたときに作らない)。
   const cur = document.getElementById('upd-cur');
   const latest = document.getElementById('upd-latest');
@@ -425,25 +489,42 @@ function checkExtVersion() {
   }
   if (!v || cmpVersion(v, EXPECTED_EXT_VERSION) >= 0) return;
   if (document.getElementById('mv-ext-old')) return;
-  const el = document.createElement('div');
-  el.id = 'mv-ext-old';
-  el.innerHTML =
-    '<b>拡張機能が古いままです</b>' +
-    '<span>入っているのは ' + v + ' 、このページが想定しているのは ' + EXPECTED_EXT_VERSION + ' です。' +
-    'ソースを更新して chrome://extensions で再読み込みするか、下の ZIP を入れ直してください。</span>';
-  const dl = document.createElement('a');
-  dl.href = EXT_ZIP_URL;
-  dl.download = EXT_ZIP_NAME;
-  dl.textContent = 'ZIP をダウンロード';
-  el.appendChild(dl);
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = '閉じる';
+  // 拡張機能がないときの赤い帯(ext-bridge.js)と同じ形で、色だけ黄色にする。
+  // 最初は一言とダウンロードのボタンだけ。手順は押したあとに帯の中へ出す。
+  // 古いままでも使えはするので、こちらは閉じられるようにする。
+  const make = (tag, props, ...kids) => {
+    const n = Object.assign(document.createElement(tag), props || {});
+    n.append(...kids);
+    return n;
+  };
+  const dl = make('a', { className: 'eo-btn eo-primary', href: EXT_ZIP_URL, download: EXT_ZIP_NAME, textContent: '新しい版をダウンロード' });
+  const how = make('button', { type: 'button', className: 'eo-how', textContent: '入れ替え方を見る' });
+  const done = make('button', { type: 'button', className: 'eo-btn eo-ghost', hidden: true, textContent: '入れ替えたので開き直す' });
+  const close = make('button', { type: 'button', className: 'eo-btn eo-ghost', textContent: '閉じる' });
+  const steps = make('ol', { hidden: true },
+    make('li', null, 'ダウンロードした ZIP を展開する'),
+    make('li', null, make('code', { textContent: 'chrome://extensions' }), ' を開き、古い Parallel Stream を削除する'),
+    make('li', null, '「パッケージ化されていない拡張機能を読み込む」で、展開したフォルダを選ぶ')
+  );
+  const openSteps = () => {
+    steps.hidden = false;
+    done.hidden = false;
+    how.hidden = true;
+  };
+  dl.addEventListener('click', openSteps);
+  how.addEventListener('click', openSteps);
+  done.addEventListener('click', () => location.reload());
+  const row = make('div', { className: 'eo-row' },
+    make('span', { textContent: '拡張機能の新しい版があります(' + v + ' → ' + EXPECTED_EXT_VERSION + ')。' }), dl, how, done, close);
+  const el = make('div', { id: 'mv-ext-old' }, row, steps);
   close.addEventListener('click', () => el.remove());
-  el.appendChild(close);
   (document.body || document.documentElement).appendChild(el);
 }
 window.addEventListener('mv-ext-ready', checkExtVersion);
+// 拡張機能の応答が、このファイルの読み込みより先に届くことがある(版が上がった直後は
+// このファイルがキャッシュに無く、取得に時間がかかるため)。そのときは合図を取り逃しているので、
+// ここで確かめる。版が上がった直後こそ案内が要る場面なので、逃すと誰にも出ない。
+if (MV.extVersion) checkExtVersion();
 
 // 右クリックは枠の移動に割り当てているので、このページではブラウザのメニューを出さない。
 // 枠の上だけ抑止していたが、枠の外・余白・パネルの上では出てしまい、操作の途中で邪魔になっていた。
@@ -747,7 +828,7 @@ async function renderLayoutList() {
     del.className = 'layout-del';
     del.type = 'button';
     del.title = 'このレイアウトを削除';
-    del.textContent = '🗑';
+    putLabel(del, ':trash:');
     del.addEventListener('click', async (e) => { e.stopPropagation(); await deleteLayout(lo.id); renderLayoutList(); });
     item.appendChild(main);
     item.appendChild(del);
@@ -789,7 +870,7 @@ function createWindow(url, opts = {}) {
   volWrap.className = 'win-vol';
   const volIcon = document.createElement('span');
   volIcon.className = 'win-vol-icon';
-  volIcon.textContent = '🔊';
+  putLabel(volIcon, ':vol-on:');
   const volSlider = document.createElement('input');
   volSlider.type = 'range';
   volSlider.min = '0';
@@ -816,15 +897,15 @@ function createWindow(url, opts = {}) {
   controls.className = 'win-controls';
   // 音声は各プレイヤー自前のミュート/音量で操作する方針(起動時のみ全ミュート)。
   // よって枠ヘッダにミュート/ソロボタンは置かない。
-  const openBtn = mkBtn('↗', '', '元サイトを新しいタブで開く(ログイン/操作用)');
-  const reloadBtn = mkBtn('🔄', '', 'この枠を再読込');
-  const chatBtn = isKick || hasChatPane ? mkBtn('💬', 'active', 'チャットの表示/非表示') : null;
+  const openBtn = mkBtn(':external:', '', '元サイトを新しいタブで開く(ログイン/操作用)');
+  const reloadBtn = mkBtn(':reload:', '', 'この枠を再読込');
+  const chatBtn = isKick || hasChatPane ? mkBtn(':chat:', 'active', 'チャットの表示/非表示') : null;
   // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
   // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
   // ⚡ は置かない(モードは映しているもので決まるので、選ばせる場面が無い)。
   const lightBtn = null;
-  const adjustBtn = mkBtn('🎨', '', 'この枠の透明度・画質を調整');
-  const maxBtn = mkBtn('⛶', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
+  const adjustBtn = mkBtn(':adjust:', '', 'この枠の透明度・画質を調整');
+  const maxBtn = mkBtn(':fullscreen:', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(openBtn, reloadBtn);
   if (chatBtn) controls.append(chatBtn);
@@ -998,7 +1079,7 @@ function createWindow(url, opts = {}) {
   volSlider.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
   volSlider.addEventListener('input', () => {
     setWinVol(win, Number(volSlider.value) / 100); // 台形/ミキサー両方のスライダーを同期
-    volIcon.textContent = win.vol <= 0 ? '🔇' : '🔊';
+    putLabel(volIcon, win.vol <= 0 ? ':vol-off:' : ':vol-on:');
     revealHeader(win); // 操作中はヘッダを消さない(特にタッチ)
   });
   volSlider.addEventListener('change', () => saveLineup());
@@ -1044,7 +1125,7 @@ function createWindow(url, opts = {}) {
 function mkBtn(label, cls, title) {
   const b = document.createElement('button');
   b.type = 'button';
-  b.textContent = label;
+  putLabel(b, label);
   if (cls) b.className = cls;
   if (title) b.title = title;
   return b;
@@ -1717,7 +1798,7 @@ function buildAdjustPanel(win) {
   head.className = 'adj-head';
   const title = document.createElement('span');
   title.className = 'adj-title';
-  title.textContent = '🎨 映像調整';
+  putLabel(title, ':adjust: 映像調整');
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'adj-x';
@@ -1736,7 +1817,7 @@ function buildAdjustPanel(win) {
     const row = document.createElement('label');
     row.className = 'adj-row';
     const span = document.createElement('span');
-    span.textContent = label;
+    putLabel(span, label);
     const input = document.createElement('input');
     input.type = 'range';
     input.min = String(min);
@@ -1751,15 +1832,15 @@ function buildAdjustPanel(win) {
     win.opacity = v;
     win.el.style.opacity = v / 100;
   });
-  const rBright = mkRow('☀ 明るさ', 20, 200, win.filter.bright, (v) => {
+  const rBright = mkRow(':sun: 明るさ', 20, 200, win.filter.bright, (v) => {
     win.filter.bright = v;
     applyFilter(win);
   });
-  const rContrast = mkRow('◐ コントラスト', 20, 200, win.filter.contrast, (v) => {
+  const rContrast = mkRow(':contrast: コントラスト', 20, 200, win.filter.contrast, (v) => {
     win.filter.contrast = v;
     applyFilter(win);
   });
-  const rSat = mkRow('🎨 彩度', 0, 200, win.filter.sat, (v) => {
+  const rSat = mkRow(':drop: 彩度', 0, 200, win.filter.sat, (v) => {
     win.filter.sat = v;
     applyFilter(win);
   });
@@ -1811,7 +1892,7 @@ function buildQuickControls(win) {
   const mkItem = (label, fn) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = label;
+    putLabel(b, label);
     b.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
@@ -1862,7 +1943,7 @@ function buildQuickControls(win) {
   const mkIcon = (row, label, title, fn, keepOpen) => {
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = label;
+    putLabel(b, label);
     b.title = title;
     b.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -1880,7 +1961,7 @@ function buildQuickControls(win) {
   // トグル表示にして、いま出ているのか隠れているのかが分かるようにする。
   if (win.chatFrame) win.menuChat = mkToggle(() => toggleChat(win));
   // 映像調整はスマホでは出さない(小さい画面でそこまで詰める場面が無く、行数だけ増える)。
-  win.menuAdjust = mkItem('🎨 映像調整', () => toggleAdjust(win));
+  win.menuAdjust = mkItem(':adjust: 映像調整', () => toggleAdjust(win));
   win.menuAdjust.classList.add('pc-only');
   // 軽量/通常の切替はメニューに置かない。何を映しているか(一覧か、配信そのものか)で
   // 決まる話で、利用者が選ぶ場面が無いため。一覧から配信を選べば自動で切り替わり、
@@ -1889,27 +1970,27 @@ function buildQuickControls(win) {
   // (横並びにすると、ここだけ操作の形が違って浮く)。
   // メニューは開いたままにする(並べ方を決めるのに何度か押して見比べるため)。
   win.menuSizeRow = mkRow('stack-only col');
-  win.menuSpan = mkIcon(win.menuSizeRow, '↔ 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
-  win.menuTall = mkIcon(win.menuSizeRow, '⬍ 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
+  win.menuSpan = mkIcon(win.menuSizeRow, ':width: 幅', '枠の幅を切り替える', () => toggleSpan(win), true);
+  win.menuTall = mkIcon(win.menuSizeRow, ':height: 高さ', '枠の高さを切り替える', () => toggleTall(win), true);
   // 並び替え。長押しドラッグは指の動きに左右されて安定しないので、確実に効く手段を用意する。
-  win.menuUp = mkIcon(win.menuSizeRow, '▲ 上へ', 'ひとつ上へ移動', () => moveWin(win, -1), true);
-  win.menuDown = mkIcon(win.menuSizeRow, '▼ 下へ', 'ひとつ下へ移動', () => moveWin(win, 1), true);
+  win.menuUp = mkIcon(win.menuSizeRow, ':up: 上へ', 'ひとつ上へ移動', () => moveWin(win, -1), true);
+  win.menuDown = mkIcon(win.menuSizeRow, ':down: 下へ', 'ひとつ下へ移動', () => moveWin(win, 1), true);
   mkSep();
 
   // ② 弾幕。on は永続なので保存。
   // Kick も 0.9.54 で content script が入り、チャットを読めるようになったので対象に含める。
   win.menuDanmaku = mkToggle(() => { toggleDanmaku(win); saveLineup(); });
-  mkItem('⚙ 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
+  mkItem(':gear: 弾幕の設定', () => openDanmakuPanel(win)); // この枠を対象に設定パネルを開く
   mkSep();
 
   // ③ 基本操作は説明が要らないので、ラベルを外してアイコンだけの1行にまとめる。
   // 項目を縦に並べると、画面の小さいスマホではそれだけでメニューが伸びて押しにくい。
   // 「戻る」は履歴が無い間は押せない(押しても何も起きないボタンは置かない)。
   const opRow = mkRow();
-  win.menuBack = mkIcon(opRow, '←', '枠の中で1つ前のページへ戻る', () => goBackWindow(win));
-  mkIcon(opRow, '🔄', 'この枠を再読込', () => reloadWindow(win));
-  mkIcon(opRow, '⛶', '全画面で操作', () => toggleStackMax(win));
-  mkIcon(opRow, '↗', '元サイトを新しいタブで開く', () => openOriginal(win));
+  win.menuBack = mkIcon(opRow, ':back:', '枠の中で1つ前のページへ戻る', () => goBackWindow(win));
+  mkIcon(opRow, ':reload:', 'この枠を再読込', () => reloadWindow(win));
+  mkIcon(opRow, ':fullscreen:', '全画面で操作', () => toggleStackMax(win));
+  mkIcon(opRow, ':external:', '元サイトを新しいタブで開く', () => openOriginal(win));
   syncMenuLabels(win);
   syncMenuModeVisibility(win); // PC(自由配置)では幅/高さ/縮小を隠す(縦積みでのみ効くため)
 
@@ -1998,7 +2079,7 @@ function syncMenuLabels(win) {
     // 「表示」のまま枠が小さくて自動で畳んでいる状態。値は変えず(広げれば戻るので)、
     // 出ていない理由が分かるように説明だけ差し替える。
     const cramped = usable && on && win.el.classList.contains('cq-hide-chat');
-    win.menuChat.name.textContent = '💬 チャット';
+    putLabel(win.menuChat.name, ':chat: チャット');
     win.menuChat.btn.disabled = !usable;
     win.menuChat.val.textContent = !usable ? 'なし' : on ? '表示' : '非表示';
     win.menuChat.btn.classList.toggle('on', usable && on);
@@ -2026,8 +2107,7 @@ function syncMenuLabels(win) {
     win.menuSpan.title = 'タップで ' + (win.span === 'half' ? '100%(1つ)' : '50%(横に2つ)') + ' に切替';
   }
   if (win.menuDanmaku) {
-    // 💬 はチャット列の表示に使っているので、弾幕は別の絵文字にする(同じ記号だと取り違える)。
-    win.menuDanmaku.name.textContent = '🌠 弾幕';
+    putLabel(win.menuDanmaku.name, ':danmaku: 弾幕');
     win.menuDanmaku.val.textContent = win.danmaku.on ? 'ON' : 'OFF';
     win.menuDanmaku.btn.classList.toggle('on', win.danmaku.on);
     win.menuDanmaku.btn.title = 'チャットのコメントを画面に流す(タップで ' + (win.danmaku.on ? 'OFF' : 'ON') + ')';
@@ -2346,7 +2426,7 @@ function renderDanmakuPanel() {
   const titleEl = document.querySelector('#danmaku-panel .dmk-title');
   // 枠名まで入れると 300px 幅では見出しが切れる。どちらを編集中かだけを短く出し、
   // どの枠かは真下の「適用先」で見せる。
-  if (titleEl) titleEl.textContent = dmkPanelWin ? '💬 弾幕設定(この枠だけ)' : '💬 弾幕設定(全体)';
+  if (titleEl) putLabel(titleEl, dmkPanelWin ? ':danmaku: 弾幕設定(この枠だけ)' : ':danmaku: 弾幕設定(全体)');
   const panelEl = document.getElementById('danmaku-panel');
   if (panelEl) panelEl.classList.toggle('scope-win', !!dmkPanelWin); // 枠選択中は適用先の行を目立たせる
   const resetBtn = document.getElementById('dmk-reset');
@@ -2536,7 +2616,7 @@ function buildDmkRow(c) {
     const rev = document.createElement('button');
     rev.type = 'button';
     rev.className = 'dmk-revert';
-    rev.textContent = '↺';
+    putLabel(rev, ':revert:');
     rev.title = 'この項目を全体の値に戻す';
     rev.classList.add('is-hidden'); // 既定は不可視(場所は確保=つまみ幅を固定)
     rev.addEventListener('click', () => {
@@ -3340,11 +3420,11 @@ function clampVol(v) {
 // マスタ音量つまみ/アイコンを masterVolume に同期させる(ツールバー + ミキサーの両方)。
 function syncMasterUI() {
   const v = Math.round(masterVolume * 100);
-  const icon = masterVolume <= 0 ? '🔇' : '🔊';
+  const icon = masterVolume <= 0 ? ':vol-off:' : ':vol-on:';
   const s1 = document.getElementById('master-vol'); if (s1) s1.value = v;
-  const i1 = document.getElementById('master-vol-icon'); if (i1) i1.textContent = icon;
+  const i1 = document.getElementById('master-vol-icon'); if (i1) putLabel(i1, icon);
   const s2 = document.getElementById('mixer-master'); if (s2) s2.value = v;
-  const i2 = document.getElementById('mixer-master-icon'); if (i2) i2.textContent = icon;
+  const i2 = document.getElementById('mixer-master-icon'); if (i2) putLabel(i2, icon);
 }
 
 // 音量を枠へ反映。実音量 = 枠ごと音量(win.vol) × マスタ(v)。
@@ -3518,7 +3598,7 @@ function renderMixer() {
     const parts = channelParts(win.url);
     const siteSpan = document.createElement('span');
     siteSpan.className = 'mx-site';
-    siteSpan.textContent = (win.light ? '⚡ ' : '') + parts.site;
+    siteSpan.textContent = (win.light ? LIGHT_MARK : '') + parts.site;
     const nameSpan = document.createElement('span');
     nameSpan.className = 'mx-name';
     nameSpan.textContent = parts.name || parts.site;
@@ -3537,7 +3617,7 @@ function renderMixer() {
     const eye = document.createElement('button');
     eye.type = 'button';
     eye.className = 'mixer-row-eye';
-    eye.textContent = win.hidden ? '🙈' : '👁';
+    putLabel(eye, win.hidden ? ':eye-off:' : ':eye:');
     eye.title = win.hidden ? '表示する' : '表示を消す(音・再生は続いたまま。位置・サイズは保持)';
     eye.addEventListener('click', () => toggleHidden(win));
     top.append(siteIcon, label, eye);
@@ -3546,7 +3626,7 @@ function renderMixer() {
     bot.className = 'mixer-row-bot';
     const volIcon = document.createElement('span');
     volIcon.className = 'mixer-row-vol-icon';
-    volIcon.textContent = '🔊';
+    putLabel(volIcon, ':vol-on:');
     const vol = document.createElement('input');
     vol.type = 'range'; vol.min = '0'; vol.max = '100';
     vol.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
@@ -3842,7 +3922,7 @@ function wireToolbar() {
 
 // ====== スマホ用メインメニュー(縦リスト) ======
 // スマホ(縦積み)ではツールバーのバー表示をやめ、≡ から右クリックメニュー風の縦リストを出す。
-// 項目: 追加・配置・一覧・パフォーマンス・弾幕設定(音量/並びはミキサー、軽量は各枠のバッジ)。
+// 項目: 配置・一覧・弾幕・チャット・パフォーマンス・ログインCookie(追加は右下の ＋、音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
 // ≡メニューの「弾幕」「チャット」に現在の全体既定を出す(値 + ON のときは緑)。
@@ -3888,7 +3968,6 @@ function setupMainMenu() {
       if (stackMode) toggleMainMenu(false);
       fn();
     });
-  act('mm-add', () => document.getElementById('add-open-btn').click());
   act('mm-layout', openLayoutDialog);
   act('mm-mixer', () => document.getElementById('mixer-btn').click());
   // 弾幕/チャットは全枠まとめて切り替え、そのまま次に追加する枠の既定にもなる。
@@ -4286,7 +4365,7 @@ function labelFor(url) {
 
 // 枠の表示名(軽量プレイヤー中は ⚡ を付けて区別)。台形ヘッダとミキサーの両方で使う。
 function winLabel(win) {
-  return (win.light ? '⚡ ' : '') + labelFor(win.url);
+  return (win.light ? LIGHT_MARK : '') + labelFor(win.url);
 }
 
 // URL を「サイト部分」と「チャンネル名/識別子」に分ける。一覧でその部分を強調するため。
