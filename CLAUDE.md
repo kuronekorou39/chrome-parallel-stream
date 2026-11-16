@@ -27,6 +27,7 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 | `multiview.html/css/js` | マルチビュー本体の UI。GitHub Pages から配信、拡張ページ版も同梱 |
 | `stream-control.js` | 各配信サイトへの content script(枠内の制御) |
 | `twitch-keepalive.js` / `keepalive-visibility.js` | バックグラウンドでも再生を止めないための MAIN world script |
+| `twitch-chat-ime.js` | Twitch のチャット入力欄で、Android の日本語入力が1文字目で確定してしまうのを避ける MAIN world script(原因は Twitch 側。空の入力欄に空白を1つ入れておく回避策) |
 | `page-bridge.js` / `ext-bridge.js` | ページ(`multiview.js`)⇔拡張機能の `postMessage` 橋渡し。`multiview.js` は `chrome.*` を直接呼ばず `MV.*` 経由 |
 | `rules.json` | `declarativeNetRequest` ルール(埋め込みのための `X-Frame-Options` 除去など) |
 | `hls.min.js` / `hls.worker.js` | third_party/hls.js の同梱ビルド。Kick だけ埋め込みでなくこれで HLS を直接再生(拡張ページ文脈だと内部リクエストが 404 になるため) |
