@@ -10,10 +10,17 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 | | |
 | --- | --- |
-| <img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左に ≡ メニュー、右下に「枠を追加」ダイアログ"> | <img src="docs/images/02-one.jpg" alt="1枠だけ表示した状態。映像の上をコメントが流れている"> |
-| **枠を追加** — `≡` メニューから、サイトのボタンか URL で | **1枠** — 映像・チャット・弾幕(コメントを映像の上に流す) |
+| <img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左下に ≡ メニュー、右下に丸ボタン(整列・一覧・追加)と「枠を追加」ダイアログ"> | <img src="docs/images/02-one.jpg" alt="1枠だけ表示した状態。映像の上をコメントが流れている"> |
+| **枠を追加** — 右下の `＋` から、サイトのボタンか URL で | **1枠** — 映像・チャット・弾幕(コメントを映像の上に流す) |
 | <img src="docs/images/03-four.jpg" alt="4枠を並べた状態。右上に枠一覧と配置パネル"> | <img src="docs/images/04-many.jpg" alt="7枠を並べた状態"> |
 | **4枠** — 枠一覧で音量、配置パネルで整列 | **さらに追加** — 大きさと位置は枠ごとに自由 |
+
+スマホでは、枠を縦に積んで見ます。
+
+| | |
+| --- | --- |
+| <img src="docs/images/05-mobile-empty.jpg" width="260" alt="スマホで枠がまだ無い状態。左下に ≡ メニュー、右下に一覧と追加の丸ボタン"> | <img src="docs/images/06-mobile-two.jpg" width="260" alt="スマホで Twitch と YouTube の2枠を縦に積んで再生している状態"> |
+| **スマホ・空の状態** | **スマホ・2枠** — Twitch と YouTube を縦に並べて再生 |
 
 ---
 
