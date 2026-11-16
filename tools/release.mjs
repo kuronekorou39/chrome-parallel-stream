@@ -28,6 +28,7 @@ const PACK = [
   'stream-control.js',
   'keepalive-visibility.js',
   'twitch-keepalive.js',
+  'twitch-chat-ime.js',
   'page-bridge.js',
   'popup.html',
   'popup.css',
