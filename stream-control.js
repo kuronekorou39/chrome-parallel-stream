@@ -275,7 +275,8 @@ function mvInOwnFrame() {
   // (YouTube ライブのチャット入力がこれ。<input> は focus が別扱いなので影響が出にくい)。
   const isEditable = (el) => {
     try {
-      return !!(el && el.closest && el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]'));
+      // contenteditable は "false" 以外すべて編集可("" / "true" / "plaintext-only")。
+      return !!(el && el.closest && el.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])'));
     } catch (e) {
       return false;
     }

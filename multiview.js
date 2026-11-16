@@ -438,7 +438,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.71';
+const EXPECTED_EXT_VERSION = '0.9.72';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3673,7 +3673,7 @@ function setupMixer() {
 }
 
 // 枠一覧を開く(最前面へ置き直し、中身を最新にしてから出す)。
-// 🎚 一覧ボタン・≡メニュー・最初の枠ができた時の自動表示で共用する。
+// 一覧ボタン(右下の丸ボタン)・最初の枠ができた時の自動表示で共用する。
 // align: 'right' = 右端へ寄せる(自動で出すとき用。枠は中央付近に出るので被らない)。
 //        省略時は中央(自分で開いた時は、目が向いている中央に出るほうが分かりやすい)。
 function openMixer(align) {
@@ -3843,6 +3843,8 @@ function wireToolbar() {
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
   document.getElementById('qa-tile').addEventListener('click', () => tileAll()); // 右下の丸ボタン(⊞)
+  // 右下の丸ボタン(一覧)。開閉の切替は #mixer-btn と同じ処理に任せる。
+  document.getElementById('qa-mixer').addEventListener('click', () => document.getElementById('mixer-btn').click());
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
   document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
   // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので
@@ -3922,7 +3924,7 @@ function wireToolbar() {
 
 // ====== スマホ用メインメニュー(縦リスト) ======
 // スマホ(縦積み)ではツールバーのバー表示をやめ、≡ から右クリックメニュー風の縦リストを出す。
-// 項目: 配置・一覧・弾幕・チャット・パフォーマンス・ログインCookie(追加は右下の ＋、音量/並びはミキサー、軽量は各枠のバッジ)。
+// 項目: 配置・弾幕・チャット・パフォーマンス・ログインCookie(追加と一覧は右下の丸ボタン、音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
 // ≡メニューの「弾幕」「チャット」に現在の全体既定を出す(値 + ON のときは緑)。
@@ -3969,7 +3971,6 @@ function setupMainMenu() {
       fn();
     });
   act('mm-layout', openLayoutDialog);
-  act('mm-mixer', () => document.getElementById('mixer-btn').click());
   // 弾幕/チャットは全枠まとめて切り替え、そのまま次に追加する枠の既定にもなる。
   // 押しても閉じない(見比べながら両方を切り替えることが多いため)。
   mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));

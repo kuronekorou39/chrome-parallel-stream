@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.71" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.72" />
 </head>
 <body>
   <div id="toolbar">
@@ -26,10 +26,11 @@
   </div>
   <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
   <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る"><i data-ic="fullscreen"></i><span class="ic-text">全画面を終了</span></button>
-  <!-- 右下の丸ボタン: よく使う「追加」「整列」への近道。機能は ≡メニューの同項目と同じ。
-       ≡ と同じく idle で消え、全画面中は隠す。縦積み(スマホ)では整列が無意味なので ＋ だけ出す。 -->
+  <!-- 右下の丸ボタン: よく使う「追加」「一覧」「整列」への近道。
+       ≡ と同じく idle で消え、全画面中は隠す。縦積み(スマホ)では整列が無意味なので ⊞ は出さない。 -->
   <div id="quick-actions">
     <button id="qa-tile" type="button" title="全部をタイル状に整列"><i data-ic="grid"></i></button>
+    <button id="qa-mixer" type="button" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)" aria-label="枠一覧"><i data-ic="mixer"></i></button>
     <button id="qa-add" type="button" title="枠を追加">＋</button>
   </div>
 
@@ -37,13 +38,12 @@
        各項目はパネル/ダイアログを開くもので、既存ツールバーボタンの機能をそのまま呼ぶ。
        アイコンは線画(data-ic の目印を multiview.js が SVG に差し替える。定義は ICON_PATHS)。
        固定幅の .mm-icon 列に入れ、ラベルの開始位置を揃える。
-       「追加」は右下の ＋ に常に出ているので、ここには置かない。
+       「追加」「一覧」は右下の丸ボタンに常に出ているので、ここには置かない。
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
     <!-- 上は「見るための操作」、下は「保守」。使う頻度が違うので区切る。 -->
     <button id="mm-layout" type="button"><span class="mm-icon"><i data-ic="layout"></i></span><span class="mm-label">配置</span></button>
-    <button id="mm-mixer" type="button"><span class="mm-icon"><i data-ic="mixer"></i></span><span class="mm-label">一覧</span></button>
     <!-- 弾幕とチャットは「全枠まとめて + 次に足す枠の既定」。枠ごとの切替は各枠の ⋮ から。
          右の値が現在の既定で、押すと全枠がその通りに切り替わる。弾幕の設定は同じ行の右端から開く。 -->
     <div class="mm-row">
@@ -109,7 +109,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.71.zip" download="parallel-stream-0.9.71.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.72.zip" download="parallel-stream-0.9.72.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -260,7 +260,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.71"></script>
-  <script src="multiview.js?v=0.9.71"></script>
+  <script src="ext-bridge.js?v=0.9.72"></script>
+  <script src="multiview.js?v=0.9.72"></script>
 </body>
 </html>
