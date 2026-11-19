@@ -127,3 +127,23 @@ test('audioLag: 無音の枠は、一致していない扱いになる', () => {
   assert.equal(audioLag(silent, noise(15 * RATE, 41), RATE, 10).ratio, 0);
   assert.equal(audioLag(silent, silent, RATE, 10).ratio, 0);
 });
+
+const syncAdjust = extract('syncAdjust');
+const round2 = (a) => a.map((v) => (v === null ? null : Math.round(v * 100) / 100));
+
+test('syncAdjust: ずれが小さければ、どの枠も動かさない', () => {
+  assert.deepEqual(syncAdjust([2.5, 0.9, 0], [0, 0.02, -0.03], 20, 0.06), [2.5, 0.9, 0]);
+});
+
+test('syncAdjust: ずれた枠だけを、中央値へ寄せて動かす', () => {
+  // 枠 2 だけ 0.5 秒遅れた(広告明けなど)。ほかの 2 枠は動かさず、枠 2 を… と行きたいが、
+  // 枠 2 は遅延 0 でこれ以上早められないので、全体を 0.5 秒後ろへずらして揃える。
+  assert.deepEqual(round2(syncAdjust([2.5, 0.9, 0], [0, 0, 0.5], 20, 0.06)), [3, 1.4, 0]);
+  // 枠 0 だけ 0.5 秒進んだ場合は、枠 0 を 0.5 秒遅らせるだけで済む。
+  assert.deepEqual(round2(syncAdjust([2.5, 0.9, 0], [-0.5, 0, 0], 20, 0.06)), [3, 0.9, 0]);
+});
+
+test('syncAdjust: その回に合わなかった枠は null(呼び出し側が触らない)', () => {
+  // 2 枠だけなら、進んでいる側(枠 0)を遅らせて揃えることになる。
+  assert.deepEqual(round2(syncAdjust([2.5, 0.9, 0], [0, null, 0.3], 20, 0.06)), [2.8, null, 0]);
+});

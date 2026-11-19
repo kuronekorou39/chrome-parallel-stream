@@ -439,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.79';
+const EXPECTED_EXT_VERSION = '0.9.80';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3544,8 +3544,9 @@ function syncFrameDelay(win) {
 // 同じ音(通話の声・同じゲームの音・本配信の音)が入っているので、2 枠の音をずらしながら重ねて
 // いちばん一致する位置を探せば、枠同士のずれが秒数で出る。全枠をいちばん遅れている枠に揃える
 // (早めることはできず、遅らせることしかできないため)。
-// 押したときに一度だけ合わせる。常に合わせ続けると、そのたびに音が揺れるうえ、広告明けなどで
-// 誤って大きく動かす危険があるため。ずれが気になったら押し直す。
+// 基本は、押したときに一度だけ合わせる。合わせた枠は再生位置を固定するので普段は動かないが、
+// 広告明けや回線の詰まりで崩れることがあるため、定期的に合わせ直すこともできる(syncAuto)。
+// 定期実行は、ずれが小さければ何もせず、直すときも全体の動きが最小になるように寄せる。
 // 聞く長さ。ずれが大きい組ほど、2 枠の録音のうち同じ音が入っている部分が短くなる
 // (ずれ 15 秒なら 20 秒中の 5 秒だけ)。本配信とミラーの差は 6〜12 秒あった(実測)ので、
 // それでも重なりが残る長さにする。
@@ -3556,7 +3557,13 @@ const SYNC_MAX_LAG_SEC = 15;  // 探すずれの範囲(±)
 // 実測では、同じ音が入っている組は 6〜25 倍、無関係な組は 1.0〜1.2 倍だった。
 const SYNC_MIN_RATIO = 3;
 const SYNC_STATUS_MS = 30000; // メニューに出した結果を消すまでの時間
+const SYNC_AUTO_GAP_MS = 60000; // 定期実行で、測り終えてから次に聞き始めるまでの間隔
+// 定期実行で、これ未満のずれは直さない。枠側が遅延を保つ精度(±0.03 秒)より細かく直そうとすると、
+// 毎回わずかに動かし続けることになる。
+const SYNC_AUTO_MIN_STEP = 0.06;
 let syncStatusTimer = 0;
+let syncAuto = false; // 定期的に合わせ直すか(その場かぎり。保存しない)
+let syncAutoTimer = 0;
 let syncRun = null; // 聞いている最中だけ { caps: Map(win → 録音) }
 
 // 高速フーリエ変換(その場で書き換える。長さは 2 のべき乗)。
@@ -3663,6 +3670,23 @@ function syncOffsets(n, edges) {
 
 // 今の遅延 cur と、その状態で測った遅れ off から、全枠をいちばん遅れている枠に揃える遅延を出す。
 // 揃えたうえで全体を前へ詰める(いちばん小さい遅延が 0 になるように)。off が null の枠は null。
+// 定期的な合わせ直し用。syncDelays と違い、いちばん遅い枠を 0 に据え直さず、遅れの中央値へ寄せる。
+// 測るたびに対象の顔ぶれが変わりうる(広告中の枠はその回だけ外れる)ので、毎回 0 を据え直すと
+// 全枠がまとめて飛ぶことがある。中央値へ寄せれば、ずれた枠だけが動く。
+// 動かす量が minStep 未満の枠はそのまま。遅延は負にできないので、足りなければ全体を後ろへずらす。
+function syncAdjust(cur, off, max, minStep) {
+  const sorted = off.filter((o) => o !== null).sort((a, b) => a - b);
+  const half = sorted.length >> 1;
+  const mid = sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
+  const next = cur.map((c, i) => (off[i] === null ? null : c + mid - off[i]));
+  const lift = Math.max(0, -Math.min(...next.filter((v) => v !== null)));
+  return next.map((v, i) => {
+    if (v === null) return null;
+    const moved = v + lift;
+    return Math.abs(moved - cur[i]) < minStep ? cur[i] : Math.min(max, moved);
+  });
+}
+
 function syncDelays(cur, off, max) {
   const latest = Math.max(...off.filter((o) => o !== null));
   const next = cur.map((c, i) => (off[i] === null ? null : c + latest - off[i]));
@@ -3677,7 +3701,24 @@ function setSyncStatus(text, final) {
   if (!el) return;
   clearTimeout(syncStatusTimer);
   el.textContent = text;
-  if (final) syncStatusTimer = setTimeout(() => { el.textContent = ''; }, SYNC_STATUS_MS);
+  if (final) syncStatusTimer = setTimeout(() => { el.textContent = syncIdleStatus(); }, SYNC_STATUS_MS);
+}
+
+// 何も実行していないときの表示。定期実行がオンなら、それだけは出しておく。
+function syncIdleStatus() {
+  return syncAuto ? '自動' : '';
+}
+
+// 定期実行のオン/オフ。オンにしても今すぐは測らず、次の周期から始める(今すぐは OK の役目)。
+function setSyncAuto(on) {
+  syncAuto = on;
+  if (!syncRun) setSyncStatus(syncIdleStatus());
+  scheduleAutoSync();
+}
+
+function scheduleAutoSync() {
+  clearTimeout(syncAutoTimer);
+  if (syncAuto) syncAutoTimer = setTimeout(() => startAudioSync(true), SYNC_AUTO_GAP_MS);
 }
 
 function syncTargets() {
@@ -3687,11 +3728,15 @@ function syncTargets() {
 // めったに使わない機能なので、押してすぐ動かさず、何をするものかを見せてから実行する。
 function openSyncDialog() {
   const dlg = document.getElementById('sync-dialog');
-  if (!dlg || syncRun) return; // 聞いている最中は開かない
+  if (!dlg) return;
   if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
+  // 聞いている最中でも開ける(定期実行をここで止められるように)。その間は OK だけ押せない。
   const enough = syncTargets().length >= 2;
-  document.getElementById('sync-dialog-ok').disabled = !enough;
-  document.getElementById('sync-dialog-status').textContent = enough ? '' : 'Twitch のライブ枠が 2 つ以上あるときに使えます。';
+  document.getElementById('sync-dialog-ok').disabled = !enough || !!syncRun;
+  document.getElementById('sync-dialog-status').textContent = !enough
+    ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
+    : syncRun ? 'いま測っている最中です。終わってから押してください。' : '';
+  document.getElementById('sync-dialog-auto').checked = syncAuto;
   const panel = dlg.querySelector('.pos-dialog');
   centerPanel(panel);
   raisePanel(dlg);
@@ -3705,8 +3750,10 @@ function setupSyncDialog() {
   document.getElementById('sync-dialog-close').addEventListener('click', close);
   document.getElementById('sync-dialog-ok').addEventListener('click', () => {
     close();
-    startAudioSync();
+    startAudioSync(false);
   });
+  const auto = document.getElementById('sync-dialog-auto');
+  auto.addEventListener('change', () => setSyncAuto(auto.checked));
   const panel = dlg.querySelector('.pos-dialog');
   makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
 }
@@ -3718,21 +3765,27 @@ function postSyncListen(win, on) {
   } catch (e) { /* noop */ }
 }
 
-function startAudioSync() {
-  if (syncRun) return; // 聞いている最中
+// auto = 定期実行。枠の上の表示もメニューの経過も出さず、静かに測って必要なぶんだけ直す。
+function startAudioSync(auto) {
+  if (syncRun) return; // 聞いている最中(定期実行と手動が重なったら、先に始めたほうに任せる)
   const targets = syncTargets();
-  if (targets.length < 2) return; // ダイアログ側で押せなくしてある
+  if (targets.length < 2) { // 手動はダイアログ側で押せなくしてある。定期実行は次の周期を待つ
+    scheduleAutoSync();
+    return;
+  }
+  clearTimeout(syncAutoTimer); // 次の周期は、測り終えてから数え直す
   syncRun = {
+    auto,
     caps: new Map(targets.map((w) => [w, { anchor: Infinity, ts0: null, rate: 0, chunks: [], error: false }])),
     held: new Map(targets.map((w) => [w, w.delayHold])) // 合わせなかった枠を元へ戻すために覚えておく
   };
-  setSyncStatus('聞いています…');
+  if (!auto) setSyncStatus('聞いています…');
   targets.forEach((w) => {
     // 聞く前に全枠の再生位置を固定する。追いつき(1.03倍)の最中の枠があると、聞いている間にも
     // ずれが動いて山がぼやける(一致の強さが 1/5 以下に落ちた。実測)。
     w.delayHold = true;
     syncFrameDelay(w);
-    openSyncView(w);
+    if (!auto) openSyncView(w);
     postSyncListen(w, true);
   });
   setTimeout(finishAudioSync, SYNC_LISTEN_MS);
@@ -3753,23 +3806,9 @@ function onSyncAudio(win, d) {
   feedSyncView(win, d.pcm, d.rate);
 }
 
-function finishAudioSync() {
-  const run = syncRun;
-  syncRun = null;
-  if (!run) return;
-  const caps = [...run.caps].filter(([w]) => wins.includes(w)); // 聞いている間に閉じた枠は外す
-  caps.forEach(([w]) => postSyncListen(w, false));
-  // 測れなかったときは、全枠の表示を同じ文言で締める。
-  // 合わせなかった枠は、固定を聞く前の状態へ戻す。
-  const release = (w) => {
-    w.delayHold = !!run.held.get(w);
-    syncFrameDelay(w);
-    if (w.syncDelayUI) w.syncDelayUI();
-  };
-  const fail = (text) => {
-    setSyncStatus(text, true);
-    caps.forEach(([w]) => { release(w); endSyncView(w, text, null); });
-  };
+// 録音から、枠ごとの遅れを測る。戻り値は { recs, cut, rate, len, off }。
+// off は syncOffsets の結果(同じ音の組が無ければ null)。録音が足りなければ null を返す。
+function measureAudioSync(caps) {
   const usable = caps.filter(([, c]) => !c.error && c.chunks.length > 0);
   const rate = usable.length ? usable[0][1].rate : 0;
   const recs = usable.filter(([, c]) => c.rate === rate).map(([win, c]) => {
@@ -3782,10 +3821,7 @@ function finishAudioSync() {
   const from = Math.max(...recs.map((r) => r.start));
   const to = Math.min(...recs.map((r) => r.start + (r.pcm.length / rate) * 1000));
   const len = Math.floor(((to - from) / 1000) * rate);
-  if (recs.length < 2 || !(len >= SYNC_MIN_SEC * rate)) {
-    fail('音を取り出せませんでした');
-    return;
-  }
+  if (recs.length < 2 || !(len >= SYNC_MIN_SEC * rate)) return null;
   const cut = recs.map((r) => {
     const o = Math.round(((from - r.start) / 1000) * rate);
     return r.pcm.subarray(o, o + len);
@@ -3797,11 +3833,36 @@ function finishAudioSync() {
       if (m.ratio >= SYNC_MIN_RATIO) edges.push({ i, j, lag: m.lag });
     }
   }
-  const off = syncOffsets(cut.length, edges);
-  if (!off) {
-    fail('同じ音が見つかりません');
+  return { recs, cut, rate, len, off: syncOffsets(cut.length, edges) };
+}
+
+function finishAudioSync() {
+  const run = syncRun;
+  syncRun = null;
+  if (!run) return;
+  const caps = [...run.caps].filter(([w]) => wins.includes(w)); // 聞いている間に閉じた枠は外す
+  caps.forEach(([w]) => postSyncListen(w, false));
+  const m = measureAudioSync(caps);
+  if (run.auto) finishAutoSync(run, caps, m);
+  else finishManualSync(run, caps, m);
+  scheduleAutoSync();
+}
+
+// 合わせなかった枠は、位置の固定を聞く前の状態へ戻す。
+function releaseSyncHold(run, win) {
+  win.delayHold = !!run.held.get(win);
+  syncFrameDelay(win);
+  if (win.syncDelayUI) win.syncDelayUI();
+}
+
+function finishManualSync(run, caps, m) {
+  if (!m || !m.off) {
+    const text = m ? '同じ音が見つかりません' : '音を取り出せませんでした';
+    setSyncStatus(text, true);
+    caps.forEach(([w]) => { releaseSyncHold(run, w); endSyncView(w, text, null); });
     return;
   }
+  const { recs, cut, rate, len, off } = m;
   const next = syncDelays(recs.map((r) => r.win.delay), off, DELAY_MAX_SEC);
   // 枠の上の表示用。基準(いちばん遅れている枠)の波形に、各枠の波形がずれた位置から重なっていく。
   const latest = Math.max(...off.filter((o) => o !== null));
@@ -3811,7 +3872,7 @@ function finishAudioSync() {
   next.forEach((v, i) => {
     const win = recs[i].win;
     if (v === null) {
-      release(win);
+      releaseSyncHold(run, win);
       endSyncView(win, '同じ音が見つかりません', null);
       return;
     }
@@ -3827,10 +3888,27 @@ function finishAudioSync() {
   // 録音が使えなかった枠(recs に入らなかった枠)の表示も締める。
   caps.forEach(([w]) => {
     if (recs.some((r) => r.win === w)) return;
-    release(w);
+    releaseSyncHold(run, w);
     endSyncView(w, '音を取り出せませんでした', null);
   });
   setSyncStatus(done + ' 枠を合わせました', true);
+}
+
+// 定期実行の締め。合った枠だけを、必要なぶんだけ動かす。
+// その回に合わなかった枠は、遅延には触らない(広告中や無音の間だけ外れた枠を、合わせた位置から
+// 動かさないため)。位置の固定だけ、聞く前の状態へ戻す(元から固定していた枠は固定のまま)。
+function finishAutoSync(run, caps, m) {
+  const matched = new Set();
+  if (m && m.off) {
+    const next = syncAdjust(m.recs.map((r) => r.win.delay), m.off, DELAY_MAX_SEC, SYNC_AUTO_MIN_STEP);
+    next.forEach((v, i) => {
+      if (v === null) return;
+      const win = m.recs[i].win;
+      matched.add(win);
+      if (v !== win.delay) setWinDelay(win, v);
+    });
+  }
+  caps.forEach(([w]) => { if (!matched.has(w)) releaseSyncHold(run, w); });
 }
 
 // ====== 音で合わせる: 枠の上の表示 ======
