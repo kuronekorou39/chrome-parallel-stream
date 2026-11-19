@@ -176,7 +176,8 @@ const ICON_PATHS = {
   'eye-off': '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><path d="M4 4l16 16"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>',
   contrast: '<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/>',
-  drop: '<path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.5 6-11z"/>'
+  drop: '<path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.5 6-11z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
 };
 // 軽量プレイヤーの印。title 属性や <option> には SVG を置けないので、ここだけ文字にする
 // (U+FE0E を付けて、絵文字ではなく単色の文字として出す)。
@@ -438,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.73';
+const EXPECTED_EXT_VERSION = '0.9.74';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -610,6 +611,10 @@ function onFrameState(e) {
   } else if (d.type === 'theater-state') {
     win.theaterState = d.state; // 'on' | 'searching' | 'off'
     updateWinTitle(win); // バッジの 🎭/🔎 表示を更新
+  } else if (d.type === 'delay-state') {
+    // 枠の中で実際に付いている遅延(twitch-keepalive.js から)。調整パネルの表示に使う。
+    win.delayState = d.state || null;
+    if (win.syncDelayUI) win.syncDelayUI();
   } else if (d.type === 'frame-hello') {
     syncFrameTheater(win);  // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
     syncFrameDanmaku(win);  // 同じく現在の弾幕 ON/OFF も返す
@@ -617,6 +622,7 @@ function onFrameState(e) {
     // 鳴り始めることがある。挨拶=content script 注入直後に渡せば、たいていは <video> が
     // できる前に音量が決まり、最初の一音から正しい大きさで出せる。
     applyVolume(win, masterVolume);
+    syncFrameDelay(win); // 再読込した枠にも、指定してあった遅延を付け直す
   }
 }
 
@@ -1015,6 +1021,8 @@ function createWindow(url, opts = {}) {
     prevRect: null, freeRect: null,
     // 枠ごとの音量の既定。実音量 = これ × マスタ。最初から大きいと事故になるので半分から。
     opacity: 100, vol: WIN_VOLUME_DEFAULT,
+    // 映像と音を遅らせる秒数(Twitch のライブのみ)。その場の音合わせ用なので保存しない。
+    delay: 0, delayState: null,
     filter: { bright: 100, contrast: 100, sat: 100 },
     // 弾幕とチャットは全体の既定から始める(復元時は restoreLineup が保存値で上書きする)。
     chatOn: chatDefaultOn,
@@ -1845,6 +1853,46 @@ function buildAdjustPanel(win) {
     applyFilter(win);
   });
 
+  // 遅延(Twitch のライブのみ)。音合わせは耳で少しずつ詰めるので、スライダーではなく
+  // 0.1 秒 / 1 秒刻みのボタンにする(スライダーだと 0.1 秒を狙って動かせない)。
+  const delayRow = document.createElement('div');
+  delayRow.className = 'adj-row adj-delay';
+  const delayLabel = document.createElement('span');
+  putLabel(delayLabel, ':clock: 遅延');
+  const delayValue = document.createElement('output');
+  delayValue.className = 'adj-delay-value';
+  const mkStep = (text, step, tip) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.title = tip;
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setWinDelay(win, step === 0 ? 0 : win.delay + step);
+    });
+    return b;
+  };
+  delayRow.append(
+    delayLabel,
+    mkStep('−1', -1, '1 秒早める'),
+    mkStep('−0.1', -0.1, '0.1 秒早める'),
+    delayValue,
+    mkStep('+0.1', 0.1, '0.1 秒遅らせる'),
+    mkStep('+1', 1, '1 秒遅らせる'),
+    mkStep('0', 0, '遅延をやめる')
+  );
+  win.syncDelayUI = () => {
+    delayRow.hidden = !delaySupported(win);
+    delayValue.textContent = win.delay.toFixed(1) + ' 秒';
+    // 枠の中で実際に付いた量が指定に届くまでは「調整中」。大きく動かした直後や、
+    // 読み直しで遅延を溜め直している間がこれに当たる。
+    const st = win.delayState;
+    const pending = win.delay > 0 && !(st && st.target === win.delay && st.settled);
+    delayValue.classList.toggle('pending', pending);
+    delayValue.title = pending ? '調整中(いま ' + (st ? st.actual.toFixed(1) : '0.0') + ' 秒)' : '';
+  };
+  win.syncDelayUI();
+
   const reset = document.createElement('button');
   reset.type = 'button';
   reset.className = 'adj-reset';
@@ -1861,7 +1909,7 @@ function buildAdjustPanel(win) {
     rSat.input.value = '100';
   });
 
-  panel.append(head, rOpacity.row, rBright.row, rContrast.row, rSat.row, reset);
+  panel.append(head, rOpacity.row, rBright.row, rContrast.row, rSat.row, delayRow, reset);
   return panel;
 }
 
@@ -1869,7 +1917,10 @@ function buildAdjustPanel(win) {
 function toggleAdjust(win) {
   const willOpen = !win.el.classList.contains('adjust-open');
   wins.forEach((w) => w.el.classList.remove('adjust-open'));
-  if (willOpen) win.el.classList.add('adjust-open');
+  if (willOpen) {
+    win.el.classList.add('adjust-open');
+    if (win.syncDelayUI) win.syncDelayUI(); // 映しているものが変わっていれば、遅延の行の出し分けも変わる
+  }
 }
 
 // 縦積みモード用の簡易操作UI。台形ヘッダの代わりにタイル右上へ [⋮メニュー][✕閉じる] を出し、
@@ -3203,6 +3254,7 @@ function mountSiteFrame(win) {
     applyVolume(win, masterVolume);
     syncFrameTheater(win);  // シアター有効化(+全画面中なら一時停止)を伝える
     syncFrameDanmaku(win);  // 弾幕 ON 中なら再読込後も監視を再開させる
+    syncFrameDelay(win);    // 遅延を指定してあれば付け直す
     hideWinLoading(win); // 読み込み中スピナーを消す(出ていれば)
   });
   const src = (win.light && toLightUrl(win.url)) || toEmbedUrl(win.url);
@@ -3446,6 +3498,36 @@ function applyVolume(win, v) {
       win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: eff }, '*');
     } catch (e) { /* noop */ }
   }
+}
+
+// ====== 枠ごとの遅延 ======
+// 本配信とミラー配信を並べると、同じ音が少しずれて二重に聞こえる。進んでいる側の枠を
+// 遅らせて揃えるためのもの。実際に遅らせるのは枠の中(twitch-keepalive.js)で、ここは
+// 秒数を持って伝えるだけ。対象は Twitch のライブを埋め込みプレイヤーで映している枠のみ。
+const DELAY_MAX_SEC = 20; // twitch-keepalive.js の DELAY_MAX_SEC と合わせる
+
+// 0.1 秒刻みに丸めて 0〜max に収める。
+function clampDelay(sec, max) {
+  const v = Math.round(Number(sec) * 10) / 10;
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(max, v));
+}
+
+function delaySupported(win) {
+  return !!win.light && !!twitchChannelOf(win.url);
+}
+
+function setWinDelay(win, sec) {
+  win.delay = clampDelay(sec, DELAY_MAX_SEC);
+  syncFrameDelay(win);
+  if (win.syncDelayUI) win.syncDelayUI();
+}
+
+function syncFrameDelay(win) {
+  if (!win.frame || !delaySupported(win)) return;
+  try {
+    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-delay', value: win.delay || 0 }, '*');
+  } catch (e) { /* noop */ }
 }
 
 // ====== 枠一覧 / ミキサーパネル ======
