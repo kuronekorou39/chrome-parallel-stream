@@ -651,11 +651,13 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 #add-dialog.pos-dialog-overlay.open,
 #layout-dialog.pos-dialog-overlay.open,
 #cookie-dialog.pos-dialog-overlay.open,
-#update-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
+#update-dialog.pos-dialog-overlay.open,
+#sync-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
 #add-dialog.pos-dialog-overlay.open .pos-dialog,
 #layout-dialog.pos-dialog-overlay.open .pos-dialog,
 #cookie-dialog.pos-dialog-overlay.open .pos-dialog,
-#update-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
+#update-dialog.pos-dialog-overlay.open .pos-dialog,
+#sync-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
 .pos-grid {
   display: grid; gap: 8px;
   grid-template-columns: repeat(3, 64px);
@@ -1230,6 +1232,9 @@ body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px
 .upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
 .upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }
 
-/* 「音で合わせる」のダイアログ。対象の枠が足りないときは OK を押せない。 */
+/* 「音で合わせる」のダイアログ。説明文が長いので幅を決め打ちする(指定しないと1行に伸びる)。
+   対象の枠が足りないときは OK を押せない。 */
+#sync-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
+body.stack-mode #sync-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
 #sync-dialog-ok { display: block; margin-left: auto; min-width: 88px; }
 #sync-dialog-ok:disabled { opacity: 0.4; cursor: default; }
