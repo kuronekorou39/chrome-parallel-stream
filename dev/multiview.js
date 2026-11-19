@@ -439,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.81';
+const EXPECTED_EXT_VERSION = '0.9.82';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3557,12 +3557,16 @@ const SYNC_MAX_LAG_SEC = 15;  // 探すずれの範囲(±)
 // 実測では、同じ音が入っている組は 6〜25 倍、無関係な組は 1.0〜1.2 倍だった。
 const SYNC_MIN_RATIO = 3;
 const SYNC_STATUS_MS = 30000; // メニューに出した結果を消すまでの時間
-const SYNC_AUTO_GAP_MS = 60000; // 定期実行で、測り終えてから次に聞き始めるまでの間隔
+const SYNC_AUTO_GAP_MS = 300000; // 定期実行で、測り終えてから次に聞き始めるまでの間隔(5 分)
+// 定期実行は、この回数で自動的にオフにする(5 分おき × 12 回 ≒ 1 時間)。合わせたい配信が
+// 終わった後も、気づかないまま測り続けることが無いようにするため。
+const SYNC_AUTO_MAX_RUNS = 12;
 // 定期実行で、これ未満のずれは直さない。枠側が遅延を保つ精度(±0.03 秒)より細かく直そうとすると、
 // 毎回わずかに動かし続けることになる。
 const SYNC_AUTO_MIN_STEP = 0.06;
 let syncStatusTimer = 0;
 let syncAuto = false; // 定期的に合わせ直すか(その場かぎり。保存しない)
+let syncAutoLeft = 0; // 定期実行の残り回数
 let syncAutoTimer = 0;
 let syncRun = null; // 聞いている最中だけ { caps: Map(win → 録音) }
 
@@ -3721,14 +3725,29 @@ function setSyncStatus(text, final) {
 
 // 何も実行していないときの表示。定期実行がオンなら、それだけは出しておく。
 function syncIdleStatus() {
-  return syncAuto ? '自動' : '';
+  return syncAuto ? '自動・残り ' + syncAutoLeft + ' 回' : '';
 }
 
 // 定期実行のオン/オフ。オンにしても今すぐは測らず、次の周期から始める(今すぐは OK の役目)。
+// オンにするたびに、残り回数を数え直す。
 function setSyncAuto(on) {
   syncAuto = on;
+  syncAutoLeft = on ? SYNC_AUTO_MAX_RUNS : 0;
+  // メニューの切り替えボタンと、ダイアログのチェック(開いていれば)を合わせる。
+  const btn = document.getElementById('mm-sync-auto');
+  if (btn) btn.classList.toggle('on', on);
+  const box = document.getElementById('sync-dialog-auto');
+  if (box) box.checked = on;
   if (!syncRun) setSyncStatus(syncIdleStatus());
   scheduleAutoSync();
+}
+
+// 定期実行を 1 回ぶん数える(枠が足りず測らなかった回も数える。必ず止まるように)。
+// 回数を使い切ったらオフにする。
+function countAutoSync() {
+  syncAutoLeft--;
+  if (syncAutoLeft <= 0) setSyncAuto(false);
+  else if (!syncRun) setSyncStatus(syncIdleStatus());
 }
 
 function scheduleAutoSync() {
@@ -3785,6 +3804,7 @@ function startAudioSync(auto) {
   if (syncRun) return; // 聞いている最中(定期実行と手動が重なったら、先に始めたほうに任せる)
   const targets = syncTargets();
   if (targets.length < 2) { // 手動はダイアログ側で押せなくしてある。定期実行は次の周期を待つ
+    if (auto) countAutoSync();
     scheduleAutoSync();
     return;
   }
@@ -3858,8 +3878,12 @@ function finishAudioSync() {
   const caps = [...run.caps].filter(([w]) => wins.includes(w)); // 聞いている間に閉じた枠は外す
   caps.forEach(([w]) => postSyncListen(w, false));
   const m = measureAudioSync(caps);
-  if (run.auto) finishAutoSync(run, caps, m);
-  else finishManualSync(run, caps, m);
+  if (run.auto) {
+    finishAutoSync(run, caps, m);
+    countAutoSync();
+  } else {
+    finishManualSync(run, caps, m);
+  }
   scheduleAutoSync();
 }
 
@@ -4572,6 +4596,7 @@ function setupMainMenu() {
   mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));
   mkAct('mm-chat-all', () => setAllChat(!chatDefaultOn));
   act('mm-sync', openSyncDialog); // 説明のダイアログを挟む(実行はその OK から)
+  mkAct('mm-sync-auto', () => setSyncAuto(!syncAuto)); // 定期実行は、ダイアログを開かずにここでも切り替えられる
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   act('mm-cookie', openCookieDialog);
