@@ -10,10 +10,15 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 | | |
 | --- | --- |
-| <img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左に ≡ メニュー、右下に「枠を追加」ダイアログ"> | <img src="docs/images/02-one.jpg" alt="1枠だけ表示した状態。映像の上をコメントが流れている"> |
-| **枠を追加** — `≡` メニューから、サイトのボタンか URL で | **1枠** — 映像・チャット・弾幕(コメントを映像の上に流す) |
-| <img src="docs/images/03-four.jpg" alt="4枠を並べた状態。右上に枠一覧と配置パネル"> | <img src="docs/images/04-many.jpg" alt="7枠を並べた状態"> |
-| **4枠** — 枠一覧で音量、配置パネルで整列 | **さらに追加** — 大きさと位置は枠ごとに自由 |
+| <img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左下に ≡ メニュー、右下に丸ボタン(整列・一覧・追加)と「枠を追加」ダイアログ"> | <img src="docs/images/03-four.jpg" alt="4枠を並べた状態。右上に枠一覧と配置パネル"> |
+| **枠を追加** — 右下の `＋` から、サイトのボタンか URL で | **4枠** — 枠一覧で音量、配置パネルで整列 |
+| <img src="docs/images/04-many.jpg" alt="7枠を並べた状態"> | |
+| **さらに追加** — 大きさと位置は枠ごとに自由 | |
+
+| | |
+| --- | --- |
+| <img src="docs/images/05-mobile-empty.jpg" width="260" alt="スマホで枠がまだ無い状態。左下に ≡ メニュー、右下に一覧と追加の丸ボタン"> | <img src="docs/images/06-mobile-two.jpg" width="260" alt="スマホで Twitch と YouTube の2枠を縦に積んで再生している状態"> |
+| **スマホ・空の状態** | **スマホ・2枠** — Twitch と YouTube を縦に並べて再生 |
 
 ---
 
@@ -27,9 +32,16 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 ---
 
+## 広告のスキップ
+
+広告をスキップする機能は、この拡張機能には入っていません。
+別の拡張機能 **[chrome-ad-skipper](https://github.com/kuronekorou39/chrome-ad-skipper)** を一緒に入れると、並べた枠の中でも広告のスキップが効きます。
+
+---
+
 ## インストール
 
-1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-0.9.73.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
+1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-0.9.82.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
 2. Chrome のアドレスバーに `chrome://extensions` と入れて開く
 3. 右上の「**デベロッパー モード**」を ON にする
 4. 左上に出てくる「**パッケージ化されていない拡張機能を読み込む**」を押して、1 で展開したフォルダを選ぶ
@@ -37,8 +49,6 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 これで使えます。更新するときは、新しい ZIP を落として同じ手順でフォルダを選び直してください
 (アプリの `≡` メニュー →「拡張機能」から、新しい版が出ているか確認できます)。
-
-> 開発する場合は、このリポジトリをクローンして、そのフォルダを 4 で選んでください。
 
 ---
 
@@ -49,15 +59,6 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 何をどこまで変えるかは **[ブラウザに与える影響](docs/browser-impact.md)** に書いてあります。
 **読んでから入れてください。**
-
----
-
-## ドキュメント
-
-| | |
-| --- | --- |
-| [ブラウザに与える影響](docs/browser-impact.md) | ヘッダ操作・Cookie・可視状態の偽装・権限の詳細 |
-| [設計メモ](docs/design.md) | UI を通常のオリジンに置いている理由と、ページ⇔拡張の橋渡し |
 
 ---
 

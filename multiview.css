@@ -392,6 +392,18 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .adj-row > span { flex: 0 0 116px; white-space: nowrap; }
 /* min-width:0 と width:auto で flex の既定 min-width:auto による『はみ出し』を防ぐ。 */
 .adj-row input[type="range"] { flex: 1 1 auto; min-width: 0; width: auto; height: 24px; margin: 0; accent-color: #58a6ff; cursor: pointer; }
+/* 遅延の行: [−1][−0.1] 秒数 [+0.1][+1][0]。秒数は桁が変わっても幅が動かないよう等幅数字にする。 */
+.adj-delay { cursor: default; gap: 6px; }
+.adj-delay[hidden] { display: none; }
+.adj-delay > span { flex: 0 0 auto; margin-right: auto; }
+.adj-delay button {
+  flex: 0 0 auto; min-width: 34px; padding: 6px 4px;
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.adj-delay button:hover { background: #30363d; border-color: #58a6ff; }
+.adj-delay-value { flex: 0 0 60px; text-align: center; font-variant-numeric: tabular-nums; }
+.adj-delay-value.pending { color: #d29922; }
 .adj-reset {
   align-self: flex-end; margin-top: 2px;
   background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
@@ -412,6 +424,27 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 }
 /* チャットの絵文字/スタンプ画像(Twitch emote / YouTube カスタム絵文字)。高さは spawnDanmaku が行に合わせて付与。 */
 .win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
+
+/* 「音で合わせる」の経過と結果。映像の下端に重ねる(弾幕 z:2 の上、スピナーや操作UIの下)。
+   ポインタは透過。消すときは .out を付けてフェードさせる(時間は multiview.js の SYNC_FADE_MS と合わせる)。 */
+.win-sync {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  height: 36%; min-height: 64px; max-height: 150px;
+  display: flex; flex-direction: column; pointer-events: none;
+  background: linear-gradient(transparent, rgba(0,0,0,0.78) 45%);
+  opacity: 1; transition: opacity 0.5s;
+}
+.win-sync.out { opacity: 0; }
+.win-sync canvas { flex: 1 1 auto; min-height: 0; width: 100%; }
+.win-sync-label {
+  flex: 0 0 auto; padding: 2px 10px 6px; font-size: 13px; color: #c9d1d9;
+  font-variant-numeric: tabular-nums; text-shadow: 0 0 3px #000;
+}
+.win-sync.matched .win-sync-label { color: #3fb950; font-weight: bold; font-size: 15px; }
+/* 聞いている間の残り時間。左から右へ伸びきったら測り終わり。 */
+.win-sync-bar { flex: 0 0 auto; height: 2px; width: 0; background: #58a6ff; }
+.win-sync.listen .win-sync-bar { animation: win-sync-listen var(--sync-ms) linear forwards; }
+@keyframes win-sync-listen { to { width: 100%; } }
 
 /* パネル(📊/🎚)をドラッグ/リサイズしている間は、全 iframe を無反応にする。クロスオリジン
    iframe の上をポインタが通ると掴みが奪われる(「下に枠があると持てない」)のを物理的に防ぐ。 */
@@ -618,11 +651,13 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 #add-dialog.pos-dialog-overlay.open,
 #layout-dialog.pos-dialog-overlay.open,
 #cookie-dialog.pos-dialog-overlay.open,
-#update-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
+#update-dialog.pos-dialog-overlay.open,
+#sync-dialog.pos-dialog-overlay.open { background: rgba(0,0,0,0); pointer-events: none; }
 #add-dialog.pos-dialog-overlay.open .pos-dialog,
 #layout-dialog.pos-dialog-overlay.open .pos-dialog,
 #cookie-dialog.pos-dialog-overlay.open .pos-dialog,
-#update-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
+#update-dialog.pos-dialog-overlay.open .pos-dialog,
+#sync-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: auto; }
 .pos-grid {
   display: grid; gap: 8px;
   grid-template-columns: repeat(3, 64px);
@@ -1196,3 +1231,10 @@ body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px
 .upd-row b { color: #c9d1d9; font-variant-numeric: tabular-nums; }
 .upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
 .upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }
+
+/* 「音で合わせる」のダイアログ。説明文が長いので幅を決め打ちする(指定しないと1行に伸びる)。
+   対象の枠が足りないときは OK を押せない。 */
+#sync-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
+body.stack-mode #sync-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
+#sync-dialog-ok { display: block; margin-left: auto; min-width: 88px; }
+#sync-dialog-ok:disabled { opacity: 0.4; cursor: default; }

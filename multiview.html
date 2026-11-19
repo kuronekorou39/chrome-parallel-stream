@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.73" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.82" />
 </head>
 <body>
   <div id="toolbar">
@@ -54,6 +54,14 @@
     <div class="mm-row">
       <button id="mm-chat-all" type="button"><span class="mm-icon"><i data-ic="chat"></i></span><span class="mm-label">チャット</span><span class="mm-sub" id="mm-chat-all-val"></span></button>
       <span class="mm-side" aria-hidden="true"><span class="mm-icon"></span></span>
+    </div>
+    <!-- Twitch のライブ枠どうしのずれを、音を聞き比べて揃える(枠ごとの遅延を自動で決める)。
+         押すと説明のダイアログが出て、その OK で 20 秒ほど聞いて一度だけ合わせる。
+         右の値は経過と結果(結果はしばらくしたら消える)。
+         右端は「定期的に合わせ直す」の切り替え(オンの間は緑。ダイアログのチェックと同じもの)。 -->
+    <div class="mm-row">
+      <button id="mm-sync" type="button" title="Twitch のライブ枠どうしのずれを、音を聞き比べて揃える"><span class="mm-icon"><i data-ic="clock"></i></span><span class="mm-label">音で合わせる</span><span class="mm-sub" id="mm-sync-val"></span></button>
+      <button id="mm-sync-auto" class="mm-side" type="button" title="定期的に合わせ直す(5 分おき。1 時間ほどで自動的にオフ)" aria-label="定期的に合わせ直す"><span class="mm-icon"><i data-ic="reload"></i></span></button>
     </div>
     <div class="mm-sep"></div>
     <!-- 拡張機能の更新。新しい版があるときだけ出す(最新のときは用が無いので出さない)。
@@ -109,12 +117,47 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.73.zip" download="parallel-stream-0.9.73.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.82.zip" download="parallel-stream-0.9.82.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
         </p>
         <a id="upd-repo" class="upd-link" href="https://github.com/kuronekorou39/chrome-parallel-stream" target="_blank" rel="noopener">GitHub でソースと変更履歴を見る</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 「音で合わせる」の説明。めったに使わない機能なので、何をするものかを見せてから実行する。 -->
+  <div id="sync-dialog" class="pos-dialog-overlay">
+    <div class="pos-dialog pos-dialog-movable" role="dialog" aria-label="音で合わせる">
+      <div class="pos-dialog-head">
+        <span class="pos-dialog-title"><i data-ic="clock"></i><span class="ic-text">音で合わせる</span></span>
+        <button id="sync-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
+      </div>
+      <div class="pos-dialog-body">
+        <!-- 文の途中で改行すると、その位置に空白が入って見える。改行は句読点の後ろに置くこと。 -->
+        <p class="cookie-note">
+          同じ配信を映している枠どうし(本配信と、それをミラーしている配信など)は、
+          枠ごとに時間が少しずれて、同じ音が二重に聞こえます。
+          このずれを、音を聞き比べて揃えます。
+        </p>
+        <p class="cookie-note">
+          OK を押すと 20 秒ほど各枠の音を聞き、進んでいる枠を遅らせて、いちばん遅れている枠に合わせます。
+          対象は Twitch のライブ枠だけで、同じ音が入っていない枠には何もしません。
+          付いた遅延は、各枠の「映像調整」で確かめたり直したりできます。
+        </p>
+        <!-- オンの間、5 分おきに静かに測り直す。切り替えはその場で効く(OK を待たない)。 -->
+        <label class="cookie-row">
+          <input type="checkbox" id="sync-dialog-auto" />
+          <span>定期的に合わせ直す</span>
+        </label>
+        <p class="cookie-note">
+          オンの間、5 分おきに測り直し、ずれていた枠だけを直します(枠の上の表示は出しません)。
+          1 時間ほど(12 回)で自動的にオフになります。
+          メニューの「音で合わせる」の右端のボタンでも切り替えられます。
+        </p>
+        <p id="sync-dialog-status" class="cookie-note"></p>
+        <button id="sync-dialog-ok" class="tb-btn tb-btn-primary" type="button">OK</button>
       </div>
     </div>
   </div>
@@ -260,7 +303,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.73"></script>
-  <script src="multiview.js?v=0.9.73"></script>
+  <script src="ext-bridge.js?v=0.9.82"></script>
+  <script src="multiview.js?v=0.9.82"></script>
 </body>
 </html>
