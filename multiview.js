@@ -439,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.80';
+const EXPECTED_EXT_VERSION = '0.9.81';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3670,21 +3670,36 @@ function syncOffsets(n, edges) {
 
 // 今の遅延 cur と、その状態で測った遅れ off から、全枠をいちばん遅れている枠に揃える遅延を出す。
 // 揃えたうえで全体を前へ詰める(いちばん小さい遅延が 0 になるように)。off が null の枠は null。
-// 定期的な合わせ直し用。syncDelays と違い、いちばん遅い枠を 0 に据え直さず、遅れの中央値へ寄せる。
+// 定期的な合わせ直し用。syncDelays と違い、いちばん遅い枠を 0 に据え直さない。
 // 測るたびに対象の顔ぶれが変わりうる(広告中の枠はその回だけ外れる)ので、毎回 0 を据え直すと
-// 全枠がまとめて飛ぶことがある。中央値へ寄せれば、ずれた枠だけが動く。
+// 全枠がまとめて飛ぶことがある。代わりに「どれか 1 枠に揃える」案を全部試し、動かす枠が
+// いちばん少ない案を選ぶ(ずれた枠だけが動く)。同数なら、遅延の合計が小さい案にする
+// (逆を選ぶと、合わせ直すたびに全体の遅延が少しずつ積み上がる。実際に起きた)。
 // 動かす量が minStep 未満の枠はそのまま。遅延は負にできないので、足りなければ全体を後ろへずらす。
 function syncAdjust(cur, off, max, minStep) {
-  const sorted = off.filter((o) => o !== null).sort((a, b) => a - b);
-  const half = sorted.length >> 1;
-  const mid = sorted.length % 2 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
-  const next = cur.map((c, i) => (off[i] === null ? null : c + mid - off[i]));
-  const lift = Math.max(0, -Math.min(...next.filter((v) => v !== null)));
-  return next.map((v, i) => {
-    if (v === null) return null;
-    const moved = v + lift;
-    return Math.abs(moved - cur[i]) < minStep ? cur[i] : Math.min(max, moved);
-  });
+  let best = null;
+  let bestMoved = Infinity;
+  let bestSum = Infinity;
+  for (let k = 0; k < off.length; k++) {
+    if (off[k] === null) continue;
+    const raw = cur.map((c, i) => (off[i] === null ? null : c + off[k] - off[i]));
+    const lift = Math.max(0, -Math.min(...raw.filter((v) => v !== null)));
+    let moved = 0;
+    let sum = 0;
+    const next = raw.map((v, i) => {
+      if (v === null) return null;
+      const d = Math.abs(v + lift - cur[i]) < minStep ? cur[i] : Math.min(max, v + lift);
+      if (d !== cur[i]) moved++;
+      sum += d;
+      return d;
+    });
+    if (moved < bestMoved || (moved === bestMoved && sum < bestSum)) {
+      best = next;
+      bestMoved = moved;
+      bestSum = sum;
+    }
+  }
+  return best;
 }
 
 function syncDelays(cur, off, max) {
