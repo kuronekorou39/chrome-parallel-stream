@@ -425,6 +425,27 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 /* チャットの絵文字/スタンプ画像(Twitch emote / YouTube カスタム絵文字)。高さは spawnDanmaku が行に合わせて付与。 */
 .win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
 
+/* 「音で合わせる」の経過と結果。映像の下端に重ねる(弾幕 z:2 の上、スピナーや操作UIの下)。
+   ポインタは透過。消すときは .out を付けてフェードさせる(時間は multiview.js の SYNC_FADE_MS と合わせる)。 */
+.win-sync {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  height: 36%; min-height: 64px; max-height: 150px;
+  display: flex; flex-direction: column; pointer-events: none;
+  background: linear-gradient(transparent, rgba(0,0,0,0.78) 45%);
+  opacity: 1; transition: opacity 0.5s;
+}
+.win-sync.out { opacity: 0; }
+.win-sync canvas { flex: 1 1 auto; min-height: 0; width: 100%; }
+.win-sync-label {
+  flex: 0 0 auto; padding: 2px 10px 6px; font-size: 13px; color: #c9d1d9;
+  font-variant-numeric: tabular-nums; text-shadow: 0 0 3px #000;
+}
+.win-sync.matched .win-sync-label { color: #3fb950; font-weight: bold; font-size: 15px; }
+/* 聞いている間の残り時間。左から右へ伸びきったら測り終わり。 */
+.win-sync-bar { flex: 0 0 auto; height: 2px; width: 0; background: #58a6ff; }
+.win-sync.listen .win-sync-bar { animation: win-sync-listen var(--sync-ms) linear forwards; }
+@keyframes win-sync-listen { to { width: 100%; } }
+
 /* パネル(📊/🎚)をドラッグ/リサイズしている間は、全 iframe を無反応にする。クロスオリジン
    iframe の上をポインタが通ると掴みが奪われる(「下に枠があると持てない」)のを物理的に防ぐ。 */
 body.panel-dragging iframe { pointer-events: none; }
