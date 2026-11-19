@@ -112,3 +112,12 @@ test('syncDelays: 既に付いている遅延を踏まえ、全体を前へ詰�
 test('syncDelays: 対象外の枠は null のまま、上限を超えない', () => {
   assert.deepEqual(syncDelays([0, 5, 0], [0, null, -30], 20), [0, null, 20]);
 });
+
+test('audioEnvelope: 区間ごとの最大の振れに縮める', () => {
+  const audioEnvelope = extract('audioEnvelope');
+  // 4000Hz を 50 点/秒へ = 80 サンプルごと。2 区間ぶん。
+  const pcm = new Float32Array(160);
+  pcm[10] = -0.5;
+  pcm[100] = 0.25;
+  assert.deepEqual([...audioEnvelope(pcm, 4000, 50)], [0.5, 0.25]);
+});

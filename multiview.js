@@ -439,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.75';
+const EXPECTED_EXT_VERSION = '0.9.76';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3680,7 +3680,10 @@ function startAudioSync() {
     caps: new Map(targets.map((w) => [w, { anchor: Infinity, ts0: null, rate: 0, chunks: [], error: false }]))
   };
   setSyncStatus('聞いています…');
-  targets.forEach((w) => postSyncListen(w, true));
+  targets.forEach((w) => {
+    openSyncView(w);
+    postSyncListen(w, true);
+  });
   setTimeout(finishAudioSync, SYNC_LISTEN_MS);
 }
 
@@ -3696,6 +3699,7 @@ function onSyncAudio(win, d) {
   if (cap.ts0 === null) cap.ts0 = d.ts;
   cap.rate = d.rate;
   cap.chunks.push(d.pcm);
+  feedSyncView(win, d.pcm, d.rate);
 }
 
 function finishAudioSync() {
@@ -3704,6 +3708,11 @@ function finishAudioSync() {
   if (!run) return;
   const caps = [...run.caps].filter(([w]) => wins.includes(w)); // 聞いている間に閉じた枠は外す
   caps.forEach(([w]) => postSyncListen(w, false));
+  // 測れなかったときは、全枠の表示を同じ文言で締める。
+  const fail = (text) => {
+    setSyncStatus(text);
+    caps.forEach(([w]) => endSyncView(w, text, null));
+  };
   const usable = caps.filter(([, c]) => !c.error && c.chunks.length > 0);
   const rate = usable.length ? usable[0][1].rate : 0;
   const recs = usable.filter(([, c]) => c.rate === rate).map(([win, c]) => {
@@ -3717,7 +3726,7 @@ function finishAudioSync() {
   const to = Math.min(...recs.map((r) => r.start + (r.pcm.length / rate) * 1000));
   const len = Math.floor(((to - from) / 1000) * rate);
   if (recs.length < 2 || !(len >= SYNC_MIN_SEC * rate)) {
-    setSyncStatus('音を取り出せませんでした');
+    fail('音を取り出せませんでした');
     return;
   }
   const cut = recs.map((r) => {
@@ -3733,17 +3742,147 @@ function finishAudioSync() {
   }
   const off = syncOffsets(cut.length, edges);
   if (!off) {
-    setSyncStatus('同じ音が見つかりません');
+    fail('同じ音が見つかりません');
     return;
   }
   const next = syncDelays(recs.map((r) => r.win.delay), off, DELAY_MAX_SEC);
+  // 枠の上の表示用。基準(いちばん遅れている枠)の波形に、各枠の波形がずれた位置から重なっていく。
+  const latest = Math.max(...off.filter((o) => o !== null));
+  const refEnv = audioEnvelope(cut[off.indexOf(latest)], rate, SYNC_ENV_HZ);
+  const viewFrom = Math.max(0, (len / rate - SYNC_VIEW_SEC) / 2); // 録音のまんなかあたりを見せる
   let done = 0;
   next.forEach((v, i) => {
-    if (v === null) return;
-    setWinDelay(recs[i].win, v);
+    const win = recs[i].win;
+    if (v === null) {
+      endSyncView(win, '同じ音が見つかりません', null);
+      return;
+    }
+    setWinDelay(win, v);
     done++;
+    endSyncView(win, win.delay > 0 ? '+' + win.delay.toFixed(2) + ' 秒' : 'そのまま(いちばん遅い枠)', {
+      own: audioEnvelope(cut[i], rate, SYNC_ENV_HZ), ref: refEnv, shift: latest - off[i], from: viewFrom
+    });
   });
+  // 録音が使えなかった枠(recs に入らなかった枠)の表示も締める。
+  caps.forEach(([w]) => { if (!recs.some((r) => r.win === w)) endSyncView(w, '音を取り出せませんでした', null); });
   setSyncStatus(done + ' 枠を合わせました');
+}
+
+// ====== 音で合わせる: 枠の上の表示 ======
+// 何が起きているかを枠の上に出す。聞いている間は、その枠から取れている音の波形が流れる。
+// 測り終えたら、基準の枠の波形(灰色)の上に、その枠の波形がずれた位置から滑ってきて重なる。
+// 押してから結果が出るまで 15 秒あるので、動いていることと、どの枠をどれだけ動かしたかを見せる。
+const SYNC_VIEW_SEC = 6;    // 波形として見せる時間幅
+const SYNC_ENV_HZ = 50;     // 波形の細かさ(1 秒あたりの点数)
+const SYNC_SLIDE_MS = 1800; // 波形が重なるまでの時間
+const SYNC_HOLD_MS = 3500;  // 結果を出したままにしておく時間
+const SYNC_FADE_MS = 500;   // CSS の .win-sync の transition と合わせる
+let syncViewRaf = 0;
+
+// 音を、hz 点/秒の「その区間でいちばん大きい振れ」の列に縮める(波形の描画用)。
+function audioEnvelope(pcm, rate, hz) {
+  const step = rate / hz;
+  const out = new Float32Array(Math.floor(pcm.length / step));
+  for (let i = 0; i < out.length; i++) {
+    let m = 0;
+    const end = Math.floor((i + 1) * step);
+    for (let j = Math.floor(i * step); j < end; j++) m = Math.max(m, Math.abs(pcm[j]));
+    out[i] = m;
+  }
+  return out;
+}
+
+function openSyncView(win) {
+  closeSyncView(win);
+  const el = document.createElement('div');
+  el.className = 'win-sync listen';
+  el.style.setProperty('--sync-ms', SYNC_LISTEN_MS + 'ms');
+  const canvas = document.createElement('canvas');
+  const label = document.createElement('div');
+  label.className = 'win-sync-label';
+  label.textContent = '聞いています…';
+  const bar = document.createElement('div');
+  bar.className = 'win-sync-bar';
+  el.append(canvas, label, bar);
+  (win.mediaEl || win.body).appendChild(el);
+  // env = 聞いている間に届いた波形(届くたびに後ろへ足す)。slide = 結果の表示用データ。
+  win.syncView = { el, canvas, label, env: [], batchSec: 0, batchAt: 0, slide: null, slideAt: 0 };
+  if (!syncViewRaf) syncViewRaf = requestAnimationFrame(drawSyncViews);
+}
+
+function feedSyncView(win, pcm, rate) {
+  const v = win.syncView;
+  if (!v) return;
+  for (const x of audioEnvelope(pcm, rate, SYNC_ENV_HZ)) v.env.push(x);
+  v.batchSec = pcm.length / rate;
+  v.batchAt = performance.now();
+}
+
+// 結果を出して、しばらくしてから消す。slide が null なら文言だけ(波形はその場で止まる)。
+function endSyncView(win, text, slide) {
+  const v = win.syncView;
+  if (!v) return;
+  v.el.classList.remove('listen');
+  v.el.classList.toggle('matched', !!slide);
+  v.label.textContent = text;
+  v.slide = slide;
+  v.slideAt = performance.now();
+  setTimeout(() => { if (win.syncView === v) closeSyncView(win); }, (slide ? SYNC_SLIDE_MS : 0) + SYNC_HOLD_MS);
+}
+
+function closeSyncView(win) {
+  const v = win.syncView;
+  if (!v) return;
+  win.syncView = null;
+  v.el.classList.add('out');
+  setTimeout(() => v.el.remove(), SYNC_FADE_MS);
+}
+
+// env を、時刻 from(秒)が左端になるように描く。shift 秒だけ右へずらす。上下対称の棒で波形に見せる。
+function drawSyncWave(g, env, from, shift, pps, h, color) {
+  let peak = 1e-4;
+  for (const x of env) peak = Math.max(peak, x);
+  const bw = Math.max(1, pps / SYNC_ENV_HZ - 1);
+  g.fillStyle = color;
+  for (let k = 0; k < env.length; k++) {
+    const x = (k / SYNC_ENV_HZ + shift - from) * pps;
+    if (x < -bw || x > g.canvas.width) continue;
+    const half = Math.max(1, (env[k] / peak) * h * 0.46);
+    g.fillRect(x, h / 2 - half, bw, half * 2);
+  }
+}
+
+function drawSyncViews() {
+  syncViewRaf = 0;
+  const now = performance.now();
+  let alive = false;
+  for (const win of wins) {
+    const v = win.syncView;
+    if (!v) continue;
+    alive = true;
+    const c = v.canvas;
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.round(c.clientWidth * dpr);
+    const h = Math.round(c.clientHeight * dpr);
+    if (!w || !h) continue;
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, w, h);
+    const pps = w / SYNC_VIEW_SEC;
+    if (v.slide) {
+      const p = Math.min(1, (now - v.slideAt) / SYNC_SLIDE_MS);
+      const eased = 1 - Math.pow(1 - p, 3);
+      drawSyncWave(g, v.slide.ref, v.slide.from, 0, pps, h, 'rgba(255,255,255,0.32)');
+      drawSyncWave(g, v.slide.own, v.slide.from, v.slide.shift * eased, pps, h, p >= 1 ? '#3fb950' : '#58a6ff');
+    } else {
+      // 音は 0.5 秒ごとにまとめて届く。届いた分を一度に出すとカクつくので、1 回分だけ遅らせて
+      // 右端を時間で進め、なめらかに流れて見えるようにする。
+      const shown = v.el.classList.contains('listen') ? Math.min(v.batchSec, (now - v.batchAt) / 1000) : v.batchSec;
+      const right = v.env.length / SYNC_ENV_HZ - v.batchSec + shown;
+      drawSyncWave(g, v.env, right - SYNC_VIEW_SEC, 0, pps, h, v.el.classList.contains('listen') ? '#58a6ff' : 'rgba(255,255,255,0.4)');
+    }
+  }
+  if (alive) syncViewRaf = requestAnimationFrame(drawSyncViews);
 }
 
 // ====== 枠一覧 / ミキサーパネル ======
