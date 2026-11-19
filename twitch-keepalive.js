@@ -9,6 +9,7 @@
 // MAIN world・document_start で、Twitch のスクリプトが観測を始める前に差し替える。
 //
 // 同じく MAIN world でしかできないこととして、枠ごとの遅延(下の 4)もここが担当する。
+// 遅延を自動で決めるための音の取り出し(下の 5)も、遅延と組なのでここに置いている。
 (function twitchKeepAlive() {
   'use strict';
   if (window.top === window.self) return; // 埋め込み(iframe)内のみ。トップレベルでは通常動作のまま
@@ -256,5 +257,83 @@
     delayTarget = t;
     if (t <= 0) { delayStop(); return; }
     if (delayTimer === null) delayTimer = setInterval(delayTick, DELAY_TICK_MS);
+  });
+
+  // 5) 音合わせ用に、いま鳴っている音を親へ渡す(親からの sync-listen)。
+  // 親は複数の枠の音を突き合わせて枠同士のずれを測り、上の遅延で揃える。枠は別オリジンなので
+  // 親からは音に触れず、ここで取り出して送るしかない。
+  // 取り出しは captureStream(再生している音の複製)。ミュート中や音量 0 でも取れ、再生にも
+  // 影響しない(実測)。AudioContext を使わないのは、操作されていない枠では自動再生の制限で
+  // 止まったままになるため。突き合わせに高い音は要らないので、4kHz 相当まで間引いて送る。
+  const SYNC_RATE = 4000;
+  const SYNC_BATCH_SEC = 0.5; // 親へ送る間隔
+  let syncStop = null;
+
+  function syncPost(msg) {
+    msg[MAGIC] = true;
+    msg.type = 'sync-audio';
+    try { window.parent.postMessage(msg, '*'); } catch (e) { /* noop */ }
+  }
+
+  function syncStart() {
+    if (syncStop) return;
+    const v = document.querySelector('video');
+    let track = null;
+    try { track = v ? v.captureStream().getAudioTracks()[0] : null; } catch (e) { /* noop */ }
+    if (!track || typeof window.MediaStreamTrackProcessor !== 'function') { syncPost({ error: true }); return; }
+    const reader = new window.MediaStreamTrackProcessor({ track: track }).readable.getReader();
+    let stopped = false;
+    syncStop = function () {
+      stopped = true;
+      syncStop = null;
+      try { reader.cancel(); } catch (e) { /* noop */ }
+      try { track.stop(); } catch (e) { /* noop */ }
+    };
+    // 各サンプルの時刻は「音側の時刻 ts + anchor」で壁時計に直す。anchor は (届いた時刻 - ts) の
+    // 最小値。届くのが遅れることはあっても早まることは無いので、最小値がいちばん正確。
+    // 枠ごとの anchor が同じ基準になるので、親は枠をまたいで時刻を比べられる。
+    let anchor = Infinity;
+    let batch = [];
+    let batchLen = 0;
+    let batchTs = 0;
+    (async function () {
+      while (!stopped) {
+        const r = await reader.read();
+        if (r.done) break;
+        const a = r.value;
+        const ts = a.timestamp / 1000; // μs → ms
+        anchor = Math.min(anchor, performance.timeOrigin + performance.now() - ts);
+        const step = Math.max(1, Math.round(a.sampleRate / SYNC_RATE));
+        const rate = a.sampleRate / step;
+        const raw = new Float32Array(a.numberOfFrames);
+        a.copyTo(raw, { planeIndex: 0, format: 'f32-planar' });
+        a.close();
+        const out = new Float32Array(Math.floor(raw.length / step));
+        for (let i = 0; i < out.length; i++) {
+          let s = 0;
+          for (let j = 0; j < step; j++) s += raw[i * step + j];
+          out[i] = s / step;
+        }
+        if (batchLen === 0) batchTs = ts;
+        batch.push(out);
+        batchLen += out.length;
+        if (batchLen >= rate * SYNC_BATCH_SEC) {
+          const pcm = new Float32Array(batchLen);
+          let o = 0;
+          for (const c of batch) { pcm.set(c, o); o += c.length; }
+          syncPost({ ts: batchTs, anchor: anchor, rate: rate, pcm: pcm });
+          batch = [];
+          batchLen = 0;
+        }
+      }
+    })().catch(function () { if (!stopped) syncPost({ error: true }); });
+  }
+
+  window.addEventListener('message', function (e) {
+    if (e.source !== window.parent) return;
+    const d = e.data;
+    if (!d || d[MAGIC] !== true || d.type !== 'sync-listen') return;
+    if (d.value === true) syncStart();
+    else if (syncStop) syncStop();
   });
 })();

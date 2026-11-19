@@ -31,9 +31,10 @@ function extractFunction(file, name) {
 const clampDelay = extractFunction('multiview.js', 'clampDelay');
 const mvDelayPlan = extractFunction('twitch-keepalive.js', 'mvDelayPlan');
 
-test('clampDelay: 0.1 秒刻みに丸める(足し算の誤差を残さない)', () => {
+test('clampDelay: 0.01 秒刻みに丸める(足し算の誤差を残さない)', () => {
   assert.equal(clampDelay(0.1 + 0.2, 20), 0.3);
-  assert.equal(clampDelay(1.04, 20), 1);
+  assert.equal(clampDelay(1.004, 20), 1);
+  assert.equal(clampDelay(2.416, 20), 2.42);
 });
 
 test('clampDelay: 0〜max に収め、数でないものは 0', () => {
