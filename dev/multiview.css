@@ -402,7 +402,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   font-family: inherit; font-size: 12px; cursor: pointer;
 }
 .adj-delay button:hover { background: #30363d; border-color: #58a6ff; }
-.adj-delay-value { flex: 0 0 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.adj-delay-value { flex: 0 0 60px; text-align: center; font-variant-numeric: tabular-nums; }
 .adj-delay-value.pending { color: #d29922; }
 .adj-reset {
   align-self: flex-end; margin-top: 2px;

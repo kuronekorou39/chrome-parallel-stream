@@ -439,7 +439,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.74';
+const EXPECTED_EXT_VERSION = '0.9.75';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -615,6 +615,8 @@ function onFrameState(e) {
     // 枠の中で実際に付いている遅延(twitch-keepalive.js から)。調整パネルの表示に使う。
     win.delayState = d.state || null;
     if (win.syncDelayUI) win.syncDelayUI();
+  } else if (d.type === 'sync-audio') {
+    onSyncAudio(win, d);
   } else if (d.type === 'frame-hello') {
     syncFrameTheater(win);  // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
     syncFrameDanmaku(win);  // 同じく現在の弾幕 ON/OFF も返す
@@ -1883,7 +1885,7 @@ function buildAdjustPanel(win) {
   );
   win.syncDelayUI = () => {
     delayRow.hidden = !delaySupported(win);
-    delayValue.textContent = win.delay.toFixed(1) + ' 秒';
+    delayValue.textContent = win.delay.toFixed(2) + ' 秒';
     // 枠の中で実際に付いた量が指定に届くまでは「調整中」。大きく動かした直後や、
     // 読み直しで遅延を溜め直している間がこれに当たる。
     const st = win.delayState;
@@ -3506,9 +3508,9 @@ function applyVolume(win, v) {
 // 秒数を持って伝えるだけ。対象は Twitch のライブを埋め込みプレイヤーで映している枠のみ。
 const DELAY_MAX_SEC = 20; // twitch-keepalive.js の DELAY_MAX_SEC と合わせる
 
-// 0.1 秒刻みに丸めて 0〜max に収める。
+// 0.01 秒刻みに丸めて 0〜max に収める(ボタンは 0.1 秒刻みだが、音で合わせた値はもっと細かい)。
 function clampDelay(sec, max) {
-  const v = Math.round(Number(sec) * 10) / 10;
+  const v = Math.round(Number(sec) * 100) / 100;
   if (!Number.isFinite(v)) return 0;
   return Math.max(0, Math.min(max, v));
 }
@@ -3528,6 +3530,220 @@ function syncFrameDelay(win) {
   try {
     win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-delay', value: win.delay || 0 }, '*');
   } catch (e) { /* noop */ }
+}
+
+// ====== 音で合わせる ======
+// 枠ごとの遅延を、耳で合わせる代わりに音の突き合わせで決める。一緒に配信している人たちの枠には
+// 同じ音(通話の声・同じゲームの音・本配信の音)が入っているので、2 枠の音をずらしながら重ねて
+// いちばん一致する位置を探せば、枠同士のずれが秒数で出る。全枠をいちばん遅れている枠に揃える
+// (早めることはできず、遅らせることしかできないため)。
+// 押したときに一度だけ合わせる。常に合わせ続けると、そのたびに音が揺れるうえ、広告明けなどで
+// 誤って大きく動かす危険があるため。ずれが気になったら押し直す。
+const SYNC_LISTEN_MS = 15000; // 聞く長さ。実測で 8 秒でも足りたが、会話が途切れる区間に備えて長めに取る
+const SYNC_MIN_SEC = 5;       // 全枠の録音が重なる区間がこれより短ければ、測らない
+const SYNC_MAX_LAG_SEC = 10;  // 探すずれの範囲(±)
+// 一致の山が、ほかの位置の最大の何倍あれば「同じ音が入っている」とみなすか。
+// 実測では、同じ音が入っている組は 6〜25 倍、無関係な組は 1.0〜1.2 倍だった。
+const SYNC_MIN_RATIO = 3;
+let syncRun = null; // 聞いている最中だけ { caps: Map(win → 録音) }
+
+// 高速フーリエ変換(その場で書き換える。長さは 2 のべき乗)。
+function fftInPlace(re, im, inverse) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = ((2 * Math.PI) / len) * (inverse ? -1 : 1);
+    const wr = Math.cos(ang);
+    const wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1;
+      let ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k;
+        const b = a + len / 2;
+        const xr = re[b] * cr - im[b] * ci;
+        const xi = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - xr; im[b] = im[a] - xi;
+        re[a] += xr; im[a] += xi;
+        const t = cr * wr - ci * wi;
+        ci = cr * wi + ci * wr;
+        cr = t;
+      }
+    }
+  }
+}
+
+// 同じ時刻から始まる同じ長さの音 a, b について、b が a より何秒遅れているかを出す。
+// 相互相関を周波数ごとの強さで割って位相だけで比べる(GCC-PHAT)。こうすると、片方にだけ
+// 乗っている声や、音量・音質の違いに引きずられにくく、山が鋭く出る。
+// ratio = 山の高さ ÷ ほかの位置(山の前後 1 秒を除く)の最大。大きいほど確か。
+function audioLag(a, b, rate, maxLagSec) {
+  let n = 1;
+  while (n < a.length * 2) n <<= 1; // 2 倍に取って、ずらしたときに反対側から回り込まないようにする
+  const ar = new Float64Array(n);
+  const ai = new Float64Array(n);
+  const br = new Float64Array(n);
+  const bi = new Float64Array(n);
+  ar.set(a);
+  br.set(b);
+  fftInPlace(ar, ai, false);
+  fftInPlace(br, bi, false);
+  for (let i = 0; i < n; i++) {
+    const r = ar[i] * br[i] + ai[i] * bi[i];
+    const m = ar[i] * bi[i] - ai[i] * br[i];
+    const g = Math.hypot(r, m) + 1e-12;
+    ar[i] = r / g;
+    ai[i] = m / g;
+  }
+  fftInPlace(ar, ai, true);
+  const maxLag = Math.min(Math.round(maxLagSec * rate), a.length - 1);
+  const at = (lag) => ar[(lag + n) % n];
+  let best = 0;
+  let peak = -Infinity;
+  for (let lag = -maxLag; lag <= maxLag; lag++) {
+    if (at(lag) > peak) { peak = at(lag); best = lag; }
+  }
+  let other = 0;
+  for (let lag = -maxLag; lag <= maxLag; lag++) {
+    if (Math.abs(lag - best) < rate) continue;
+    other = Math.max(other, Math.abs(at(lag)));
+  }
+  return { lag: best / rate, ratio: other > 0 ? peak / other : Infinity };
+}
+
+// 枠どうしのずれ edges = [{ i, j, lag }](j は i より lag 秒遅れ)から、枠ごとの遅れを出す。
+// つながっている枠がいちばん多い組だけを対象にし、その組の中での遅れ(秒。基準は組の1枠目)を返す。
+// 組に入らない枠は null。2 枠以上の組が無ければ null。
+function syncOffsets(n, edges) {
+  let best = null;
+  let bestCount = 1;
+  const seen = new Array(n).fill(false);
+  for (let s = 0; s < n; s++) {
+    if (seen[s]) continue;
+    const off = new Array(n).fill(null);
+    off[s] = 0;
+    const queue = [s];
+    let count = 0;
+    while (queue.length) {
+      const u = queue.shift();
+      seen[u] = true;
+      count++;
+      for (const e of edges) {
+        const v = e.i === u ? e.j : e.j === u ? e.i : -1;
+        if (v < 0 || off[v] !== null) continue;
+        off[v] = off[u] + (e.i === u ? e.lag : -e.lag);
+        queue.push(v);
+      }
+    }
+    if (count > bestCount) { bestCount = count; best = off; }
+  }
+  return best;
+}
+
+// 今の遅延 cur と、その状態で測った遅れ off から、全枠をいちばん遅れている枠に揃える遅延を出す。
+// 揃えたうえで全体を前へ詰める(いちばん小さい遅延が 0 になるように)。off が null の枠は null。
+function syncDelays(cur, off, max) {
+  const latest = Math.max(...off.filter((o) => o !== null));
+  const next = cur.map((c, i) => (off[i] === null ? null : c + latest - off[i]));
+  const min = Math.min(...next.filter((v) => v !== null));
+  return next.map((v) => (v === null ? null : Math.min(max, v - min)));
+}
+
+function setSyncStatus(text) {
+  const el = document.getElementById('mm-sync-val');
+  if (el) el.textContent = text;
+}
+
+function postSyncListen(win, on) {
+  if (!win.frame) return;
+  try {
+    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'sync-listen', value: on }, '*');
+  } catch (e) { /* noop */ }
+}
+
+function startAudioSync() {
+  if (syncRun) return; // 聞いている最中
+  const targets = wins.filter((w) => !w.hidden && w.frame && delaySupported(w));
+  if (targets.length < 2) {
+    setSyncStatus('Twitch のライブ枠が 2 つ要ります');
+    return;
+  }
+  syncRun = {
+    caps: new Map(targets.map((w) => [w, { anchor: Infinity, ts0: null, rate: 0, chunks: [], error: false }]))
+  };
+  setSyncStatus('聞いています…');
+  targets.forEach((w) => postSyncListen(w, true));
+  setTimeout(finishAudioSync, SYNC_LISTEN_MS);
+}
+
+// 枠から届いた音(twitch-keepalive.js の 5)を溜める。
+function onSyncAudio(win, d) {
+  const cap = syncRun && syncRun.caps.get(win);
+  if (!cap) return;
+  if (d.error || !(d.pcm instanceof Float32Array) || !Number.isFinite(d.ts) || !Number.isFinite(d.anchor) || !(d.rate > 0)) {
+    cap.error = true;
+    return;
+  }
+  cap.anchor = Math.min(cap.anchor, d.anchor); // 後から届いた値ほど正確(枠側のコメント参照)
+  if (cap.ts0 === null) cap.ts0 = d.ts;
+  cap.rate = d.rate;
+  cap.chunks.push(d.pcm);
+}
+
+function finishAudioSync() {
+  const run = syncRun;
+  syncRun = null;
+  if (!run) return;
+  const caps = [...run.caps].filter(([w]) => wins.includes(w)); // 聞いている間に閉じた枠は外す
+  caps.forEach(([w]) => postSyncListen(w, false));
+  const usable = caps.filter(([, c]) => !c.error && c.chunks.length > 0);
+  const rate = usable.length ? usable[0][1].rate : 0;
+  const recs = usable.filter(([, c]) => c.rate === rate).map(([win, c]) => {
+    const pcm = new Float32Array(c.chunks.reduce((sum, x) => sum + x.length, 0));
+    let o = 0;
+    for (const x of c.chunks) { pcm.set(x, o); o += x.length; }
+    return { win, pcm, start: c.anchor + c.ts0 }; // 1 サンプル目の時刻(ms)
+  });
+  // 全枠の録音が重なっている区間だけを使う。
+  const from = Math.max(...recs.map((r) => r.start));
+  const to = Math.min(...recs.map((r) => r.start + (r.pcm.length / rate) * 1000));
+  const len = Math.floor(((to - from) / 1000) * rate);
+  if (recs.length < 2 || !(len >= SYNC_MIN_SEC * rate)) {
+    setSyncStatus('音を取り出せませんでした');
+    return;
+  }
+  const cut = recs.map((r) => {
+    const o = Math.round(((from - r.start) / 1000) * rate);
+    return r.pcm.subarray(o, o + len);
+  });
+  const edges = [];
+  for (let i = 0; i < cut.length; i++) {
+    for (let j = i + 1; j < cut.length; j++) {
+      const m = audioLag(cut[i], cut[j], rate, SYNC_MAX_LAG_SEC);
+      if (m.ratio >= SYNC_MIN_RATIO) edges.push({ i, j, lag: m.lag });
+    }
+  }
+  const off = syncOffsets(cut.length, edges);
+  if (!off) {
+    setSyncStatus('同じ音が見つかりません');
+    return;
+  }
+  const next = syncDelays(recs.map((r) => r.win.delay), off, DELAY_MAX_SEC);
+  let done = 0;
+  next.forEach((v, i) => {
+    if (v === null) return;
+    setWinDelay(recs[i].win, v);
+    done++;
+  });
+  setSyncStatus(done + ' 枠を合わせました');
 }
 
 // ====== 枠一覧 / ミキサーパネル ======
@@ -4057,6 +4273,7 @@ function setupMainMenu() {
   // 押しても閉じない(見比べながら両方を切り替えることが多いため)。
   mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));
   mkAct('mm-chat-all', () => setAllChat(!chatDefaultOn));
+  mkAct('mm-sync', startAudioSync); // 押しても閉じない(右側に出る経過と結果を見せるため)
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   act('mm-cookie', openCookieDialog);
