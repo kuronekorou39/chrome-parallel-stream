@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=0.9.81" />
+  <link rel="stylesheet" href="multiview.css?v=0.9.82" />
 </head>
 <body>
   <div id="toolbar">
@@ -57,10 +57,11 @@
     </div>
     <!-- Twitch のライブ枠どうしのずれを、音を聞き比べて揃える(枠ごとの遅延を自動で決める)。
          押すと説明のダイアログが出て、その OK で 20 秒ほど聞いて一度だけ合わせる。
-         右の値は経過と結果(結果はしばらくしたら消える)。 -->
+         右の値は経過と結果(結果はしばらくしたら消える)。
+         右端は「定期的に合わせ直す」の切り替え(オンの間は緑。ダイアログのチェックと同じもの)。 -->
     <div class="mm-row">
       <button id="mm-sync" type="button" title="Twitch のライブ枠どうしのずれを、音を聞き比べて揃える"><span class="mm-icon"><i data-ic="clock"></i></span><span class="mm-label">音で合わせる</span><span class="mm-sub" id="mm-sync-val"></span></button>
-      <span class="mm-side" aria-hidden="true"><span class="mm-icon"></span></span>
+      <button id="mm-sync-auto" class="mm-side" type="button" title="定期的に合わせ直す(5 分おき。1 時間ほどで自動的にオフ)" aria-label="定期的に合わせ直す"><span class="mm-icon"><i data-ic="reload"></i></span></button>
     </div>
     <div class="mm-sep"></div>
     <!-- 拡張機能の更新。新しい版があるときだけ出す(最新のときは用が無いので出さない)。
@@ -116,7 +117,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.81.zip" download="parallel-stream-0.9.81.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-0.9.82.zip" download="parallel-stream-0.9.82.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -145,14 +146,15 @@
           対象は Twitch のライブ枠だけで、同じ音が入っていない枠には何もしません。
           付いた遅延は、各枠の「映像調整」で確かめたり直したりできます。
         </p>
-        <!-- オンの間、約 1 分おきに静かに測り直す。切り替えはその場で効く(OK を待たない)。 -->
+        <!-- オンの間、5 分おきに静かに測り直す。切り替えはその場で効く(OK を待たない)。 -->
         <label class="cookie-row">
           <input type="checkbox" id="sync-dialog-auto" />
           <span>定期的に合わせ直す</span>
         </label>
         <p class="cookie-note">
-          オンの間、約 1 分おきに測り直し、ずれていた枠だけを直します。
-          枠の上の表示は出しません。ページを開き直すとオフに戻ります。
+          オンの間、5 分おきに測り直し、ずれていた枠だけを直します(枠の上の表示は出しません)。
+          1 時間ほど(12 回)で自動的にオフになります。
+          メニューの「音で合わせる」の右端のボタンでも切り替えられます。
         </p>
         <p id="sync-dialog-status" class="cookie-note"></p>
         <button id="sync-dialog-ok" class="tb-btn tb-btn-primary" type="button">OK</button>
@@ -301,7 +303,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=0.9.81"></script>
-  <script src="multiview.js?v=0.9.81"></script>
+  <script src="ext-bridge.js?v=0.9.82"></script>
+  <script src="multiview.js?v=0.9.82"></script>
 </body>
 </html>
