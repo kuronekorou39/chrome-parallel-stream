@@ -1229,3 +1229,7 @@ body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px
 .upd-row b { color: #c9d1d9; font-variant-numeric: tabular-nums; }
 .upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
 .upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }
+
+/* 「音で合わせる」のダイアログ。対象の枠が足りないときは OK を押せない。 */
+#sync-dialog-ok { display: block; margin-left: auto; min-width: 88px; }
+#sync-dialog-ok:disabled { opacity: 0.4; cursor: default; }

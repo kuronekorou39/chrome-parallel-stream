@@ -117,7 +117,11 @@
   const DELAY_JUMP_SEC = 3; // これ以上の不連続は、プレイヤー側の読み直し/シークとみなす
   const rateDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'playbackRate');
 
-  let delayTarget = 0;   // 親が指定した遅延(秒)。0 = 何もしない
+  let delayTarget = 0;   // 親が指定した遅延(秒)
+  // 遅延 0 でも再生位置を固定するか。音で合わせた枠は、基準の枠(遅延 0)も含めて全部固定する。
+  // 固定しないと、その枠だけプレイヤーの追いつき(1.03倍)で進んでいき、合わせた位置がずれる
+  // (追いつき中の枠は 15 秒で 0.4 秒ほど動いていた。実測)。
+  let delayHold = false;
   let delayVideo = null; // 速度の書き込みを握っている <video>
   let delayRate = 1;     // こちらが最後に当てた速度
   let delayRef = null;   // 基準点 { wall, media }。ここから等速で進んだ位置との差が「今の遅延」
@@ -253,9 +257,11 @@
     const d = e.data;
     if (!d || d[MAGIC] !== true || d.type !== 'set-delay') return;
     const t = Math.max(0, Math.min(DELAY_MAX_SEC, Number(d.value) || 0));
-    if (t === delayTarget) return;
+    const hold = d.hold === true;
+    if (t === delayTarget && hold === delayHold) return;
     delayTarget = t;
-    if (t <= 0) { delayStop(); return; }
+    delayHold = hold;
+    if (t <= 0 && !hold) { delayStop(); return; }
     if (delayTimer === null) delayTimer = setInterval(delayTick, DELAY_TICK_MS);
   });
 

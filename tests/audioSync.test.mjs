@@ -121,3 +121,9 @@ test('audioEnvelope: 区間ごとの最大の振れに縮める', () => {
   pcm[100] = 0.25;
   assert.deepEqual([...audioEnvelope(pcm, 4000, 50)], [0.5, 0.25]);
 });
+
+test('audioLag: 無音の枠は、一致していない扱いになる', () => {
+  const silent = new Float32Array(15 * RATE);
+  assert.equal(audioLag(silent, noise(15 * RATE, 41), RATE, 10).ratio, 0);
+  assert.equal(audioLag(silent, silent, RATE, 10).ratio, 0);
+});
