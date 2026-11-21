@@ -26,7 +26,7 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 | `popup.html/css/js` | ツールバーの拡張アイコンを押したときのポップアップ |
 | `multiview.html/css/js` | マルチビュー本体の UI。GitHub Pages から配信、拡張ページ版も同梱 |
 | `stream-control.js` | 各配信サイトへの content script(枠内の制御) |
-| `twitch-keepalive.js` / `keepalive-visibility.js` | バックグラウンドでも再生を止めないための MAIN world script |
+| `twitch-keepalive.js` / `keepalive-visibility.js` | バックグラウンドでも再生を止めないための MAIN world script。`twitch-keepalive.js` は、枠ごとの遅延(再生位置と速度の制御)と、「音で合わせる」用の音の取り出しも担当する(どちらも MAIN world でないとできないため) |
 | `twitch-chat-ime.js` | Twitch のチャット入力欄で、Android の日本語入力が1文字目で確定してしまうのを避ける MAIN world script(原因は Twitch 側。空の入力欄に空白を1つ入れておく回避策) |
 | `page-bridge.js` / `ext-bridge.js` | ページ(`multiview.js`)⇔拡張機能の `postMessage` 橋渡し。`multiview.js` は `chrome.*` を直接呼ばず `MV.*` 経由 |
 | `rules.json` | `declarativeNetRequest` ルール(埋め込みのための `X-Frame-Options` 除去など) |
@@ -52,9 +52,16 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
   npm 依存を持たない方針なので package.json は置かず、必要なときだけ npx で取ってくる
 - ローカルで動かす: `chrome://extensions` → デベロッパーモード ON → 「パッケージ化されていない
   拡張機能を読み込む」でこのフォルダを選ぶ
-- UI の作業中の見た目を確認する: 拡張機能に同梱されている
-  `chrome-extension://<拡張ID>/multiview.html?dev=1` を開く(`?dev=1` が無いと GitHub Pages へ
-  転送される)。他拡張(広告スキッパー等)は拡張ページ内では効かない点に注意
+- UI の作業中の見た目を確認する: commit してから `node tools/publish.mjs dev` を実行し、
+  `https://kuronekorou39.github.io/chrome-parallel-stream/dev/multiview.html` を開く(下記)。
+  利用者が見るページは変わらないので、確認のたびに実行してよい
+- 拡張機能に同梱されている `chrome-extension://<拡張ID>/multiview.html?dev=1` でも開けるが
+  (`?dev=1` が無いと GitHub Pages へ転送される)、**Twitch の枠は「接続が拒否されました」になる**。
+  埋め込みプレイヤーは `parent=` に渡したホスト名でしか埋め込みを許可せず、拡張ページの
+  オリジン(`chrome-extension://…`)はそれに当てはまらないため。他拡張(広告スキッパー等)も
+  拡張ページ内では効かない。Twitch を含む確認には使えない
+- 枠の中のスクリプト(`stream-control.js` / `twitch-keepalive.js` など content script)を変えたら、
+  ページの反映とは別に、`chrome://extensions` で拡張機能を再読み込みしないと効かない
 - `node tools/release.mjs` — パッチ版を1つ上げ、`manifest.json` / `multiview.html` の `?v=` /
   `multiview.js` の `EXPECTED_EXT_VERSION` を揃えて `dist/` に配布用 ZIP を作る
 - `node tools/release.mjs 1.0.0` — 版を明示指定して同様に行う

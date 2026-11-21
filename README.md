@@ -27,6 +27,8 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 - 配信をいくつでも並べて、大きさと位置を自由に決める
 - 枠ごとに音量を変える(全部まとめても)
 - コメントを映像の上に流す(弾幕)
+- 同じ配信を映している枠どうし(本配信と、そのミラー配信など)の時間のずれを揃える。
+  音を聞き比べて自動で合わせるほか、枠ごとに 0.1 秒単位で手で遅らせることもできる(Twitch のライブのみ)
 - 並べ方に名前を付けて保存し、あとで呼び出す
 - スマホでは縦に積んで見る
 
@@ -41,7 +43,7 @@ Twitch / YouTube / mellow-fan(旧 OPENREC) / Kick の配信を、1画面に並�
 
 ## インストール
 
-1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-0.9.82.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
+1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-0.9.83.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
 2. Chrome のアドレスバーに `chrome://extensions` と入れて開く
 3. 右上の「**デベロッパー モード**」を ON にする
 4. 左上に出てくる「**パッケージ化されていない拡張機能を読み込む**」を押して、1 で展開したフォルダを選ぶ

@@ -45,9 +45,14 @@ UI は GitHub Pages から配っているので、`main` に push した時点�
 git push origin main:release   # これを実行した時だけ、利用者に届く
 ```
 
-作業中の UI を自分で確かめるときは、拡張機能に同梱されている
-`chrome-extension://<拡張ID>/multiview.html?dev=1` を開く(`?dev=1` が無いと Pages へ転送される)。
-拡張ページなので枠の中で他の拡張(広告スキッパー)は効かないが、それ以外は同じように動く。
+作業中の UI を自分で確かめるときは、`node tools/publish.mjs dev` で `release` の中の `dev/` へ
+写し、`https://kuronekorou39.github.io/chrome-parallel-stream/dev/multiview.html` を開く。
+利用者が見るのはルート側なので、ここを更新しても届かない。
+
+拡張機能に同梱されている `chrome-extension://<拡張ID>/multiview.html?dev=1` でも開けるが
+(`?dev=1` が無いと Pages へ転送される)、Twitch の枠は映らない。埋め込みプレイヤーは `parent=` に
+渡したホスト名でしか埋め込みを許可せず、拡張ページのオリジンはそれに当てはまらないため。
+枠の中で他の拡張(広告スキッパー)も効かない。
 
 ## リリース
 

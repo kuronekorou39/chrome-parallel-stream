@@ -153,7 +153,6 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .layout-action + .layout-action { border-left: 1px solid #30363d; }
 .layout-action:hover { background: #30363d; }
 .layout-action-title { font-size: 14px; font-weight: bold; color: #f0f6fc; }
-.layout-action-desc { font-size: 11px; color: #8b949e; line-height: 1.3; text-align: center; }
 
 .layout-save-row { display: flex; gap: 8px; align-items: stretch; }
 /* min-width:0 で入力欄を縮めさせ、保存ボタンを枠外へ押し出さない。ボタンは縮まず折り返さない。 */
@@ -839,7 +838,10 @@ body.stack-mode #qa-tile { display: none; }
 .mm-tools { display: flex; align-items: center; gap: 2px; }
 #main-menu .mm-tools button { padding: 8px 10px; opacity: 0.55; }
 #main-menu .mm-tools button:hover { opacity: 1; }
-.mm-ver { margin-left: auto; padding-right: 10px; font-size: 11px; color: #6e7681; }
+.mm-ver { margin-left: auto; font-size: 11px; color: #6e7681; }
+/* 版の右隣の GitHub へのリンク。左のボタン(パフォーマンス等)と同じく、控えめに出す。 */
+.mm-repo { display: flex; padding: 8px 10px; color: #c9d1d9; opacity: 0.55; }
+.mm-repo:hover { opacity: 1; }
 /* 切替の項目と、その設定を開く小さなボタンを1行に並べる(弾幕 + 弾幕設定)。 */
 .mm-row { display: flex; gap: 2px; }
 .mm-row > button:first-child { flex: 1 1 auto; }

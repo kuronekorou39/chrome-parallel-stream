@@ -87,12 +87,29 @@ h2 {
 }
 
 .status {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
   color: #8b949e;
   font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 360px;
+}
+
+/* ヘッダ右端の GitHub へのリンク(アイコンだけ)。 */
+.repo-link {
+  flex: 0 0 auto;
+  display: flex;
+  color: #8b949e;
+}
+.repo-link:hover {
+  color: #f0f6fc;
+}
+.repo-link svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 .status.error {
