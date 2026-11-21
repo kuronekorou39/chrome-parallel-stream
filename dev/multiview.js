@@ -442,7 +442,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '0.9.83';
+const EXPECTED_EXT_VERSION = '0.9.84';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -1571,7 +1571,6 @@ function startStackDragState(win, clientX, clientY) {
   if (navigator.vibrate) {
     try { navigator.vibrate(20); } catch (_) { /* noop */ } // 「浮いた」感触
   }
-  const r = getRect(win);
   stackDrag = {
     win, mode, group,
     t0: Date.now(), // 開始時刻。終了処理を取りこぼした古い残骸の検出(reapStuckDrag)に使う
@@ -4110,26 +4109,7 @@ function showWindow(win) {
 }
 function toggleHidden(win) { win.hidden ? showWindow(win) : hideWindow(win); }
 
-// 休止: 枠のメディアの読み込み・再生を完全に止める(枠の DOM と URL は保持)。
-function suspendMedia(win) {
-  win.pendingLoad = false; // 順次読込待ち中に隠したら、読込予約を取り消してスピナーも消す
-  hideWinLoading(win);
-  if (win.video) {
-    if (win.video._hls) {
-      try { win.video._hls.destroy(); } catch (e) { /* noop */ }
-      win.video._hls = null;
-    }
-    try { win.video.pause(); } catch (e) { /* noop */ }
-    win.video.removeAttribute('src');
-    try { win.video.load(); } catch (e) { /* noop */ } // src 解放を確定させる
-    if (win.chatFrame) win.chatFrame.src = 'about:blank';
-  } else if (win.frame) {
-    win.frame.remove(); // iframe ごと破棄(再開時に mountSiteFrame で作り直す)
-    win.frame = null;
-  }
-}
-
-// 再開: 休止中だったメディアを win.url から読み込み直す(休止していなければ何もしない)。
+// まだ読み込んでいない枠(起動時に隠れた状態で復元された枠)を win.url から読み込む。読込済みなら何もしない。
 function resumeMedia(win) {
   if (win.video) {
     if (!win.video._hls && !win.video.src) {
