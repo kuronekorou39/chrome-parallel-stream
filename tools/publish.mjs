@@ -77,6 +77,8 @@ try {
     if (!existsSync(p(f))) { console.error(`見つかりません: ${f}`); process.exit(1); }
     cpSync(p(f), join(devDir, f));
   }
+  // 前に置いた版の zip は消す(確認用ページが指すのは今の版だけ。残すと版のぶんだけ溜まる)。
+  rmSync(join(devDir, 'dist'), { recursive: true, force: true });
   for (const z of ZIPS(version)) {
     if (!existsSync(p(z))) continue;
     mkdirSync(join(devDir, 'dist'), { recursive: true });
