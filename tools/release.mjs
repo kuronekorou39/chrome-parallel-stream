@@ -108,7 +108,7 @@ if (!report(readVersions())) {
 // どの版を入れたのか分かるようにするため(同じ名前だと入れ替えたかも分からない)。
 const stageName = `parallel-stream-${next}`;
 const stage = p('dist', stageName);
-// dist ごと消さないこと。過去の版の zip を消すと、古いページを開いたままの利用者の
+// dist ごと消さないこと。直前の版の zip まで消すと、古いページを開いたままの利用者の
 // リンクが 404 になる(実際に起きた)。作業フォルダだけ作り直す。
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
@@ -129,9 +129,9 @@ for (const f of PACK) {
 // 展開すればその名前のフォルダができる。
 // 版入りの zip と、固定名(latest)の2つを置く。ページや README が指すのは版入りのほう
 // (落としたファイル名で版が分かり、前の版と名前が被らないので (1) も付かない)。
-// latest は外から固定 URL で取りたい向けに残す。版入りの zip は消さない。消すと、古いページを
-// 開いたままの利用者が 404 になる(実際に起きた)。中身は latest と同じバイト列なので、git の
-// 履歴上は同じ blob として共有され、残しても履歴は膨らまない。
+// latest は外から固定 URL で取りたい向けに残す。版入りの zip は直近の KEEP_ZIPS 版だけ残す。
+// 全部消すと、古いページを開いたままの利用者が 404 になる(実際に起きた)。かといって全部
+// 残すと版のぶんだけ溜まり続けるので、何日も前のページを開いたままの人までは面倒を見ない。
 const zipName = zipName2;
 const zipPath = p('dist', zipName);
 execFileSync(
@@ -170,6 +170,20 @@ if (!entries.includes('manifest.json')) {
   process.exit(1);
 }
 console.log(`  検査: ${entries.length} ファイル、すべて直下。manifest.json あり。`);
+
+// 古い版の zip を消す(理由は上の「配布物」のコメント)。
+const KEEP_ZIPS = 3;
+const verOf = (name) => name.match(/^parallel-stream-(\d+)\.(\d+)\.(\d+)\.zip$/);
+const oldZips = readdirSync(p('dist'))
+  .filter(verOf)
+  .sort((a, b) => {
+    const [x, y] = [verOf(a), verOf(b)];
+    return y[1] - x[1] || y[2] - x[2] || y[3] - x[3]; // 新しい順
+  })
+  .slice(KEEP_ZIPS)
+  .filter((name) => name !== zipName); // 版を下げて作り直したときも、今回の zip は消さない
+for (const name of oldZips) rmSync(p('dist', name));
+if (oldZips.length) console.log(`  古い版の zip を削除: ${oldZips.join(', ')}`);
 
 // zip を作る前の作業フォルダは、作った後は用が無い。放っておくと版のぶんだけ溜まり続けるので
 // (git は追跡していないが、手元のディスクと検索結果を汚す)、今回のもの以外は消す。
