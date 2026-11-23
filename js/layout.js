@@ -93,8 +93,42 @@ function stopAutoLayout() {
 
 function runAutoLayout() {
   if (autoLayout === 'off' || stackMode || restoring || stackDrag) return;
-  if (autoLayout === 'tile') tileAll();
-  else layoutByVolume();
+  animateLayout(autoLayout === 'tile' ? tileAll : layoutByVolume);
+}
+
+// 並べ直しを短いアニメーションで見せる(一瞬で変わると、どの枠がどこへ行ったか見逃すため)。
+// left/top/width/height を動かすと iframe の中まで毎フレーム再レイアウトされて重いので、
+// 先に最終位置へ置き、元の位置に見える transform から戻す。
+const LAYOUT_ANIM_MS = 220;
+function animateLayout(run) {
+  // 裏のタブは描画されないので動かしても見えない。OS で動きを減らす設定の人にも動かさない。
+  if (stackMode || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    run();
+    return;
+  }
+  // 動いている途中で次の並べ直しが来ても、今見えている位置から続くように、止める前に測る。
+  const before = new Map(wins.filter((w) => !w.hidden).map((w) => [w, w.el.getBoundingClientRect()]));
+  before.forEach((_, w) => { if (w.layoutAnim) w.layoutAnim.cancel(); });
+  run();
+  before.forEach((from, w) => {
+    const transform = layoutAnimFrom(from, w.el.getBoundingClientRect());
+    if (!transform) return;
+    w.layoutAnim = w.el.animate(
+      [{ transformOrigin: '0 0', transform }, { transformOrigin: '0 0', transform: 'none' }],
+      { duration: LAYOUT_ANIM_MS, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+    );
+  });
+}
+
+// 最終位置 to に置いた枠を、元の位置 from に見せる transform。動いていなければ null。
+function layoutAnimFrom(from, to) {
+  if (!to.width || !to.height) return null;
+  const dx = from.left - to.left;
+  const dy = from.top - to.top;
+  const sx = from.width / to.width;
+  const sy = from.height / to.height;
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return null;
+  return `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`;
 }
 
 function scheduleAutoLayout() {
@@ -114,7 +148,7 @@ function onWinVolCommitted() {
 function runManualLayout(kind, run) {
   panelsNeedAvoid = true;
   if (!stackMode && autoLayout !== kind) stopAutoLayout();
-  run();
+  animateLayout(run);
 }
 
 // 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。

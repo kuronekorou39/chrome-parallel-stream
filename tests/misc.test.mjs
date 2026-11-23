@@ -36,8 +36,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -168,6 +168,19 @@ test('nextMuteVolume: 鳴っていれば 0 にして音量を覚え、次で元�
 
 test('nextMuteVolume: つまみで 0 にした後は既定の音量にする', () => {
   assert.deepEqual(f.nextMuteVolume(0, null, 0.5), { vol: 0.5, remembered: null });
+});
+
+test('layoutAnimFrom: 元の位置と大きさに見える transform を返す', () => {
+  const from = { left: 10, top: 20, width: 100, height: 50 };
+  const to = { left: 110, top: 70, width: 200, height: 100 };
+  assert.equal(f.layoutAnimFrom(from, to), 'translate(-100px, -50px) scale(0.5, 0.5)');
+});
+
+test('layoutAnimFrom: 動いていない枠や、大きさの無い枠はアニメーションしない', () => {
+  const r = { left: 10, top: 20, width: 100, height: 50 };
+  assert.equal(f.layoutAnimFrom(r, { ...r }), null);
+  assert.equal(f.layoutAnimFrom(r, { ...r, left: 10.5 }), null);
+  assert.equal(f.layoutAnimFrom(r, { ...r, width: 0 }), null);
 });
 
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
