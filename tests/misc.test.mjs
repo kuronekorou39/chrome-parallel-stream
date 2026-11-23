@@ -38,8 +38,9 @@ const f = new Function(
   [
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    constSource('AUTO_LAYOUT_MODES'),
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectMoved'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectMoved, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -112,4 +113,29 @@ test('packVolumeRows: 幅より大きい枠でも 1 行に 1 つは置く。空�
   const big = f.packVolumeRows([{ r: 1 }, { r: 1 }], 1, 10, 90);
   assert.deepEqual(big.rows.map((row) => row.items.length), [1, 1]);
   assert.deepEqual(f.packVolumeRows([], 1000, 10, 90), { rows: [], totalH: 0 });
+});
+
+test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
+  assert.deepEqual(f.tileGrid(4, 1920, 1080, 4), { cols: 2, rows: 2 });
+  assert.deepEqual(f.tileGrid(2, 1920, 400, 4), { cols: 2, rows: 1 });
+  assert.deepEqual(f.tileGrid(3, 400, 1200, 4), { cols: 1, rows: 3 });
+});
+
+test('tileGrid: 画面が小さすぎても、全枠が入る行列を返す', () => {
+  const { cols, rows } = f.tileGrid(5, 0, 0, 4);
+  assert.ok(cols * rows >= 5);
+});
+
+test('autoLayoutModeOf: 知らない値はオフにする', () => {
+  assert.equal(f.autoLayoutModeOf('tile'), 'tile');
+  assert.equal(f.autoLayoutModeOf('volume'), 'volume');
+  assert.equal(f.autoLayoutModeOf('snap'), 'off');
+  assert.equal(f.autoLayoutModeOf(undefined), 'off');
+});
+
+test('rectMoved: 位置か大きさが変わったときだけ true', () => {
+  const r = { x: 1, y: 2, w: 3, h: 4 };
+  assert.equal(f.rectMoved(r, { ...r }), false);
+  assert.equal(f.rectMoved(r, { ...r, x: 9 }), true);
+  assert.equal(f.rectMoved(r, { ...r, h: 9 }), true);
 });

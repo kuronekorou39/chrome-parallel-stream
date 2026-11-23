@@ -152,6 +152,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 }
 .layout-action + .layout-action { border-left: 1px solid #30363d; }
 .layout-action:hover { background: #30363d; }
+.layout-action.on, .layout-action.on:hover { background: #1f6feb; }
 .layout-action-title { font-size: 14px; font-weight: bold; color: #f0f6fc; }
 
 .layout-save-row { display: flex; gap: 8px; align-items: stretch; }
