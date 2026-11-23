@@ -26,7 +26,7 @@ const SNAP_GAP = 6; // 整形(グリッドスナップ)時の枠どうしの隙�
 const EDGE_KEEP = 100; // 枠/パネルがステージ外へはみ出しても、掴んで戻せるよう画面内に必ず残す可視量
 const TOP_OVERHANG = 30; // 上方向へのはみ出し上限。台形ヘッダ(高さ62px)の半分は掴めるよう残す
 const IDLE_CURSOR_MS = 10000; // この時間ポインタが動かないとカーソル+常駐UI/機能パネルを自動で消す(視聴の没入用)
-const TOOLBAR_HIDE_MS = 30000; // この時間操作が無いとツールバーを自動で隠す(復帰は ≡メニュー)
+const TOOLBAR_HIDE_MS = 30000; // この時間操作が無いとツールバーを隠し、≡メニューと「追加」「配置」も閉じる
 const IS_COARSE = window.matchMedia('(pointer: coarse)').matches; // 主ポインタが指(スマホ/タブレット)か
 const ZOOM_DEFAULT_FULL = 75; // 枠内サイト縮小率(🔍)の既定(全幅タイル)。一覧しやすいよう少し縮める
 const ZOOM_DEFAULT_HALF = 50; // 同(50%幅タイル)。横に2つ並ぶ小さい枠なのでより縮める
@@ -374,39 +374,7 @@ function onFrameUrl(e) {
   // 枠の中で一覧から配信・動画を選んだら、その時点で「プレイヤー + チャット」の構成へ移る。
   // 利用者に軽量/通常を選ばせない方針(見ている対象で決まる話でしかない)。
   // YouTube は視聴ページを枠に入れるとレンダラが落ちるので、そもそも他に選択肢が無い。
-  if (kickWatchChannel(win.url)) { swapToKickWindow(win); return; } // Kick は枠ごと作り直す(下記)
   if (toLightUrl(win.url)) switchToEmbed(win);
-}
-
-// Kick の枠を、一覧を開いている iframe から HLS 直再生の枠へ差し替える。
-// Kick のプレイヤーは iframe 内だと再描画のたびに 404 になるため映像は <video> で持つが、
-// その器は枠の生成時にしか作れない。そこで「同じ場所・同じ並び順・同じ音量で作り直す」。
-// これで利用者は URL をコピーせず、枠の中で配信を選ぶだけでよくなる。
-function swapToKickWindow(win) {
-  const url = win.url;
-  const rect = win.freeRect || getRect(win); // 縦積み中はタイル座標ではなく退避してある自由配置の座標
-  const idx = wins.indexOf(win);
-  const vol = win.vol;
-  closeWindow(win);
-  const next = createWindow(url, { silent: true });
-  if (!next) return;
-  if (Number.isFinite(vol)) setWinVol(next, vol);
-  // 並び順を元の位置へ戻す(縦積みでは並び順がそのまま画面の順番になるため)。
-  const at = wins.indexOf(next);
-  if (idx >= 0 && at >= 0 && at !== idx) {
-    wins.splice(at, 1);
-    wins.splice(idx, 0, next);
-  }
-  if (stackMode) {
-    next.freeRect = rect;
-    relayoutStack();
-  } else {
-    setRect(next, rect.x, rect.y, rect.w, rect.h);
-  }
-  focusWindow(next);
-  updateCount();
-  saveLineup();
-  renderMixer();
 }
 
 // live_chat 枠からの「チャットが使えるか」。使えない動画(ライブでない等)では列ごと畳む。
@@ -457,7 +425,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.4';
+const EXPECTED_EXT_VERSION = '1.0.5';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -906,8 +874,9 @@ function createWindow(url, opts = {}) {
   volSlider.title = 'この枠の音量';
   volWrap.append(volIcon, volSlider);
 
-  // Kick は「配信ページ」のときだけ HLS 直再生の枠にする。トップや一覧は普通の iframe で開き、
-  // 枠の中で配信を選んだら onFrameUrl が作り直す(そのために URL を貼らずに済む)。
+  // Kick の配信ページは、公式プレイヤー(player.kick.com)+ popout チャットの2枚組にする。
+  // 再生リストの CORS は Kick の許可オリジンにしか開いておらず、このページから hls.js では読めない。
+  // トップや一覧はサイト全体を開き、枠の中で配信を選んだら onFrameUrl が2枚組へ切り替える。
   const isKick = !!kickWatchChannel(url);
   // YouTube は視聴ページを枠に入れると Chromium が落ちるため、埋め込みプレイヤーで映像を出し、
   // チャットは公式の live_chat 枠を横に並べる(Kick と同じ2分割)。
@@ -918,7 +887,7 @@ function createWindow(url, opts = {}) {
   // Twitch も軽量表示では「プレイヤー + 埋め込みチャット」の2枚組にする。サイト全体を出すと
   // レイアウトも書き込みもサイト側の都合に左右され、縦長のときに使い物にならないため。
   const isTwitch = siteHost.includes('twitch.tv') && !siteHost.startsWith('player.');
-  const hasChatPane = isYouTube || isTwitch;
+  const hasChatPane = isYouTube || isTwitch || siteHost.includes('kick.com');
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
@@ -926,7 +895,7 @@ function createWindow(url, opts = {}) {
   // よって枠ヘッダにミュート/ソロボタンは置かない。
   const openBtn = mkBtn(':external:', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn(':reload:', '', 'この枠を再読込');
-  const chatBtn = isKick || hasChatPane ? mkBtn(':chat:', 'active', 'チャットの表示/非表示') : null;
+  const chatBtn = hasChatPane ? mkBtn(':chat:', 'active', 'チャットの表示/非表示') : null;
   // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
   // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
   // ⚡ は置かない(モードは映しているもので決まるので、選ばせる場面が無い)。
@@ -948,50 +917,7 @@ function createWindow(url, opts = {}) {
   let video = null;
   let chatFrame = null;
   let mediaEl = null; // チャットと2分割するとき、映像側を入れる箱(無ければ body 直下)
-  if (isKick) {
-    // Kick は拡張ページの iframe 内だとプレイヤーの内部リクエスト(IVS)が origin で弾かれ、
-    // 最大化など再描画の契機で 404 になる。そこで映像は HLS を <video> で直接再生し
-    // (リサイズ/再ペアレントの影響を受けない)、チャットだけ本物の kick.com の popout を
-    // 横に並べる(プレイヤーが無いので 404 にならず、拡張ページ配下ならログインも通る想定)。
-    // chat-on は付けない。出すかどうかは全体の既定(chatDefaultOn)で決まり、枠ができた後に
-    // syncChatVisibility が当てる。読み込みだけは先に始める(畳んでいても後で開けるように)。
-    body.classList.add('split-chat');
-    const media = document.createElement('div');
-    media.className = 'win-media';
-    video = document.createElement('video');
-    video.className = 'win-video';
-    video.autoplay = true;
-    video.muted = true; // 起動時はミュート(轟音防止)。音量はミキサーで操作する
-    video.playsInline = true;
-    // ネイティブUIは出さない。Kick だけがこれを出しっぱなしで、他のサイト(埋め込みプレイヤー)は
-    // 触らなければ引っ込むため、ここだけ映像の上に常に操作列が乗って見えていた。
-    // 時間も再生も設定も、ライブを見るぶんには使わない(音量はミキサー、全画面と再読込は⋮メニュー)。
-    // 触れる的が減るぶん、クリック/タップで枠を選ぶ動作も邪魔されなくなる。
-    video.controls = false;
-    media.appendChild(video);
-    body.appendChild(media);
-    // 休止スタート(startHidden)や遅延読み込み(deferLoad)時は、表示/順次読込のタイミングで読む。
-    if (!opts.startHidden && !opts.deferLoad) setupKickVideo(video, url, media);
-
-    const channel = kickChannelOf(url);
-    if (channel) {
-      // 他サイトと同じ「入れ物 + iframe」にする。畳んでいる間も弾幕の取得元として生かすには、
-      // 入れ物側を 0 にして中の iframe を実寸のまま切り落とす必要があるため(chat-feed)。
-      // iframe を直接置いていた頃は、畳む = display:none しかなく、弾幕も一緒に止まっていた。
-      const wrap = document.createElement('div');
-      wrap.className = 'win-chat-slot win-chat-wrap';
-      const chat = document.createElement('iframe');
-      chat.className = 'win-chat';
-      chat.allow = IFRAME_ALLOW;
-      wrap.appendChild(chat);
-      body.appendChild(wrap);
-      chatFrame = chat;
-      // ログインCookieを埋め込みへ送れるよう緩めてからチャットを読み込む(投稿可能にする)。
-      if (!opts.startHidden && !opts.deferLoad) {
-        loadFrameWithLogin(chat, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
-      }
-    }
-  } else if (hasChatPane) {
+  if (hasChatPane) {
     // 映像(埋め込みプレイヤー)は mountSiteFrame() が .win-media の中へ作る。
     // チャットはここで枠だけ用意し、読み込みは mountChatFrame() に任せる(URL 変更・再読込と共用)。
     // chat-on は付けない。チャットがあると分かってから出す(先に出して畳むと画面がガタつく)。
@@ -1059,7 +985,7 @@ function createWindow(url, opts = {}) {
   // YouTube は通常表示だとレンダラが落ちるので、保存内容にかかわらず埋め込みで開く。
   // Twitch は新規の枠だけ既定を2枚組(プレイヤー+チャット)にする。サイト全体だとチャット列が
   // 出ず、縦長でコメントも入力欄も使えないため。復元時は保存された選択(opts.light)を尊重する。
-  const defaultLight = isYouTube || (isTwitch && opts.light === undefined);
+  const defaultLight = isYouTube || isKick || (isTwitch && opts.light === undefined);
   win.light = (defaultLight || !!opts.light) && !!toLightUrl(url);
   pushWinHistory(win, url); // ⋮メニューの「戻る」用。最初のページを起点にする
   if (win.light && lightBtn) lightBtn.classList.add('active');
@@ -1121,8 +1047,7 @@ function createWindow(url, opts = {}) {
   maxBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMax(win); });
   closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeWindow(win); });
   bar.addEventListener('dblclick', () => toggleMax(win));
-  // サイト枠(非Kick)の iframe を生成。Kick は <video> なので applyVolume だけ。
-  if (!isKick && !opts.startHidden && !opts.deferLoad) mountSiteFrame(win);
+  if (!opts.startHidden && !opts.deferLoad) mountSiteFrame(win);
   applyVolume(win, masterVolume);
   syncChatVisibility(win); // 全体の既定(chatDefaultOn)を反映。Kick はこの時点で確定する
 
@@ -3388,6 +3313,17 @@ function mountChatFrame(win) {
     showChat(win);
     return;
   }
+  const kickChannel = kickWatchChannel(win.url);
+  if (kickChannel) {
+    const kickUrl = 'https://kick.com/popout/' + encodeURIComponent(kickChannel) + '/chat';
+    if (win.chatKey === kickUrl) return;
+    win.chatKey = kickUrl;
+    win.chatReplay = false;
+    chat.addEventListener('load', () => syncFrameDanmaku(win), { once: true });
+    loadFrameWithLogin(chat, 'kick.com', kickUrl);
+    showChat(win);
+    return;
+  }
   const id = youtubeVideoIdOf(win.url);
   if (!id) {
     chat.src = 'about:blank';
@@ -3658,6 +3594,7 @@ let syncAuto = false; // 定期的に合わせ直すか(その場かぎり。保
 let syncAutoLeft = 0; // 定期実行の残り回数
 let syncAutoTimer = 0;
 let syncRun = null; // 聞いている最中だけ { caps: Map(win → 録音) }
+let syncDialogRan = false; // ダイアログを開いてから実行したか(定期実行の案内を出す条件)
 
 // 高速フーリエ変換(その場で書き換える。長さは 2 のべき乗)。
 function fftInPlace(re, im, inverse) {
@@ -3809,6 +3746,7 @@ function setSyncStatus(text, final) {
   if (!el) return;
   clearTimeout(syncStatusTimer);
   el.textContent = text;
+  if (final || syncRun) document.getElementById('sync-dialog-status').textContent = text;
   if (final) syncStatusTimer = setTimeout(() => { el.textContent = syncIdleStatus(); }, SYNC_STATUS_MS);
 }
 
@@ -3825,9 +3763,8 @@ function setSyncAuto(on) {
   // メニューの切り替えボタンと、ダイアログのチェック(開いていれば)を合わせる。
   const btn = document.getElementById('mm-sync-auto');
   if (btn) btn.classList.toggle('on', on);
-  const box = document.getElementById('sync-dialog-auto');
-  if (box) box.checked = on;
   if (!syncRun) setSyncStatus(syncIdleStatus());
+  syncDialogUI();
   scheduleAutoSync();
 }
 
@@ -3848,18 +3785,28 @@ function syncTargets() {
   return wins.filter((w) => !w.hidden && w.frame && delaySupported(w));
 }
 
+// ダイアログの表示を今の状態に合わせる。定期実行は単独で使うものではないので、
+// 一度実行した後か、既にオンのときだけ案内を出す。
+function syncDialogUI() {
+  const run = document.getElementById('sync-dialog-run');
+  if (!run) return;
+  run.disabled = syncTargets().length < 2 || !!syncRun;
+  document.getElementById('sync-auto-section').hidden = !(syncDialogRan || syncAuto);
+  const auto = document.getElementById('sync-dialog-auto');
+  auto.textContent = syncAuto ? '定期実行をオフにする' : '定期実行をオンにする';
+  auto.classList.toggle('on', syncAuto);
+}
+
 // めったに使わない機能なので、押してすぐ動かさず、何をするものかを見せてから実行する。
 function openSyncDialog() {
   const dlg = document.getElementById('sync-dialog');
   if (!dlg) return;
   if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  // 聞いている最中でも開ける(定期実行をここで止められるように)。その間は OK だけ押せない。
-  const enough = syncTargets().length >= 2;
-  document.getElementById('sync-dialog-ok').disabled = !enough || !!syncRun;
-  document.getElementById('sync-dialog-status').textContent = !enough
+  syncDialogRan = false;
+  document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
     ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
-    : syncRun ? 'いま測っている最中です。終わってから押してください。' : '';
-  document.getElementById('sync-dialog-auto').checked = syncAuto;
+    : syncRun ? 'いま測っている最中です。' : '';
+  syncDialogUI();
   const panel = dlg.querySelector('.pos-dialog');
   centerPanel(panel);
   raisePanel(dlg);
@@ -3869,14 +3816,14 @@ function openSyncDialog() {
 function setupSyncDialog() {
   const dlg = document.getElementById('sync-dialog');
   if (!dlg) return;
-  const close = () => dlg.classList.remove('open');
-  document.getElementById('sync-dialog-close').addEventListener('click', close);
-  document.getElementById('sync-dialog-ok').addEventListener('click', () => {
-    close();
+  document.getElementById('sync-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
+  // 実行しても閉じない(結果と、定期実行の案内を下に出す)。
+  document.getElementById('sync-dialog-run').addEventListener('click', () => {
+    syncDialogRan = true;
     startAudioSync(false);
+    syncDialogUI();
   });
-  const auto = document.getElementById('sync-dialog-auto');
-  auto.addEventListener('change', () => setSyncAuto(auto.checked));
+  document.getElementById('sync-dialog-auto').addEventListener('click', () => setSyncAuto(!syncAuto));
   const panel = dlg.querySelector('.pos-dialog');
   makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
 }
@@ -3904,6 +3851,7 @@ function startAudioSync(auto) {
     held: new Map(targets.map((w) => [w, w.delayHold])) // 合わせなかった枠を元へ戻すために覚えておく
   };
   if (!auto) setSyncStatus('聞いています…');
+  syncDialogUI();
   targets.forEach((w) => {
     // 聞く前に全枠の再生位置を固定する。追いつき(1.03倍)の最中の枠があると、聞いている間にも
     // ずれが動いて山がぼやける(一致の強さが 1/5 以下に落ちた。実測)。
@@ -3970,9 +3918,11 @@ function finishAudioSync() {
   if (run.auto) {
     finishAutoSync(run, caps, m);
     countAutoSync();
+    document.getElementById('sync-dialog-status').textContent = '';
   } else {
     finishManualSync(run, caps, m);
   }
+  syncDialogUI();
   scheduleAutoSync();
 }
 
@@ -4666,8 +4616,8 @@ function setupMainMenu() {
   // 押しても閉じない(見比べながら両方を切り替えることが多いため)。
   mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));
   mkAct('mm-chat-all', () => setAllChat(!chatDefaultOn));
-  act('mm-sync', openSyncDialog); // 説明のダイアログを挟む(実行はその OK から)
-  mkAct('mm-sync-auto', () => setSyncAuto(!syncAuto)); // 定期実行は、ダイアログを開かずにここでも切り替えられる
+  act('mm-sync', openSyncDialog); // 説明のダイアログを挟む(実行はその中のボタンから)
+  mkAct('mm-sync-auto', () => setSyncAuto(false)); // オンの間だけ出る。押すと定期実行を止める
   act('mm-perf', () => document.getElementById('perf-btn').click());
   act('mm-danmaku', () => openDanmakuPanel(null)); // 全体対象で弾幕設定パネルを開く
   act('mm-cookie', openCookieDialog);
@@ -4720,6 +4670,17 @@ function setupLayoutDialog() {
 // 「カーソルと一緒に ≡ も消す」は body.idle に相乗りした CSS が担当(multiview.css の body.idle ルール)。
 // マウス/指を動かすと arm() が即 body.idle を外し、カーソルと ≡/全画面終了ボタンが戻る(= 動かしている間は表示)。
 // 一方ツールバー本体(toolbar-hidden)は時間で畳んだら、戻すのは ≡ を押した時だけ(勝手に出さない)。
+// 無操作が続いたら「追加」「配置」を閉じる。一覧はよく使うので残す。
+// 入力欄で文字を打っている間はポインタが動かないので、そのダイアログは閉じない。
+function closeIdleDialogs() {
+  const focused = document.activeElement;
+  ['add-dialog', 'layout-dialog'].forEach((id) => {
+    const dlg = document.getElementById(id);
+    if (!dlg || (dlg.contains(focused) && focused.matches('input'))) return;
+    dlg.classList.remove('open');
+  });
+}
+
 function setupIdleHide() {
   const toolbar = document.getElementById('toolbar');
   let cursorTimer = null;
@@ -4756,6 +4717,7 @@ function setupIdleHide() {
     // 開いている ≡ メニューも一緒に畳む。ツールバーと ≡ ボタンだけ消えてメニューが残ると、
     // 出所の分からない板が画面に浮いたままになる。
     toggleMainMenu(false);
+    closeIdleDialogs();
     document.body.classList.add('toolbar-hidden');
   };
   let lastArm = 0;
@@ -5039,6 +5001,11 @@ function toLightUrl(url) {
       return 'https://player.twitch.tv/?channel=' + encodeURIComponent(segs[0]) + tail;
     }
     return null;
+  }
+
+  if (host.includes('kick.com')) {
+    const channel = kickWatchChannel(url);
+    return channel ? 'https://player.kick.com/' + encodeURIComponent(channel) + '?autoplay=true&muted=true' : null;
   }
 
   // mellow-fan(旧 OPENREC)。URL 形式は改名後も /live/<id> ・ /movie/<id> のまま。
