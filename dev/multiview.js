@@ -429,7 +429,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.7';
+const EXPECTED_EXT_VERSION = '1.0.8';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -2965,10 +2965,8 @@ function rectResized(a, b) {
 }
 
 function syncAutoLayoutUI() {
-  document.querySelectorAll('#layout-auto [data-auto]').forEach((btn) => {
-    const on = btn.dataset.auto === autoLayout;
-    btn.classList.toggle('on', on);
-    btn.setAttribute('aria-pressed', String(on));
+  document.querySelectorAll('#layout-auto [data-auto]').forEach((box) => {
+    box.checked = box.dataset.auto === autoLayout; // 自動は同時に 1 つだけ
   });
   const qa = document.getElementById('qa-layout');
   if (!qa) return;
@@ -4828,8 +4826,8 @@ function setupLayoutDialog() {
   if (snap) snap.addEventListener('click', () => runManualLayout('snap', snapLayout));
   const byVol = document.getElementById('layout-volume');
   if (byVol) byVol.addEventListener('click', () => runManualLayout('volume', layoutByVolume));
-  document.querySelectorAll('#layout-auto [data-auto]').forEach((btn) => {
-    btn.addEventListener('click', () => setAutoLayout(btn.dataset.auto));
+  document.querySelectorAll('#layout-auto [data-auto]').forEach((box) => {
+    box.addEventListener('change', () => setAutoLayout(box.checked ? box.dataset.auto : 'off'));
   });
   syncAutoLayoutUI();
   const nameInput = document.getElementById('layout-name');

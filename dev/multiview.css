@@ -138,22 +138,32 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   color: #c9d1d9; font-size: 12px; font-weight: bold; margin: 16px 2px 8px;
   padding-left: 8px; border-left: 3px solid #388bfd;
 }
-/* 整列/整形は「2つで1つのコントロール」=セグメント(外周だけ角丸・中央は区切り線)。角丸ボックスを増やさず、
-   各ボタンに見出し+説明を縦に置く(セクション見出しは付けず、ボタン自身が役割を説明する)。 */
-.layout-actions {
-  display: flex; gap: 0; margin-bottom: 4px;
-  border: 1px solid #30363d; border-radius: 8px; overflow: hidden;
+.layout-sec:first-child { margin-top: 2px; }
+/* 並べ方: 左 = 今すぐ実行するボタン、右 = 自動で続けるスイッチ。役割が違うので形も変える。 */
+.layout-methods { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; }
+.layout-run {
+  display: flex; align-items: center; gap: 8px;
+  background: #21262d; color: #f0f6fc; border: 1px solid #30363d; border-radius: 6px;
+  padding: 9px 12px; font-family: inherit; font-size: 14px; font-weight: bold; cursor: pointer;
 }
-.layout-action {
-  flex: 1 1 0;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: #21262d; border: none; border-radius: 0;
-  padding: 9px 8px; font-family: inherit; cursor: pointer; color: #c9d1d9;
+.layout-run:hover { background: #30363d; border-color: #58a6ff; }
+.layout-switch {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  color: #8b949e; font-size: 12px; cursor: pointer; user-select: none;
 }
-.layout-action + .layout-action { border-left: 1px solid #30363d; }
-.layout-action:hover { background: #30363d; }
-.layout-action.on, .layout-action.on:hover { background: #1f6feb; }
-.layout-action-title { font-size: 14px; font-weight: bold; color: #f0f6fc; }
+.layout-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.layout-switch-track {
+  position: relative; width: 32px; height: 18px; border-radius: 9px;
+  background: #30363d; transition: background 0.15s ease;
+}
+.layout-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: #c9d1d9; transition: transform 0.15s ease;
+}
+.layout-switch input:checked + .layout-switch-track { background: #3fb950; }
+.layout-switch input:checked + .layout-switch-track::after { transform: translateX(14px); background: #fff; }
+.layout-switch input:checked ~ span:last-child { color: #3fb950; }
+.layout-switch input:focus-visible + .layout-switch-track { outline: 2px solid #58a6ff; outline-offset: 2px; }
 
 .layout-save-row { display: flex; gap: 8px; align-items: stretch; }
 /* min-width:0 で入力欄を縮めさせ、保存ボタンを枠外へ押し出さない。ボタンは縮まず折り返さない。 */
@@ -814,7 +824,6 @@ body.has-stack-max #quick-actions { display: none; }
 body.stack-mode #qa-layout { display: none; }
 /* ポップアップが開いている間は、対応するボタンを明るくする。 */
 #quick-actions > button.panel-open { background: #1f3a5f; border-color: #58a6ff; color: #f0f6fc; }
-#quick-actions > #qa-add.panel-open { background: #58a6ff; border-color: #a5d6ff; color: #0d1117; }
 /* 自動配置がオンの間は、配置ボタンの右上に緑の点を出す(開いているかどうかとは別の情報)。 */
 #qa-layout { position: relative; }
 #qa-layout.auto-on::after {
