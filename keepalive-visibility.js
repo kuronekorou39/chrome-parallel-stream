@@ -52,7 +52,7 @@
       if (key === reported) return;
       reported = key;
       try {
-        // '__multiviewControl' は stream-control.js / multiview.js の MAGIC と一致させること。
+        // '__multiviewControl' は stream-control.js / js/ の MAGIC と一致させること。
         window.parent.postMessage({ __multiviewControl: true, type: 'adblock-state', state: state }, '*');
       } catch (e) { /* noop */ }
     };

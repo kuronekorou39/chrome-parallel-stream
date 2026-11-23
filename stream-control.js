@@ -242,7 +242,7 @@ function mvInOwnFrame() {
   // ---- 長押し → 親へ「このタイルを掴んだ」を中継(縦積みのドラッグ並び替え用) ----
   // サイト内の通常タップ・クリック・スクロールには一切干渉しない(静止 LP_MS で発火、動けば不成立)。
   // 座標は screen 系で送る(ドラッグでタイルごと iframe が動いても screen 座標はぶれないため)。
-  // しきい値は親(multiview.js)の LONG_PRESS_MS / LONG_PRESS_SLOP と感覚を合わせること。
+  // しきい値は親(js/)の LONG_PRESS_MS / LONG_PRESS_SLOP と感覚を合わせること。
   const LP_MS = 450;
   const LP_SLOP = 10;
   let lpTimer = null;

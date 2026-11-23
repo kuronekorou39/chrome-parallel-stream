@@ -6,13 +6,10 @@
 // multiview.js はブラウザ専用なので、関数と定数の定義だけをソースから抜き出して評価する
 // (やり方は cmpVersion.test.mjs と同じ。互いに呼び合うものはまとめて評価する)。
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(ROOT, 'multiview.js'), 'utf8');
+const src = uiSource();
 
 function functionSource(name) {
   const start = src.indexOf(`function ${name}(`);
@@ -39,10 +36,12 @@ function constSource(name) {
 // 埋め込み用 URL の parent / embed_domain には、このページのホスト名が入る。
 const HOST = 'pages.example';
 const SOURCES = [
+  constSource('SITES'),
   constSource('EMBEDDABLE_HOSTS'),
   constSource('TWITCH_NON_CHANNEL'),
   constSource('KICK_NON_CHANNEL'),
   ...[
+    'hostMatches', 'siteKeyOf', 'isYouTubeWatchHost', 'loginDomainOf',
     'isEmbeddableHost', 'isAllowedFrameUrl', 'hostOf', 'kickChannelOf', 'kickWatchChannel',
     'youtubeVideoIdOf', 'toYouTubeChatUrl', 'twitchChannelOf', 'toTwitchChatUrl', 'toLightUrl',
     'labelFor', 'channelParts', 'siteOf',
@@ -51,7 +50,7 @@ const SOURCES = [
 const f = new Function(
   'location',
   `${SOURCES}\nreturn { isAllowedFrameUrl, kickWatchChannel, youtubeVideoIdOf, toYouTubeChatUrl,
-    twitchChannelOf, toTwitchChatUrl, toLightUrl, labelFor, channelParts, siteOf };`
+    twitchChannelOf, toTwitchChatUrl, toLightUrl, labelFor, channelParts, siteOf, siteKeyOf, loginDomainOf };`
 )({ hostname: HOST });
 
 test('isAllowedFrameUrl: 対応サイトの http(s) だけ通す', () => {
@@ -110,6 +109,12 @@ test('twitchChannelOf: 配信ページのときだけチャンネル名を返す
   assert.equal(f.twitchChannelOf('not a url'), null);
 });
 
+test('toLightUrl: Kick の配信ページだけ公式プレイヤーにする', () => {
+  assert.equal(f.toLightUrl('https://kick.com/foo'), 'https://player.kick.com/foo?autoplay=true&muted=true');
+  assert.equal(f.toLightUrl('https://kick.com/'), null);
+  assert.equal(f.toLightUrl('https://kick.com/browse'), null);
+});
+
 test('kickWatchChannel: 配信ページのときだけチャンネル名を返す', () => {
   assert.equal(f.kickWatchChannel('https://kick.com/foo'), 'foo');
   assert.equal(f.kickWatchChannel('https://kick.com/'), '');
@@ -141,7 +146,6 @@ test('toLightUrl: mellow-fan(旧 OPENREC)は埋め込みへ。それ以外は nu
   assert.equal(f.toLightUrl('https://www.openrec.tv/live/xyz'), 'https://www.mellow-fan.com/embed/xyz');
   assert.equal(f.toLightUrl('https://www.mellow-fan.com/movie/xyz'), 'https://www.mellow-fan.com/embed/xyz');
   assert.equal(f.toLightUrl('https://www.mellow-fan.com/'), null);
-  assert.equal(f.toLightUrl('https://kick.com/foo'), null); // Kick は埋め込みでなく HLS で直接再生する
   assert.equal(f.toLightUrl('not a url'), null);
 });
 
@@ -168,6 +172,23 @@ test('channelParts: サイト部分と、チャンネル名や動画 ID に分�
   assert.deepEqual(f.channelParts('https://kick.com/foo'), { site: 'kick.com/', name: 'foo' });
   assert.deepEqual(f.channelParts('https://www.twitch.tv/'), { site: 'twitch.tv', name: '' });
   assert.deepEqual(f.channelParts('not a url'), { site: '', name: 'not a url' });
+});
+
+test('siteKeyOf: ドメインとサブドメインだけを対応サイトとみなす', () => {
+  assert.equal(f.siteKeyOf('www.twitch.tv'), 'twitch');
+  assert.equal(f.siteKeyOf('youtu.be'), 'youtube');
+  assert.equal(f.siteKeyOf('www.openrec.tv'), 'openrec');
+  assert.equal(f.siteKeyOf('nottwitch.tv'), null);
+  assert.equal(f.siteKeyOf('twitch.tv.example.com'), null);
+});
+
+test('loginDomainOf: ログインを使うサイトだけ、そのドメインを返す', () => {
+  assert.equal(f.loginDomainOf('player.twitch.tv'), 'twitch.tv');
+  assert.equal(f.loginDomainOf('player.kick.com'), 'kick.com');
+  assert.equal(f.loginDomainOf('www.openrec.tv'), 'openrec.tv');
+  assert.equal(f.loginDomainOf('www.mellow-fan.com'), 'mellow-fan.com');
+  assert.equal(f.loginDomainOf('www.youtube.com'), null);
+  assert.equal(f.loginDomainOf('example.com'), null);
 });
 
 test('siteOf: URL からサイトを判定する', () => {

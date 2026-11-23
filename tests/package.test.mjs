@@ -3,6 +3,7 @@
 //   - multiview.js の EMBEDDABLE_HOSTS と、rules.json が埋め込み制限を外す対象が一致している
 //   - rules.json が効く範囲が、このページと対応サイトだけに限られている
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +23,12 @@ function arrayConst(file, name) {
 }
 
 const PACK = arrayConst('tools/release.mjs', 'PACK');
-const EMBEDDABLE_HOSTS = arrayConst('multiview.js', 'EMBEDDABLE_HOSTS');
+// EMBEDDABLE_HOSTS は SITES から作っているので、定義ごと評価して取り出す。
+const EMBEDDABLE_HOSTS = (() => {
+  const src = uiSource();
+  const part = (name) => src.match(new RegExp(`^const ${name} = [\\s\\S]*?;`, 'm'))[0];
+  return new Function(`${part('SITES')}\n${part('EMBEDDABLE_HOSTS')}\nreturn EMBEDDABLE_HOSTS;`)();
+})();
 const PAGES_HOST = 'kuronekorou39.github.io';
 
 function manifestFiles() {
@@ -46,7 +52,7 @@ test('manifest.json が指すファイルは実在し、配布 ZIP にも入る'
 
 test('配布 ZIP に入れるファイルは実在する。manifest.json とライセンス類も入る', () => {
   for (const file of PACK) assert.ok(existsSync(join(ROOT, file)), `${file} がありません`);
-  for (const file of ['manifest.json', 'LICENSE', 'THIRD-PARTY-NOTICES.md']) {
+  for (const file of ['manifest.json', 'LICENSE']) {
     assert.ok(PACK.includes(file), `${file} が PACK にありません`);
   }
 });

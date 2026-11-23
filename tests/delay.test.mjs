@@ -28,7 +28,7 @@ function extractFunction(file, name) {
   return new Function(`return (${src.slice(start, end + 1)})`)();
 }
 
-const clampDelay = extractFunction('multiview.js', 'clampDelay');
+const clampDelay = extractFunction('js/audio.js', 'clampDelay');
 const mvDelayPlan = extractFunction('twitch-keepalive.js', 'mvDelayPlan');
 
 test('clampDelay: 0.01 秒刻みに丸める(足し算の誤差を残さない)', () => {

@@ -5,13 +5,10 @@
 // multiview.js はブラウザ専用なので、関数と定数の定義だけをソースから抜き出して評価する
 // (やり方は cmpVersion.test.mjs と同じ)。
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(ROOT, 'multiview.js'), 'utf8');
+const src = uiSource();
 
 function functionSource(name) {
   const start = src.indexOf(`function ${name}(`);
@@ -39,8 +36,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectMoved'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectMoved, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -115,6 +112,77 @@ test('packVolumeRows: 幅より大きい枠でも 1 行に 1 つは置く。空�
   assert.deepEqual(f.packVolumeRows([], 1000, 10, 90), { rows: [], totalH: 0 });
 });
 
+test('packVolumeRows: 高さの下限より小さい枠は、下限の大きさで詰める', () => {
+  const { rows, totalH } = f.packVolumeRows([{ r: 1 }, { r: 0.2 }], 10000, 10, 300, 240);
+  assert.equal(totalH, 300);
+  assert.equal(rows[0].w, 300 * f.VOL_LAYOUT_ASPECT + 10 + 240 * f.VOL_LAYOUT_ASPECT);
+});
+
+test('panelOverlapCost: 重なった面積 × 重みを足す。接しているだけなら 0', () => {
+  const r = { x: 0, y: 0, w: 10, h: 10 };
+  assert.equal(f.panelOverlapCost(r, [{ x: 5, y: 5, w: 10, h: 10, weight: 2 }]), 50);
+  assert.equal(f.panelOverlapCost(r, [{ x: 10, y: 0, w: 10, h: 10, weight: 1 }]), 0);
+});
+
+test('pickPanelPos: 何も無ければ中央に置く', () => {
+  assert.deepEqual(
+    (({ x, y, cost }) => ({ x, y, cost }))(f.pickPanelPos(100, 100, 1000, 500, [], 10)),
+    { x: 450, y: 200, cost: 0 }
+  );
+});
+
+test('pickPanelPos: 空きがあれば、枠に被らない場所へ置く', () => {
+  const left = { x: 0, y: 0, w: 700, h: 500, weight: 1 };
+  const p = f.pickPanelPos(200, 100, 1000, 500, [left], 10);
+  assert.equal(p.cost, 0);
+  assert.ok(p.x >= 710);
+});
+
+test('pickPanelPos: 空きが無ければ、重みの小さい枠の上を選ぶ', () => {
+  const loud = { x: 0, y: 0, w: 500, h: 500, weight: 1.25 };
+  const quiet = { x: 500, y: 0, w: 500, h: 500, weight: 0.3 };
+  const p = f.pickPanelPos(200, 100, 1000, 500, [loud, quiet], 10);
+  assert.ok(p.x >= 500);
+});
+
+test('pickPanelPos: 画面より大きいパネルでも位置を返す', () => {
+  const p = f.pickPanelPos(2000, 1000, 1000, 500, [], 10);
+  assert.deepEqual([p.x, p.y], [10, 10]);
+});
+
+test('volIconName: 0 は専用、それ以外は大きさで 3 段階', () => {
+  assert.equal(f.volIconName(0), 'vol-off');
+  assert.equal(f.volIconName(0.01), 'vol-low');
+  assert.equal(f.volIconName(0.33), 'vol-low');
+  assert.equal(f.volIconName(0.34), 'vol-mid');
+  assert.equal(f.volIconName(0.66), 'vol-mid');
+  assert.equal(f.volIconName(0.67), 'vol-high');
+  assert.equal(f.volIconName(1), 'vol-high');
+});
+
+test('nextMuteVolume: 鳴っていれば 0 にして音量を覚え、次で元へ戻す', () => {
+  const muted = f.nextMuteVolume(0.8, null, 0.5);
+  assert.deepEqual(muted, { vol: 0, remembered: 0.8 });
+  assert.deepEqual(f.nextMuteVolume(muted.vol, muted.remembered, 0.5), { vol: 0.8, remembered: null });
+});
+
+test('nextMuteVolume: つまみで 0 にした後は既定の音量にする', () => {
+  assert.deepEqual(f.nextMuteVolume(0, null, 0.5), { vol: 0.5, remembered: null });
+});
+
+test('layoutAnimFrom: 元の位置と大きさに見える transform を返す', () => {
+  const from = { left: 10, top: 20, width: 100, height: 50 };
+  const to = { left: 110, top: 70, width: 200, height: 100 };
+  assert.equal(f.layoutAnimFrom(from, to), 'translate(-100px, -50px) scale(0.5, 0.5)');
+});
+
+test('layoutAnimFrom: 動いていない枠や、大きさの無い枠はアニメーションしない', () => {
+  const r = { left: 10, top: 20, width: 100, height: 50 };
+  assert.equal(f.layoutAnimFrom(r, { ...r }), null);
+  assert.equal(f.layoutAnimFrom(r, { ...r, left: 10.5 }), null);
+  assert.equal(f.layoutAnimFrom(r, { ...r, width: 0 }), null);
+});
+
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
   assert.deepEqual(f.tileGrid(4, 1920, 1080, 4), { cols: 2, rows: 2 });
   assert.deepEqual(f.tileGrid(2, 1920, 400, 4), { cols: 2, rows: 1 });
@@ -133,9 +201,10 @@ test('autoLayoutModeOf: 知らない値はオフにする', () => {
   assert.equal(f.autoLayoutModeOf(undefined), 'off');
 });
 
-test('rectMoved: 位置か大きさが変わったときだけ true', () => {
+test('rectResized: 大きさが変わったときだけ true(移動だけなら false)', () => {
   const r = { x: 1, y: 2, w: 3, h: 4 };
-  assert.equal(f.rectMoved(r, { ...r }), false);
-  assert.equal(f.rectMoved(r, { ...r, x: 9 }), true);
-  assert.equal(f.rectMoved(r, { ...r, h: 9 }), true);
+  assert.equal(f.rectResized(r, { ...r }), false);
+  assert.equal(f.rectResized(r, { ...r, x: 9, y: 9 }), false);
+  assert.equal(f.rectResized(r, { ...r, w: 9 }), true);
+  assert.equal(f.rectResized(r, { ...r, h: 9 }), true);
 });

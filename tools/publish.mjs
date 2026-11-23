@@ -18,7 +18,7 @@ const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8'
 
 // /dev/ に置く UI 一式。ここに無いものはルート(= 公開版)を見に行くことになるので、
 // 参照している資産はすべて含めること。
-const UI_FILES = ['multiview.html', 'multiview.js', 'multiview.css', 'ext-bridge.js', 'hls.min.js', 'hls.worker.js'];
+const UI_FILES = ['multiview.html', 'multiview.css', 'ext-bridge.js', 'js'];
 // 配布 ZIP も一緒に置く。ページからのリンクは相対なので、/dev/ からは /dev/dist/ を見に行く。
 // ここに置かないとリンクが 404 になるうえ、置くべきは公開版ではなく「このページに合う版」
 // (確認用ページは main の UI なので、拡張も main のものでないと版が食い違う)。
@@ -72,13 +72,12 @@ if (mode === 'release') {
 // origin/release を切り離して取り出し、その上に積んで押し戻す。
 try {
   const devDir = join(work, 'dev');
+  rmSync(devDir, { recursive: true, force: true }); // 消したファイルが /dev/ に残らないよう作り直す
   mkdirSync(devDir, { recursive: true });
   for (const f of UI_FILES) {
     if (!existsSync(p(f))) { console.error(`見つかりません: ${f}`); process.exit(1); }
-    cpSync(p(f), join(devDir, f));
+    cpSync(p(f), join(devDir, f), { recursive: true });
   }
-  // 前に置いた版の zip は消す(確認用ページが指すのは今の版だけ。残すと版のぶんだけ溜まる)。
-  rmSync(join(devDir, 'dist'), { recursive: true, force: true });
   for (const z of ZIPS(version)) {
     if (!existsSync(p(z))) continue;
     mkdirSync(join(devDir, 'dist'), { recursive: true });

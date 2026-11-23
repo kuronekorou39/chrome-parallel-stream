@@ -5,13 +5,10 @@
 // multiview.js はブラウザ専用なので、関数定義だけをソースから抜き出して評価する
 // (やり方は cmpVersion.test.mjs と同じ。互いに呼び合う関数はまとめて評価する)。
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const src = readFileSync(join(ROOT, 'multiview.js'), 'utf8');
+const src = uiSource();
 
 function sourceOf(name) {
   const start = src.indexOf(`function ${name}(`);

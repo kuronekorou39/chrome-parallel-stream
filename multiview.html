@@ -8,13 +8,13 @@
   <title>Multiview</title>
   <!-- ?v= はキャッシュ避け。GitHub Pages はキャッシュ制御を設定できず、更新しても利用者が
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
-       multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
+       js/ / multiview.css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=1.0.2" />
+  <link rel="stylesheet" href="multiview.css?v=1.0.15" />
 </head>
 <body>
   <div id="toolbar">
-    <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/20</span>
+    <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/<span id="count-max"></span></span>
     <button id="add-open-btn" class="tb-btn tb-btn-primary" title="枠を追加">＋ 追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)"><i data-ic="mixer"></i><span class="ic-text">一覧</span></button>
@@ -26,24 +26,23 @@
   </div>
   <button id="toolbar-show" title="メニューを表示">≡ メニュー</button>
   <button id="stack-restore" title="全画面表示を終了してタイル一覧に戻る"><i data-ic="fullscreen"></i><span class="ic-text">全画面を終了</span></button>
-  <!-- 右下の丸ボタン: よく使う「追加」「一覧」「整列」への近道。
-       ≡ と同じく idle で消え、全画面中は隠す。縦積み(スマホ)では整列が無意味なので ⊞ は出さない。 -->
+  <!-- 右下の丸ボタン: よく使う「追加」「一覧」「配置」への近道。
+       ≡ と同じく idle で消え、全画面中は隠す。縦積み(スマホ)では配置を使わないので出さない。 -->
   <div id="quick-actions">
-    <button id="qa-tile" type="button" title="全部をタイル状に整列"><i data-ic="grid"></i></button>
+    <button id="qa-layout" type="button" title="配置" aria-label="配置"><i data-ic="layout"></i></button>
     <button id="qa-mixer" type="button" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)" aria-label="枠一覧"><i data-ic="mixer"></i></button>
     <button id="qa-add" type="button" title="枠を追加">＋</button>
   </div>
 
   <!-- ≡ から出す縦リストメニュー(右クリックメニュー風。PC/スマホ共通)。
        各項目はパネル/ダイアログを開くもので、既存ツールバーボタンの機能をそのまま呼ぶ。
-       アイコンは線画(data-ic の目印を multiview.js が SVG に差し替える。定義は ICON_PATHS)。
+       アイコンは線画(data-ic の目印を js/icons.js が SVG に差し替える。定義は ICON_PATHS)。
        固定幅の .mm-icon 列に入れ、ラベルの開始位置を揃える。
-       「追加」「一覧」は右下の丸ボタンに常に出ているので、ここには置かない。
+       「追加」「一覧」「配置」は右下の丸ボタンに常に出ているので、ここには置かない。
        backdrop はメニュー外タップを「閉じるだけ」にして、下のタイル(iframe)へ流さないための透明層。 -->
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
     <!-- 上は「見るための操作」、下は「保守」。使う頻度が違うので区切る。 -->
-    <button id="mm-layout" type="button"><span class="mm-icon"><i data-ic="layout"></i></span><span class="mm-label">配置</span><span class="mm-sub" id="mm-layout-val"></span></button>
     <!-- 弾幕とチャットは「全枠まとめて + 次に足す枠の既定」。枠ごとの切替は各枠の ⋮ から。
          右の値が現在の既定で、押すと全枠がその通りに切り替わる。弾幕の設定は同じ行の右端から開く。 -->
     <div class="mm-row">
@@ -56,12 +55,12 @@
       <span class="mm-side" aria-hidden="true"><span class="mm-icon"></span></span>
     </div>
     <!-- Twitch のライブ枠どうしのずれを、音を聞き比べて揃える(枠ごとの遅延を自動で決める)。
-         押すと説明のダイアログが出て、その OK で 20 秒ほど聞いて一度だけ合わせる。
+         押すと説明のダイアログが出て、その中のボタンで 20 秒ほど聞いて一度だけ合わせる。
          右の値は経過と結果(結果はしばらくしたら消える)。
-         右端は「定期的に合わせ直す」の切り替え(オンの間は緑。ダイアログのチェックと同じもの)。 -->
+         右端は定期実行がオンの間だけ出る、オフにするボタン。 -->
     <div class="mm-row">
       <button id="mm-sync" type="button" title="Twitch のライブ枠どうしのずれを、音を聞き比べて揃える"><span class="mm-icon"><i data-ic="clock"></i></span><span class="mm-label">音で合わせる</span><span class="mm-sub" id="mm-sync-val"></span></button>
-      <button id="mm-sync-auto" class="mm-side" type="button" title="定期的に合わせ直す(5 分おき。1 時間ほどで自動的にオフ)" aria-label="定期的に合わせ直す"><span class="mm-icon"><i data-ic="reload"></i></span></button>
+      <button id="mm-sync-auto" class="mm-side" type="button" title="定期実行をオフにする" aria-label="定期実行をオフにする"><span class="mm-icon"><i data-ic="reload"></i></span></button>
     </div>
     <div class="mm-sep"></div>
     <!-- 拡張機能の更新。新しい版があるときだけ出す(最新のときは用が無いので出さない)。
@@ -116,7 +115,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.2.zip" download="parallel-stream-1.0.2.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.15.zip" download="parallel-stream-1.0.15.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -138,16 +137,15 @@
         <p class="cookie-note">
           Twitch のライブ枠の音を 20 秒ほど聞き比べ、進んでいる枠を遅らせて揃えます。
         </p>
-        <!-- オンの間、5 分おきに静かに測り直す。切り替えはその場で効く(OK を待たない)。 -->
-        <label class="cookie-row">
-          <input type="checkbox" id="sync-dialog-auto" />
-          <span>定期的に合わせ直す</span>
-        </label>
-        <p class="cookie-note">
-          5 分おきに測り直します。1 時間ほどで自動的にオフになります。
-        </p>
+        <button id="sync-dialog-run" class="tb-btn tb-btn-primary" type="button">音合わせを実行</button>
         <p id="sync-dialog-status" class="cookie-note"></p>
-        <button id="sync-dialog-ok" class="tb-btn tb-btn-primary" type="button">OK</button>
+        <!-- 定期実行は単独では使わないので、実行した後(または既にオンのとき)だけ出す。 -->
+        <div id="sync-auto-section" hidden>
+          <p class="cookie-note">
+            5 分おきに測り直します。1 時間ほどで自動的にオフになります。
+          </p>
+          <button id="sync-dialog-auto" class="tb-btn" type="button">定期実行をオンにする</button>
+        </div>
       </div>
     </div>
   </div>
@@ -197,7 +195,7 @@
   </div>
 
   <!-- 📐 配置ダイアログ: 整列/整形の即実行と、現在の配置(URL・サイズ・位置・音量)を
-       名前付きで保存し、後から選んで戻すレイアウト履歴。≡メニューの「配置」から開く。 -->
+       名前付きで保存し、後から選んで戻すレイアウト履歴。右下の丸ボタンから開く。 -->
   <div id="layout-dialog" class="pos-dialog-overlay">
     <div class="pos-dialog pos-dialog-movable" role="dialog" aria-label="配置">
       <div class="pos-dialog-head">
@@ -205,23 +203,24 @@
         <button id="layout-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
       </div>
       <div class="pos-dialog-body">
-        <div class="layout-actions">
-          <button id="layout-tile" class="layout-action" type="button" title="全部を均等に並べ直す">
-            <span class="layout-action-title"><i data-ic="grid"></i><span class="ic-text">整列</span></span>
-          </button>
-          <button id="layout-snap" class="layout-action" type="button" title="今の配置を保ったまま隙間をそろえる">
-            <span class="layout-action-title"><i data-ic="sparkle"></i><span class="ic-text">整形</span></span>
-          </button>
-          <button id="layout-volume" class="layout-action" type="button" title="音量の大きい枠ほど大きく並べ直す">
-            <span class="layout-action-title"><i data-ic="vol-on"></i><span class="ic-text">音量順</span></span>
-          </button>
-        </div>
-        <!-- 枠の増減や画面サイズの変更で並べ直す。手で動かすとオフに戻る。 -->
-        <div class="layout-sec" title="枠の増減や画面サイズの変更で並べ直します。手で動かすとオフになります">自動で並べる</div>
-        <div id="layout-auto" class="layout-actions">
-          <button class="layout-action" data-auto="off" type="button"><span class="layout-action-title">オフ</span></button>
-          <button class="layout-action" data-auto="tile" type="button"><span class="layout-action-title">整列</span></button>
-          <button class="layout-action" data-auto="volume" type="button"><span class="layout-action-title">音量順</span></button>
+        <!-- 1 行が 1 つの並べ方。左のボタンは今すぐ実行、右のスイッチはその並べ方を自動で続ける。
+             自動は同時に 1 つだけ。枠のサイズを手で変えるとオフに戻る(移動だけなら続く)。 -->
+        <div class="layout-sec">並べ方</div>
+        <div id="layout-auto" class="layout-methods">
+          <button id="layout-tile" class="layout-run" type="button" title="全部を均等に並べ直す"><i data-ic="grid"></i><span class="ic-text">整列</span></button>
+          <label class="layout-switch" title="枠の増減や画面サイズの変更で整列し直します。枠のサイズを変えるとオフになります">
+            <input type="checkbox" data-auto="tile" />
+            <span class="layout-switch-track"></span>
+            <span>自動</span>
+          </label>
+          <button id="layout-volume" class="layout-run" type="button" title="音量の大きい枠ほど大きく並べ直す"><i data-ic="vol-high"></i><span class="ic-text">音量順</span></button>
+          <label class="layout-switch" title="枠の増減や画面サイズの変更で音量順に並べ直します。枠のサイズを変えるとオフになります">
+            <input type="checkbox" data-auto="volume" />
+            <span class="layout-switch-track"></span>
+            <span>自動</span>
+          </label>
+          <button id="layout-snap" class="layout-run" type="button" title="今の配置を保ったまま隙間をそろえる"><i data-ic="sparkle"></i><span class="ic-text">整形</span></button>
+          <span aria-hidden="true"></span>
         </div>
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
@@ -294,10 +293,28 @@
       <div class="mixer-list"></div>
     </div>
   </div>
-  <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
-       multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=1.0.2"></script>
-  <script src="multiview.js?v=1.0.2"></script>
+       js/ より先に読むこと(MV.* を使うため)。 -->
+  <script src="ext-bridge.js?v=1.0.15"></script>
+  <!-- 全ファイルでトップレベルを共有する通常の script。順番に意味がある(main が必ず最後)。 -->
+  <script src="js/config.js?v=1.0.15"></script>
+  <script src="js/urls.js?v=1.0.15"></script>
+  <script src="js/icons.js?v=1.0.15"></script>
+  <script src="js/version.js?v=1.0.15"></script>
+  <script src="js/lineup.js?v=1.0.15"></script>
+  <script src="js/frames.js?v=1.0.15"></script>
+  <script src="js/window.js?v=1.0.15"></script>
+  <script src="js/window-input.js?v=1.0.15"></script>
+  <script src="js/window-controls.js?v=1.0.15"></script>
+  <script src="js/stack.js?v=1.0.15"></script>
+  <script src="js/danmaku.js?v=1.0.15"></script>
+  <script src="js/layout.js?v=1.0.15"></script>
+  <script src="js/audio.js?v=1.0.15"></script>
+  <script src="js/audio-sync.js?v=1.0.15"></script>
+  <script src="js/mixer.js?v=1.0.15"></script>
+  <script src="js/panels.js?v=1.0.15"></script>
+  <script src="js/toolbar.js?v=1.0.15"></script>
+  <script src="js/perf.js?v=1.0.15"></script>
+  <script src="js/main.js?v=1.0.15"></script>
 </body>
 </html>

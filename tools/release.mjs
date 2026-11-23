@@ -7,7 +7,7 @@
 // 版番号は3箇所に散っていて、手で合わせるとずれる(実際にずれた)。ここで一括して書き換える。
 //   manifest.json            拡張機能の版
 //   multiview.html の ?v=    Pages のキャッシュ避け
-//   multiview.js の EXPECTED_EXT_VERSION  ページが要求する拡張の版
+//   js/version.js の EXPECTED_EXT_VERSION  ページが要求する拡張の版
 //
 // 配布物は dist/ に置く。zip の中身は「展開したフォルダがそのまま拡張機能」になる形にする
 // (BEX の『未パッケージ拡張機能をフォルダから読み込む』にそのまま渡せるようにするため)。
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const p = (...a) => join(ROOT, ...a);
 
-// 拡張機能として必要なファイルだけを入れる。ページ側の資産(multiview.*, ext-bridge.js, hls.*)は
+// 拡張機能として必要なファイルだけを入れる。ページ側の資産(multiview.*, js/, ext-bridge.js)は
 // GitHub Pages が配るので同梱しない。README/ログ/スクリーンショットも入れない。
 const PACK = [
   'manifest.json',
@@ -38,7 +38,6 @@ const PACK = [
   'icon-48.png',
   'icon-128.png',
   'LICENSE',
-  'THIRD-PARTY-NOTICES.md',
 ];
 
 const args = process.argv.slice(2);
@@ -47,7 +46,7 @@ const explicit = args.find((a) => /^\d+\.\d+\.\d+$/.test(a));
 
 const manifestPath = p('manifest.json');
 const htmlPath = p('multiview.html');
-const jsPath = p('multiview.js');
+const jsPath = p('js', 'version.js');
 
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const cur = manifest.version;

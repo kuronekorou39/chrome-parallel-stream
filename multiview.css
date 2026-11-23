@@ -1,3 +1,38 @@
+/* 色と重なり順の定義。値を変えるときはここだけを直す。 */
+:root {
+  --c-bg: #0d1117; /* いちばん濃い地 */
+  --c-surface: #161b22; /* 一段明るい地 */
+  --c-surface-2: #21262d; /* ボタンなどの地 */
+  --c-border: #30363d; /* 枠線 */
+  --c-text-strong: #f0f6fc; /* 強調する文字 */
+  --c-text: #c9d1d9; /* 通常の文字 */
+  --c-text-muted: #8b949e; /* 控えめな文字 */
+  --c-text-faint: #6e7681; /* いちばん薄い文字 */
+  --c-accent: #58a6ff; /* アクセント */
+  --c-accent-strong: #388bfd; /* 強いアクセント */
+  --c-accent-solid: #1f6feb; /* 塗りのアクセント */
+  --c-success: #3fb950; /* オン・成功 */
+  --c-warning: #d29922; /* 注意 */
+  --c-highlight: #f0b849; /* 文中の強調 */
+  --c-danger: #f85149; /* 閉じる・警告 */
+  --c-purple: #a371f7; /* グラフの 4 色目 */
+  --c-panel: rgba(13,17,23,0.94); /* 浮動パネルの地 */
+  --c-panel-soft: rgba(13,17,23,0.92); /* 丸ボタンなどの地 */
+  --c-shadow: rgba(0,0,0,0.6); /* 影 */
+  --c-shadow-soft: rgba(0,0,0,0.5); /* 弱い影 */
+  --c-hover: rgba(255,255,255,0.12); /* ホバーの地 */
+
+  --z-menu-backdrop: 89999; /* ≡ メニューの外側 */
+  --z-panel: 90000; /* 浮動パネルの起点(js/ の panelZ と一致させる) */
+  --z-fullscreen-win: 99999; /* 縦積みの全画面枠 */
+  --z-toolbar: 100000; /* ツールバー */
+  --z-quick: 100001; /* 常駐ボタン */
+  --z-modal: 100002; /* 位置ダイアログ */
+  --z-menu: 100004; /* ≡ メニュー */
+  --z-restore: 100005; /* 全画面の終了ボタン */
+  --z-banner: 2147483000; /* 拡張機能が古いときの案内 */
+}
+
 /* マルチビュー本体ページ。上部ツールバー + 下部ステージ(フローティング窓)。 */
 
 * { box-sizing: border-box; }
@@ -5,14 +40,14 @@ html, body {
   margin: 0; padding: 0; height: 100%; overflow: hidden; overscroll-behavior: none;
   background: #000;
   font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
-  color: #c9d1d9;
+  color: var(--c-text);
 }
 body { display: flex; flex-direction: column; }
 
 /* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
 body.idle, body.idle * { cursor: none !important; }
 
-/* ===== アイコン(線画の SVG。定義は multiview.js の ICON_PATHS) ===== */
+/* ===== アイコン(線画の SVG。定義は js/ の ICON_PATHS) ===== */
 /* 大きさは文字に合わせ、色は文字色に従う。文字と並べるときは .ic-text との間を少し空ける。 */
 .ic {
   width: 1.1em; height: 1.1em; vertical-align: -0.18em; flex: 0 0 auto;
@@ -28,9 +63,9 @@ body.idle, body.idle * { cursor: none !important; }
   display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
   padding: 10px 16px;
   background: rgba(13,17,23,0.5);
-  border-bottom: 1px solid #21262d;
+  border-bottom: 1px solid var(--c-surface-2);
   font-size: 15px;
-  z-index: 100000;
+  z-index: var(--z-toolbar);
 }
 
 /* ヘッダにポインタが乗っている間(操作中)は透過を解いてはっきり見せる。 */
@@ -38,20 +73,17 @@ body.idle, body.idle * { cursor: none !important; }
 
 /* ===== メニュー位置(上/下=横バー, 左/右=縦バー)。JS が body.tb-pos-* / tb-vertical を付ける ===== */
 body.tb-pos-top #toolbar    { top: 0; bottom: auto; left: 0; right: 0; }
-body.tb-pos-bottom #toolbar { top: auto; bottom: 0; left: 0; right: 0; border-bottom: none; border-top: 1px solid #21262d; }
-body.tb-pos-left #toolbar   { top: 0; bottom: 0; left: 0; right: auto; border-bottom: none; border-right: 1px solid #21262d; }
-body.tb-pos-right #toolbar  { top: 0; bottom: 0; left: auto; right: 0; border-bottom: none; border-left: 1px solid #21262d; }
+body.tb-pos-bottom #toolbar { top: auto; bottom: 0; left: 0; right: 0; border-bottom: none; border-top: 1px solid var(--c-surface-2); }
+body.tb-pos-left #toolbar   { top: 0; bottom: 0; left: 0; right: auto; border-bottom: none; border-right: 1px solid var(--c-surface-2); }
+body.tb-pos-right #toolbar  { top: 0; bottom: 0; left: auto; right: 0; border-bottom: none; border-left: 1px solid var(--c-surface-2); }
 
 /* 縦バー: 縦積みにして各コントロールを幅いっぱいに。 */
 body.tb-vertical #toolbar {
   flex-direction: column; flex-wrap: nowrap; align-items: stretch;
   width: 240px; max-height: 100%; overflow-y: auto;
 }
-body.tb-vertical .tb-sep { width: 100%; height: 1px; }
 body.tb-vertical .tb-input,
 body.tb-vertical #master-vol { width: 100%; }
-body.tb-vertical .tb-grow,
-body.tb-vertical .tb-hint { display: none; }
 
 /* 出し入れアニメ: 位置に応じた方向へスライド+フェード。初回適用はアニメさせない(tb-ready で有効化)。 */
 body.tb-ready #toolbar { transition: background 0.2s ease, transform 0.28s ease, opacity 0.28s ease; }
@@ -63,15 +95,15 @@ body.tb-pos-right.toolbar-hidden #toolbar  { transform: translateX(100%); }
 
 /* ツールバーを隠したときに出る復帰ボタン(隠れたバーの方向側に、フェードで現れる)。 */
 #toolbar-show {
-  position: fixed; z-index: 100001;
+  position: fixed; z-index: var(--z-quick);
   display: inline-flex; align-items: center; gap: 6px;
   opacity: 0; pointer-events: none;
-  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  background: var(--c-panel-soft); color: var(--c-text); border: 1px solid var(--c-border);
   border-radius: 7px; padding: 9px 13px; font-family: inherit; font-size: 14px; cursor: pointer;
   transition: opacity 0.2s ease;
 }
 body.toolbar-hidden #toolbar-show { opacity: 1; pointer-events: auto; }
-#toolbar-show:hover { background: #30363d; border-color: #58a6ff; }
+#toolbar-show:hover { background: var(--c-border); border-color: var(--c-accent); }
 body.tb-pos-top #toolbar-show,
 body.tb-pos-right #toolbar-show { top: 8px; right: 10px; bottom: auto; left: auto; }
 body.tb-pos-bottom #toolbar-show { bottom: 8px; left: 10px; top: auto; right: auto; }
@@ -79,41 +111,38 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 
 /* 主要サイトのワンクリック追加チップ */
 .site-chip {
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border);
   border-left-width: 4px; border-radius: 5px;
   padding: 7px 12px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
-.site-chip:hover { background: #30363d; }
+.site-chip:hover { background: var(--c-border); }
 .site-chip[data-site="twitch"] { border-left-color: #9147ff; }
 .site-chip[data-site="youtube"] { border-left-color: #ff0033; }
 .site-chip[data-site="kick"] { border-left-color: #53fc18; }
 .site-chip[data-site="openrec"] { border-left-color: #ffd200; }
-.tb-item { display: inline-flex; align-items: center; gap: 8px; color: #8b949e; font-size: 15px; }
+.tb-item { display: inline-flex; align-items: center; gap: 8px; color: var(--c-text-muted); font-size: 15px; }
 #count {
-  font-weight: bold; color: #f0f6fc; font-size: 16px;
-  background: #21262d; border-radius: 12px; padding: 4px 13px; min-width: 30px; text-align: center;
+  font-weight: bold; color: var(--c-text-strong); font-size: 16px;
+  background: var(--c-surface-2); border-radius: 12px; padding: 4px 13px; min-width: 30px; text-align: center;
 }
-.tb-sep { width: 1px; height: 24px; background: #30363d; }
-.tb-grow { flex: 1 1 auto; }
-.tb-hint { color: #6e7681; font-size: 12px; white-space: nowrap; }
 
-#master-vol { width: 160px; height: 22px; accent-color: #58a6ff; cursor: pointer; }
+#master-vol { width: 160px; height: 22px; accent-color: var(--c-accent); cursor: pointer; }
 
 .tb-btn {
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border);
   border-radius: 7px; padding: 10px 18px; font-family: inherit; font-size: 15px; cursor: pointer;
 }
-.tb-btn:hover { background: #30363d; border-color: #58a6ff; }
+.tb-btn:hover { background: var(--c-border); border-color: var(--c-accent); }
 /* 「＋追加」を目立たせる主要アクション。 */
-.tb-btn-primary { background: #1f6feb; border-color: #388bfd; color: #fff; font-weight: bold; }
-.tb-btn-primary:hover { background: #388bfd; border-color: #58a6ff; }
-.tb-btn.on { background: #3c0d11; border-color: #f85149; color: #f85149; }
+.tb-btn-primary { background: var(--c-accent-solid); border-color: var(--c-accent-strong); color: #fff; font-weight: bold; }
+.tb-btn-primary:hover { background: var(--c-accent-strong); border-color: var(--c-accent); }
+.tb-btn.on { background: #3c0d11; border-color: var(--c-danger); color: var(--c-danger); }
 
 .tb-input {
-  background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 4px;
+  background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 4px;
   padding: 7px 11px; font-family: inherit; font-size: 13px; width: 240px;
 }
-.tb-input:focus { outline: none; border-color: #58a6ff; }
+.tb-input:focus { outline: none; border-color: var(--c-accent); }
 
 /* 追加ダイアログ(枠を追加): サイトボタン + URL入力。pos-dialog の見た目を流用。 */
 #add-dialog .pos-dialog { width: 380px; max-width: calc(100% - 32px); }
@@ -135,25 +164,35 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 
 /* セクション見出し: 左のアクセントバーで「ここから別の段」と示し、操作ボタンや履歴と役割を区別する。 */
 .layout-sec {
-  color: #c9d1d9; font-size: 12px; font-weight: bold; margin: 16px 2px 8px;
-  padding-left: 8px; border-left: 3px solid #388bfd;
+  color: var(--c-text); font-size: 12px; font-weight: bold; margin: 16px 2px 8px;
+  padding-left: 8px; border-left: 3px solid var(--c-accent-strong);
 }
-/* 整列/整形は「2つで1つのコントロール」=セグメント(外周だけ角丸・中央は区切り線)。角丸ボックスを増やさず、
-   各ボタンに見出し+説明を縦に置く(セクション見出しは付けず、ボタン自身が役割を説明する)。 */
-.layout-actions {
-  display: flex; gap: 0; margin-bottom: 4px;
-  border: 1px solid #30363d; border-radius: 8px; overflow: hidden;
+.layout-sec:first-child { margin-top: 2px; }
+/* 並べ方: 左 = 今すぐ実行するボタン、右 = 自動で続けるスイッチ。役割が違うので形も変える。 */
+.layout-methods { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 12px; }
+.layout-run {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--c-surface-2); color: var(--c-text-strong); border: 1px solid var(--c-border); border-radius: 6px;
+  padding: 9px 12px; font-family: inherit; font-size: 14px; font-weight: bold; cursor: pointer;
 }
-.layout-action {
-  flex: 1 1 0;
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  background: #21262d; border: none; border-radius: 0;
-  padding: 9px 8px; font-family: inherit; cursor: pointer; color: #c9d1d9;
+.layout-run:hover { background: var(--c-border); border-color: var(--c-accent); }
+.layout-switch {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  color: var(--c-text-muted); font-size: 12px; cursor: pointer; user-select: none;
 }
-.layout-action + .layout-action { border-left: 1px solid #30363d; }
-.layout-action:hover { background: #30363d; }
-.layout-action.on, .layout-action.on:hover { background: #1f6feb; }
-.layout-action-title { font-size: 14px; font-weight: bold; color: #f0f6fc; }
+.layout-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.layout-switch-track {
+  position: relative; width: 32px; height: 18px; border-radius: 9px;
+  background: var(--c-border); transition: background 0.15s ease;
+}
+.layout-switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--c-text); transition: transform 0.15s ease;
+}
+.layout-switch input:checked + .layout-switch-track { background: var(--c-success); }
+.layout-switch input:checked + .layout-switch-track::after { transform: translateX(14px); background: #fff; }
+.layout-switch input:checked ~ span:last-child { color: var(--c-success); }
+.layout-switch input:focus-visible + .layout-switch-track { outline: 2px solid var(--c-accent); outline-offset: 2px; }
 
 .layout-save-row { display: flex; gap: 8px; align-items: stretch; }
 /* min-width:0 で入力欄を縮めさせ、保存ボタンを枠外へ押し出さない。ボタンは縮まず折り返さない。 */
@@ -167,48 +206,49 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   display: flex; align-items: stretch; gap: 0;
   border: 1px solid transparent; border-radius: 6px; overflow: hidden;
 }
-.layout-item:hover { border-color: #21262d; }
+.layout-item:hover { border-color: var(--c-surface-2); }
 .layout-item-main {
   flex: 1 1 auto; text-align: left; cursor: pointer;
-  background: transparent; color: #c9d1d9; border: none; border-radius: 0;
+  background: transparent; color: var(--c-text); border: none; border-radius: 0;
   padding: 9px 12px; font-family: inherit;
 }
 .layout-item-main:hover { background: rgba(63,185,80,0.12); }
-.layout-item-name { font-size: 14px; font-weight: bold; color: #f0f6fc; word-break: break-all; }
-.layout-item-meta { font-size: 11px; color: #8b949e; margin-top: 2px; }
+.layout-item-name { font-size: 14px; font-weight: bold; color: var(--c-text-strong); word-break: break-all; }
+.layout-item-meta { font-size: 11px; color: var(--c-text-muted); margin-top: 2px; }
 .layout-del {
   flex: 0 0 auto; width: 40px; cursor: pointer;
-  background: transparent; color: #6e7681; border: none; border-radius: 0; font-size: 15px;
+  background: transparent; color: var(--c-text-faint); border: none; border-radius: 0; font-size: 15px;
 }
-.layout-item:hover .layout-del { border-left: 1px solid #21262d; }
-.layout-del:hover { background: rgba(248,81,73,0.15); color: #f85149; }
+.layout-item:hover .layout-del { border-left: 1px solid var(--c-surface-2); }
+.layout-del:hover { background: rgba(248,81,73,0.15); color: var(--c-danger); }
 
 /* ===== 枠一覧 / ミキサーパネル(移動・リサイズ自由の浮動パネル) ===== */
 /* 地・影・ヘッダの見た目はパフォーマンスパネル(#perf-panel / .perf-head)に合わせている。 */
 .mixer-panel {
   position: absolute; top: 64px; left: 64px; width: 340px; height: 400px;
-  display: flex; flex-direction: column; z-index: 90000;
-  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+  display: flex; flex-direction: column; z-index: var(--z-panel);
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 8px 24px var(--c-shadow); overflow: hidden; color: var(--c-text);
+  user-select: none; /* 選択してコピーできるのは URL(.mixer-row-label)だけ */
 }
 .mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
 /* perf-head と同じくフラット(濃い帯・下線なし)。 */
-.mixer-head {
+.mixer-head, .pos-dialog-head, .dmk-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
   cursor: move; user-select: none; touch-action: none;
 }
-.mixer-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; } /* perf-title と同じ */
+.mixer-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); } /* perf-title と同じ */
 /* perf-close と同じく枠なしの小さな✕。 */
-.mixer-x {
-  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
+.mixer-x, .adj-x, .pos-dialog-x, .dmk-x {
+  flex: 0 0 auto; background: transparent; color: var(--c-text-muted); border: none; border-radius: 6px;
   font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
 }
-.mixer-x:hover { color: #f85149; }
+.mixer-x:hover, .adj-x:hover, .pos-dialog-x:hover, .dmk-x:hover { color: var(--c-danger); }
 .mixer-master {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #21262d;
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--c-surface-2);
 }
-.mixer-master-label { font-size: 12px; color: #8b949e; } /* perf-label と同じ */
-.mixer-master input[type="range"] { flex: 1 1 auto; accent-color: #58a6ff; cursor: pointer; }
+.mixer-master-label { font-size: 12px; color: var(--c-text-muted); } /* perf-label と同じ */
+.mixer-master input[type="range"] { flex: 1 1 auto; accent-color: var(--c-accent); cursor: pointer; }
 .mixer-list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
 /* 下端のリサイズハンドル: 枠が増えて一覧が長くなった時に縦へ伸ばせる(高さは保存)。 */
 .mixer-resize {
@@ -219,7 +259,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   content: ""; width: 40px; height: 3px; border-radius: 2px; background: rgba(201,209,217,0.35);
 }
 .mixer-resize:hover::before { background: rgba(88,166,255,0.7); }
-.mixer-empty { color: #6e7681; font-size: 13px; text-align: center; padding: 20px; }
+.mixer-empty { color: var(--c-text-faint); font-size: 13px; text-align: center; padding: 20px; }
 /* 1行で詰めず、上=枠名(URL)+👁、下=音量つまみ(全幅)の 2段にする。URLが見切れにくい。 */
 .mixer-row { display: flex; flex-direction: column; gap: 6px; padding: 8px 6px; border-radius: 6px; }
 .mixer-row:hover { background: rgba(255,255,255,0.05); }
@@ -231,24 +271,26 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .mixer-row-site {
   flex: 0 0 auto; width: 22px; height: 22px; border-radius: 5px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: bold; color: #0d1117;
+  font-size: 12px; font-weight: bold; color: var(--c-bg);
 }
 .mixer-row-label {
-  flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: #c9d1d9;
+  flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: var(--c-text);
   border: none; cursor: pointer; font-family: inherit; font-size: 13px; padding: 5px 6px; border-radius: 5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text;
 }
-.mixer-row-label:hover { background: rgba(88,166,255,0.18); }
 /* サイト部分は薄く小さく、チャンネル名/動画IDは白太字で強調する。 */
-.mixer-row-label .mx-site { color: #6e7681; font-size: 11px; }
-.mixer-row-label .mx-name { color: #f0f6fc; font-weight: bold; }
+.mixer-row-label .mx-site { color: var(--c-text-faint); font-size: 11px; }
+.mixer-row-label .mx-name { color: var(--c-text-strong); font-weight: bold; }
 .mixer-row-eye {
   flex: 0 0 auto; background: transparent; border: none; cursor: pointer;
   width: 34px; height: 34px; font-size: 17px; border-radius: 6px;
 }
-.mixer-row-eye:hover { background: rgba(255,255,255,0.12); }
-.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; padding-left: 4px; }
-.mixer-row-vol { flex: 1 1 auto; width: auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
+.mixer-row-eye:hover { background: var(--c-hover); }
+.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; }
+/* 音量アイコンはミュートの切り替えボタンを兼ねる。 */
+.vol-toggle { padding: 3px 4px; border-radius: 4px; cursor: pointer; user-select: none; }
+.vol-toggle:hover { background: var(--c-hover); color: var(--c-text-strong); }
+.mixer-row-vol { flex: 1 1 auto; width: auto; min-width: 0; accent-color: var(--c-accent); cursor: pointer; }
 
 /* ===== ステージ ===== */
 #stage { position: relative; flex: 1 1 auto; overflow: hidden; background: #050505; }
@@ -260,45 +302,45 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .empty-card {
   display: flex; flex-direction: column; align-items: center; gap: 14px;
   max-width: 460px; padding: 36px 40px;
-  background: rgba(13,17,23,0.85); border: 1px dashed #30363d; border-radius: 16px;
+  background: rgba(13,17,23,0.85); border: 1px dashed var(--c-border); border-radius: 16px;
 }
 .empty-icon {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
   width: 68px; height: 68px; padding: 8px;
-  background: rgba(88,166,255,0.08); border: 1px solid #30363d; border-radius: 14px;
+  background: rgba(88,166,255,0.08); border: 1px solid var(--c-border); border-radius: 14px;
 }
 .empty-icon span { background: rgba(88,166,255,0.45); border-radius: 4px; animation: cell-pulse 2.8s ease-in-out infinite; }
 .empty-icon span:nth-child(2) { animation-delay: 0.7s; }
 .empty-icon span:nth-child(3) { animation-delay: 1.4s; }
 .empty-icon span:nth-child(4) { animation-delay: 2.1s; }
 @keyframes cell-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-.empty-title { color: #f0f6fc; font-size: 18px; font-weight: bold; }
-.empty-hint { color: #8b949e; font-size: 14px; line-height: 1.7; }
+.empty-title { color: var(--c-text-strong); font-size: 18px; font-weight: bold; }
+.empty-hint { color: var(--c-text-muted); font-size: 14px; line-height: 1.7; }
 #empty-add-btn {
   margin-top: 4px;
-  background: #1f6feb; color: #fff; border: 1px solid #388bfd; border-radius: 10px;
+  background: var(--c-accent-solid); color: #fff; border: 1px solid var(--c-accent-strong); border-radius: 10px;
   padding: 13px 28px; font-family: inherit; font-size: 16px; font-weight: bold; cursor: pointer;
 }
-#empty-add-btn:hover { background: #388bfd; border-color: #58a6ff; }
+#empty-add-btn:hover { background: var(--c-accent-strong); border-color: var(--c-accent); }
 
 /* ===== フローティング窓 ===== */
 .win {
   position: absolute; display: flex; flex-direction: column;
-  background: #000; border: 1px solid #30363d; border-radius: 6px; overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+  background: #000; border: 1px solid var(--c-border); border-radius: 6px; overflow: hidden;
+  box-shadow: 0 6px 20px var(--c-shadow);
   min-width: 426px; min-height: 240px; /* JS の MIN_W / MIN_H と一致させること(16:9。右下のつまみが原寸で収まる) */
   transition: border-color 0.25s ease, box-shadow 0.25s ease;
   user-select: none; -webkit-user-select: none; /* 枠の長押しで親要素のテキストが選択されるのを防ぐ(iframe 内は stream-control.js が担当) */
 }
 /* 一時表示中(クリック直後・数秒で消える)の枠を青枠で示す。 */
-.win.show-bar { border-color: #58a6ff; box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
+.win.show-bar { border-color: var(--c-accent); box-shadow: 0 6px 24px rgba(88,166,255,0.35); }
 /* 複数選択中の枠(Shift+クリック等)は緑の枠で示す。まとめて移動・整形の対象。 */
-.win.selected { border-color: #3fb950; box-shadow: 0 0 0 2px rgba(63,185,80,0.6), 0 6px 24px rgba(0,0,0,0.6); }
+.win.selected { border-color: var(--c-success); box-shadow: 0 0 0 2px rgba(63,185,80,0.6), 0 6px 24px var(--c-shadow); }
 /* ミキサーの項目クリックで、その枠を一瞬パルス強調(どれがどの枠か分かる)。 */
 .win.pulse { animation: win-pulse 0.65s ease-out 2; }
 @keyframes win-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(88,166,255,0.9), 0 6px 20px rgba(0,0,0,0.6); }
-  100% { box-shadow: 0 0 0 16px rgba(88,166,255,0), 0 6px 20px rgba(0,0,0,0.6); }
+  0% { box-shadow: 0 0 0 0 rgba(88,166,255,0.9), 0 6px 20px var(--c-shadow); }
+  100% { box-shadow: 0 0 0 16px rgba(88,166,255,0), 0 6px 20px var(--c-shadow); }
 }
 
 /* ヘッダは「上部中央の台形ハンドル」。既定は非表示で、出てる間は大きく目立たせる(すぐ消えるので)。
@@ -311,7 +353,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   background: linear-gradient(180deg, rgba(28,33,40,0.98), rgba(13,17,23,0.86));
   /* 上辺が枠上端に密着し、下へすぼまる台形(上が長い)。padding(30px)で両端グリップを斜辺の内側に置く。 */
   clip-path: polygon(0 0, 100% 0, calc(100% - 26px) 100%, 26px 100%);
-  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 4px 12px var(--c-shadow-soft));
   user-select: none; touch-action: none;
   opacity: 0; transform: translate(calc(-50% + var(--bar-x, 0px)), -100%); pointer-events: none;
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -323,7 +365,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   flex: 0 0 auto; width: 26px; display: flex; align-items: center; justify-content: center;
   cursor: ew-resize; color: rgba(201,209,217,0.5); font-size: 24px; line-height: 1; user-select: none;
 }
-.win-grip:hover { color: #f0f6fc; background: rgba(255,255,255,0.08); }
+.win-grip:hover { color: var(--c-text-strong); background: rgba(255,255,255,0.08); }
 .win-bar-main {
   flex: 1 1 auto; min-width: 0; height: 100%; cursor: move;
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -333,7 +375,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win.show-bar .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
 
 .win-title {
-  flex: 0 1 auto; font-size: 14px; color: #c9d1d9; max-width: 180px; padding-left: 4px;
+  flex: 0 1 auto; font-size: 14px; color: var(--c-text); max-width: 180px; padding-left: 4px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 /* 枠ごとの音量バー(台形ハンドル内)。余白を埋めるように伸び、狭い枠ではコンテナクエリで隠す。 */
@@ -341,7 +383,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-vol-icon { flex: 0 0 auto; font-size: 15px; line-height: 1; }
 .win-vol input[type="range"] {
   flex: 1 1 auto; min-width: 0; width: auto; height: 26px; margin: 0;
-  accent-color: #58a6ff; cursor: pointer;
+  accent-color: var(--c-accent); cursor: pointer;
 }
 /* 枠が狭いと台形の中身が見切れるので、優先度の低い順に隠す(タイトル → 音量。ボタンは常に残す)。
    幅判定は JS(updateWinWidthClass)が .win に cq-hide-* クラスを付ける。container-query は
@@ -354,14 +396,14 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   display: flex; flex-direction: row; align-items: center; gap: 6px; flex: 0 0 auto;
 }
 .win-controls button {
-  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  background: transparent; color: var(--c-text); border: none; border-radius: 8px;
   width: 44px; height: 44px; font-size: 22px; cursor: pointer; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
 }
-.win-controls button:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #f0f6fc; }
-.win-controls button.active { color: #3fb950; }
+.win-controls button:hover:not(:disabled) { background: var(--c-hover); color: var(--c-text-strong); }
+.win-controls button.active { color: var(--c-success); }
 .win-controls button:disabled { opacity: 0.35; cursor: default; } /* ⚡: 変換できないURLの間は無効 */
-.win-controls .close:hover { background: #3c0d11; color: #f85149; }
+.win-controls .close:hover { background: #3c0d11; color: var(--c-danger); }
 
 /* 🎨 で開く「この枠だけ」の調整パネル。台形ハンドルのすぐ下(上部中央)にドロップする。
    left は translateX(-50%) ではなく計算で中央に置く(幅は下の 340px 固定)。移動できるように
@@ -369,9 +411,9 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-adjust {
   position: absolute; top: 70px; left: calc(50% - 170px); z-index: 7;
   display: none; flex-direction: column; gap: 12px;
-  background: rgba(13,17,23,0.96); border: 1px solid #30363d; border-radius: 10px;
+  background: rgba(13,17,23,0.96); border: 1px solid var(--c-border); border-radius: 10px;
   padding: 16px; width: 340px; max-width: calc(100% - 24px);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+  box-shadow: 0 8px 22px var(--c-shadow);
 }
 .win.adjust-open .win-adjust { display: flex; }
 /* 「名前 + ✕」のヘッダ。枠一覧(.mixer-head)・弾幕設定(.dmk-head)と同じ形で、
@@ -380,36 +422,31 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   display: flex; align-items: center; gap: 8px;
   cursor: move; user-select: none; touch-action: none;
 }
-.adj-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; }
-.adj-x { /* mixer-x / dmk-x と同じ、枠なしの小さな✕。 */
-  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
-  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
-}
-.adj-x:hover { color: #f85149; }
+.adj-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); }
 /* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
 .win.adjust-open .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
-.adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #c9d1d9; cursor: pointer; }
+.adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--c-text); cursor: pointer; }
 .adj-row > span { flex: 0 0 116px; white-space: nowrap; }
 /* min-width:0 と width:auto で flex の既定 min-width:auto による『はみ出し』を防ぐ。 */
-.adj-row input[type="range"] { flex: 1 1 auto; min-width: 0; width: auto; height: 24px; margin: 0; accent-color: #58a6ff; cursor: pointer; }
+.adj-row input[type="range"] { flex: 1 1 auto; min-width: 0; width: auto; height: 24px; margin: 0; accent-color: var(--c-accent); cursor: pointer; }
 /* 遅延の行: [−1][−0.1] 秒数 [+0.1][+1][0]。秒数は桁が変わっても幅が動かないよう等幅数字にする。 */
 .adj-delay { cursor: default; gap: 6px; }
 .adj-delay[hidden] { display: none; }
 .adj-delay > span { flex: 0 0 auto; margin-right: auto; }
 .adj-delay button {
   flex: 0 0 auto; min-width: 34px; padding: 6px 4px;
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 6px;
   font-family: inherit; font-size: 12px; cursor: pointer;
 }
-.adj-delay button:hover { background: #30363d; border-color: #58a6ff; }
+.adj-delay button:hover { background: var(--c-border); border-color: var(--c-accent); }
 .adj-delay-value { flex: 0 0 60px; text-align: center; font-variant-numeric: tabular-nums; }
-.adj-delay-value.pending { color: #d29922; }
+.adj-delay-value.pending { color: var(--c-warning); }
 .adj-reset {
   align-self: flex-end; margin-top: 2px;
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 6px;
   padding: 8px 16px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
-.adj-reset:hover { background: #30363d; border-color: #58a6ff; }
+.adj-reset:hover { background: var(--c-border); border-color: var(--c-accent); }
 
 .win-body { position: relative; flex: 1 1 auto; background: #000; }
 .win-body iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -426,7 +463,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
 
 /* 「音で合わせる」の経過と結果。映像の下端に重ねる(弾幕 z:2 の上、スピナーや操作UIの下)。
-   ポインタは透過。消すときは .out を付けてフェードさせる(時間は multiview.js の SYNC_FADE_MS と合わせる)。 */
+   ポインタは透過。消すときは .out を付けてフェードさせる(時間は js/ の SYNC_FADE_MS と合わせる)。 */
 .win-sync {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
   height: 36%; min-height: 64px; max-height: 150px;
@@ -437,12 +474,12 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-sync.out { opacity: 0; }
 .win-sync canvas { flex: 1 1 auto; min-height: 0; width: 100%; }
 .win-sync-label {
-  flex: 0 0 auto; padding: 2px 10px 6px; font-size: 13px; color: #c9d1d9;
+  flex: 0 0 auto; padding: 2px 10px 6px; font-size: 13px; color: var(--c-text);
   font-variant-numeric: tabular-nums; text-shadow: 0 0 3px #000;
 }
-.win-sync.matched .win-sync-label { color: #3fb950; font-weight: bold; font-size: 15px; }
+.win-sync.matched .win-sync-label { color: var(--c-success); font-weight: bold; font-size: 15px; }
 /* 聞いている間の残り時間。左から右へ伸びきったら測り終わり。 */
-.win-sync-bar { flex: 0 0 auto; height: 2px; width: 0; background: #58a6ff; }
+.win-sync-bar { flex: 0 0 auto; height: 2px; width: 0; background: var(--c-accent); }
 .win-sync.listen .win-sync-bar { animation: win-sync-listen var(--sync-ms) linear forwards; }
 @keyframes win-sync-listen { to { width: 100%; } }
 
@@ -454,11 +491,11 @@ body.panel-dragging iframe { pointer-events: none; }
 .win-loading {
   position: absolute; inset: 0; z-index: 3;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
-  background: #0b0e14; color: #8b949e; pointer-events: none;
+  background: #0b0e14; color: var(--c-text-muted); pointer-events: none;
 }
 .win-spinner {
   width: 40px; height: 40px; border-radius: 50%;
-  border: 3px solid rgba(88,166,255,0.25); border-top-color: #58a6ff;
+  border: 3px solid rgba(88,166,255,0.25); border-top-color: var(--c-accent);
   animation: win-spin 0.8s linear infinite;
 }
 @keyframes win-spin { to { transform: rotate(360deg); } }
@@ -466,17 +503,17 @@ body.panel-dragging iframe { pointer-events: none; }
 
 /* 拡張機能が古いときの案内。拡張機能がないときの赤い帯(ext-bridge.js)と同じ形の、黄色い帯。 */
 #mv-ext-old {
-  position: fixed; left: 0; right: 0; top: 0; z-index: 2147483000;
+  position: fixed; left: 0; right: 0; top: 0; z-index: var(--z-banner);
   padding: 12px 18px; max-height: 70vh; overflow: auto;
-  background: #2a2313; color: #f0e6c8; border-bottom: 1px solid #d29922;
-  font: 14px/1.7 system-ui, sans-serif; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  background: #2a2313; color: #f0e6c8; border-bottom: 1px solid var(--c-warning);
+  font: 14px/1.7 system-ui, sans-serif; box-shadow: 0 4px 18px var(--c-shadow);
 }
 #mv-ext-old .eo-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; }
 #mv-ext-old .eo-btn {
-  padding: 6px 16px; border-radius: 6px; border: 1px solid #d29922;
+  padding: 6px 16px; border-radius: 6px; border: 1px solid var(--c-warning);
   font: inherit; font-weight: bold; text-decoration: none; cursor: pointer;
 }
-#mv-ext-old .eo-primary { background: #d29922; color: #1c1600; }
+#mv-ext-old .eo-primary { background: var(--c-warning); color: #1c1600; }
 #mv-ext-old .eo-primary:hover { background: #e3b341; }
 #mv-ext-old .eo-ghost { background: transparent; color: #f0e6c8; }
 #mv-ext-old .eo-ghost:hover { background: #3a3120; }
@@ -493,7 +530,7 @@ body.panel-dragging iframe { pointer-events: none; }
 .win-body .win-chat-slot {
   position: static; inset: auto;
   flex: 0 0 var(--chat-w); width: var(--chat-w); height: 100%;
-  border: 0; display: none; background: #0d1117;
+  border: 0; display: none; background: var(--c-bg);
 }
 .win-body.split-chat.chat-on .win-chat-slot { display: block; }
 /* 畳んでいるが弾幕が ON の枠(判定は JS の syncChatVisibility)。チャットは弾幕の取得元なので、
@@ -526,22 +563,14 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
    syncChatVisibility が chat-on を外して映像を優先する。💬 の設定自体は変えないので、
    枠を広げれば黙って元に戻る。弾幕 ON の枠は上の chat-feed で取得元として生かされる。 */
 
-/* Kick 用の直接再生 video */
-.win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
-.win-error {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 16px; color: #ffb4ac; font-size: 12px; line-height: 1.6;
-  background: #161b22;
-}
-
 /* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
 /* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。
    枠の overflow:hidden で切れないよう内側に置く。タッチでも掴めるよう大きめ。 */
 /* トップページからは開けないサイト(Kick)。押せることは押せるが、見た目で「別扱い」と分かるようにする。 */
 /* 押せないサイトのボタン。破線にすると、左端の太い色帯まで点線になって崩れて見えるので、
    線は実線のまま落ち着いた色にして「押せない」ことだけ伝える。 */
-.site-chip-off { color: #6e7681; background: #1a1f26; border-color: #262c34; }
-.site-chip-off:hover { background: #21262d; color: #8b949e; }
+.site-chip-off { color: var(--c-text-faint); background: #1a1f26; border-color: #262c34; }
+.site-chip-off:hover { background: var(--c-surface-2); color: var(--c-text-muted); }
 
 /* 枠に追加できない URL を貼られたときの説明。 */
 .add-note {
@@ -584,7 +613,7 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
   position: absolute; right: var(--grip-inset-r); bottom: var(--grip-inset-b);
   z-index: 7; width: var(--grip-size); height: var(--grip-size);
   display: flex; align-items: center; justify-content: center;
-  background: rgba(13,17,23,0.72); color: #8b949e;
+  background: rgba(13,17,23,0.72); color: var(--c-text-muted);
   border: 1px solid rgba(48,54,61,0.9); border-radius: 14px;
   box-shadow: 0 4px 18px rgba(0,0,0,0.55);
   font-size: 40px; line-height: 1; user-select: none;
@@ -599,11 +628,11 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 @media (hover: hover) {
   .win:hover .win-resize-grip { opacity: 1; pointer-events: auto; }
 }
-.win-resize-grip:hover { background: rgba(88,166,255,0.28); color: #f0f6fc; border-color: rgba(88,166,255,0.9); }
+.win-resize-grip:hover { background: rgba(88,166,255,0.28); color: var(--c-text-strong); border-color: rgba(88,166,255,0.9); }
 
 /* ===== メニュー位置ダイアログ(中央モーダル) ===== */
 .pos-dialog-overlay {
-  position: fixed; inset: 0; z-index: 90000; /* 移動可能ダイアログ(枠を追加/配置)は浮動パネルバンド。JS raisePanel が上書き */
+  position: fixed; inset: 0; z-index: var(--z-panel); /* 移動可能ダイアログ(枠を追加/配置)は浮動パネルバンド。JS raisePanel が上書き */
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0);
   opacity: 0; pointer-events: none;
@@ -611,14 +640,14 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 }
 .pos-dialog-overlay.open { opacity: 1; pointer-events: auto; background: rgba(0,0,0,0.25); }
 /* #pos-dialog(メニュー位置)は画面を暗転する真のモーダルなので、浮動パネルより上に固定する。 */
-#pos-dialog.pos-dialog-overlay { z-index: 100002; }
+#pos-dialog.pos-dialog-overlay { z-index: var(--z-modal); }
 .pos-dialog {
-  background: rgba(13,17,23,0.98); border: 1px solid #30363d; border-radius: 12px;
+  background: rgba(13,17,23,0.98); border: 1px solid var(--c-border); border-radius: 12px;
   padding: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.7);
   transform: scale(0.96); transition: transform 0.18s ease;
 }
 .pos-dialog-overlay.open .pos-dialog { transform: scale(1); }
-.pos-dialog-title { text-align: center; color: #c9d1d9; font-size: 14px; margin-bottom: 14px; }
+.pos-dialog-title { text-align: center; color: var(--c-text); font-size: 14px; margin-bottom: 14px; }
 
 /* ===== ドラッグ移動できるダイアログ(枠を追加 / 配置) =====
    見た目・ヘッダ・✕ を「枠一覧(ミキサー)」「パフォーマンス」と統一する(地・影・フラットなヘッダ帯・右上の小さな✕)。
@@ -627,22 +656,13 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 .pos-dialog-movable {
   position: absolute; padding: 0; overflow: hidden;
   display: flex; flex-direction: column;
-  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6); color: #c9d1d9;
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 8px 24px var(--c-shadow); color: var(--c-text);
 }
 /* ヘッダ帯 = ドラッグの取っ手。mixer-head と同じくフラット(濃い帯・下線なし)。 */
-.pos-dialog-head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  cursor: move; user-select: none; touch-action: none;
-}
 .pos-dialog-movable .pos-dialog-title { /* mixer-title と同じ。中央寄せの基本形を上書きして左寄せに。 */
-  flex: 1 1 auto; text-align: left; font-size: 12px; color: #c9d1d9; margin: 0;
+  flex: 1 1 auto; text-align: left; font-size: 12px; color: var(--c-text); margin: 0;
 }
-.pos-dialog-x { /* mixer-x / perf-close と同じ、枠なしの小さな✕。 */
-  flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px;
-  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
-}
-.pos-dialog-x:hover { color: #f85149; }
 .pos-dialog-body { padding: 4px 12px 14px; }
 .pos-dialog-body > :first-child { margin-top: 0; } /* 先頭セクション(見出し等)の上余白を詰める */
 /* 枠一覧/パフォーマンスと同じフロート挙動: 背景を暗転せず、オーバーレイはクリックを透過(pointer-events:none)
@@ -669,116 +689,113 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 }
 .pos-pick {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 8px;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 8px;
   font-family: inherit; font-size: 18px; cursor: pointer;
 }
-.pos-pick span { font-size: 11px; color: #8b949e; }
-.pos-pick:hover { background: #30363d; border-color: #58a6ff; }
-.pos-pick.active { border-color: #58a6ff; background: rgba(31,111,235,0.2); color: #f0f6fc; }
-.pos-pick.active span { color: #c9d1d9; }
+.pos-pick span { font-size: 11px; color: var(--c-text-muted); }
+.pos-pick:hover { background: var(--c-border); border-color: var(--c-accent); }
+.pos-pick.active { border-color: var(--c-accent); background: rgba(31,111,235,0.2); color: var(--c-text-strong); }
+.pos-pick.active span { color: var(--c-text); }
 .pos-pick.pos-top { grid-area: top; }
 .pos-pick.pos-bottom { grid-area: bottom; }
 .pos-pick.pos-left { grid-area: left; }
 .pos-pick.pos-right { grid-area: right; }
 .pos-grid-center {
   grid-area: center; display: flex; align-items: center; justify-content: center;
-  color: #6e7681; font-size: 12px; border: 1px dashed #30363d; border-radius: 8px;
+  color: var(--c-text-faint); font-size: 12px; border: 1px dashed var(--c-border); border-radius: 8px;
 }
 .pos-dialog-close {
   display: block; margin: 16px auto 0;
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 6px;
   padding: 8px 20px; font-family: inherit; font-size: 13px; cursor: pointer;
 }
-.pos-dialog-close:hover { background: #30363d; border-color: #58a6ff; }
+.pos-dialog-close:hover { background: var(--c-border); border-color: var(--c-accent); }
 
 /* ===== パフォーマンスパネル(📊) ===== */
 /* perf ボタンの ON は青(整形モードの赤 .on と区別)。 */
-.tb-btn.on-blue { background: #0d2440; border-color: #58a6ff; color: #58a6ff; }
+.tb-btn.on-blue { background: #0d2440; border-color: var(--c-accent); color: var(--c-accent); }
 #perf-panel {
-  position: fixed; left: 10px; bottom: 10px; z-index: 90000; /* 浮動パネルバンド。JS raisePanel が前面化で上書き */
-  width: 232px; background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
-  padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+  position: fixed; left: 10px; bottom: 10px; z-index: var(--z-panel); /* 浮動パネルバンド。JS raisePanel が前面化で上書き */
+  width: 232px; background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 10px 12px; box-shadow: 0 8px 24px var(--c-shadow);
 }
 #perf-panel[hidden] { display: none; }
 .perf-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: move; user-select: none; touch-action: none; }
-.perf-title { color: #c9d1d9; font-size: 12px; }
-#perf-close { background: transparent; color: #8b949e; border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
-#perf-close:hover { color: #f85149; }
+.perf-title { color: var(--c-text); font-size: 12px; }
+#perf-close { background: transparent; color: var(--c-text-muted); border: none; cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 4px; }
+#perf-close:hover { color: var(--c-danger); }
 .perf-row { display: flex; align-items: center; gap: 8px; height: 28px; }
-.perf-label { flex: 0 0 28px; color: #8b949e; font-size: 12px; }
-.perf-val { flex: 0 0 56px; color: #f0f6fc; font-size: 12px; font-variant-numeric: tabular-nums; }
-.perf-val.warn { color: #f85149; font-weight: bold; }
+.perf-label { flex: 0 0 28px; color: var(--c-text-muted); font-size: 12px; }
+.perf-val { flex: 0 0 56px; color: var(--c-text-strong); font-size: 12px; font-variant-numeric: tabular-nums; }
+.perf-val.warn { color: var(--c-danger); font-weight: bold; }
 .perf-spark { flex: 0 0 auto; background: rgba(0,0,0,0.3); border-radius: 3px; }
 
 /* ===== 弾幕設定パネル(💬。地・影・ヘッダは枠一覧/パフォーマンスに合わせる) ===== */
 .dmk-panel {
   position: absolute; top: 64px; left: 64px; width: 300px; max-width: calc(100vw - 24px);
-  display: flex; flex-direction: column; z-index: 90000;
-  background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+  display: flex; flex-direction: column; z-index: var(--z-panel);
+  background: var(--c-panel); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 8px 24px var(--c-shadow); overflow: hidden; color: var(--c-text);
 }
 .dmk-panel[hidden] { display: none; }
 body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロールに連れられない */
-.dmk-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: move; user-select: none; touch-action: none; }
-.dmk-title { flex: 1 1 auto; font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dmk-x { flex: 0 0 auto; background: transparent; color: #8b949e; border: none; border-radius: 6px; font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer; }
-.dmk-x:hover { color: #f85149; }
+.dmk-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 適用先ドロップダウン(全体の既定 / 個別の枠を名前で選ぶ)。 */
 .dmk-scope-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
-.dmk-scope-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+.dmk-scope-label { flex: 0 0 auto; font-size: 12px; color: var(--c-text-muted); }
 .dmk-scope {
   flex: 1 1 auto; min-width: 0; padding: 6px 8px; font-family: inherit; font-size: 13px; cursor: pointer;
-  background: #21262d; color: #f0f6fc; border: 1px solid #30363d; border-radius: 6px;
+  background: var(--c-surface-2); color: var(--c-text-strong); border: 1px solid var(--c-border); border-radius: 6px;
 }
 /* 「その枠だけ」を編集している状態(⋮ から開くとこちら)。全体の既定を変えているつもりで
    枠の上書きに入れてしまうと、全体で開き直したときに何も変わっていないように見えるので、
    一目で分かるように色を付ける。 */
-#danmaku-panel.scope-win .dmk-scope { border-color: #f0b849; color: #f0b849; }
-#danmaku-panel.scope-win .dmk-scope-label { color: #f0b849; }
+#danmaku-panel.scope-win .dmk-scope { border-color: var(--c-highlight); color: var(--c-highlight); }
+#danmaku-panel.scope-win .dmk-scope-label { color: var(--c-highlight); }
 /* 種類ごとの見出し(サイズ/速度/色/表示)。 */
 .dmk-group {
-  font-size: 11px; color: #6e7681; letter-spacing: 0.04em;
-  border-top: 1px solid #21262d; padding-top: 8px;
+  font-size: 11px; color: var(--c-text-faint); letter-spacing: 0.04em;
+  border-top: 1px solid var(--c-surface-2); padding-top: 8px;
 }
 .dmk-group:first-child { border-top: none; padding-top: 0; }
 /* ↺ 個別リセット(この枠だけ全体と違う項目に出る)。 */
 .dmk-revert {
   flex: 0 0 auto; width: 26px; height: 26px; line-height: 1; font-size: 13px; cursor: pointer;
-  background: transparent; color: #d29922; border: 1px solid rgba(210,153,34,0.5); border-radius: 6px;
+  background: transparent; color: var(--c-warning); border: 1px solid rgba(210,153,34,0.5); border-radius: 6px;
 }
-.dmk-revert:hover { background: rgba(210,153,34,0.15); color: #f0f6fc; }
+.dmk-revert:hover { background: rgba(210,153,34,0.15); color: var(--c-text-strong); }
 /* 隠しても場所は確保する(display:none にすると隣のつまみ幅が変わって UI がずれるため visibility で消す)。 */
 .dmk-revert.is-hidden { visibility: hidden; }
 /* 適用先に応じた弾幕 ON/OFF(枠=トグル / 全体=すべてON/OFF)。 */
 .dmk-onoff { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
-.dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: #8b949e; }
+.dmk-onoff-label { flex: 0 0 auto; font-size: 12px; color: var(--c-text-muted); }
 /* 一番よく押すので、設定行のトグルより大きく取る。「すべてON/OFF」も同じ大きさに揃える
    (プリセットの小さいボタンも .dmk-bulk なので、この行の中だけを対象にする)。 */
 .dmk-onoff .dmk-toggle,
 .dmk-onoff .dmk-bulk { flex: 1 1 auto; padding: 12px 0; font-size: 15px; font-weight: bold; }
 .dmk-bulk {
   flex: 1 1 0; padding: 6px 0; font-family: inherit; font-size: 12px; cursor: pointer;
-  background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+  background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 6px;
 }
-.dmk-bulk:hover { border-color: #58a6ff; color: #f0f6fc; }
+.dmk-bulk:hover { border-color: var(--c-accent); color: var(--c-text-strong); }
 /* プリセット(現在の適用先の値を保存・適用・削除)。 */
 .dmk-presets { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 4px; }
-.dmk-presets-head { font-size: 11px; color: #6e7681; }
+.dmk-presets-head { font-size: 11px; color: var(--c-text-faint); }
 .dmk-presets-btns { display: flex; gap: 6px; }
 .dmk-rows { display: flex; flex-direction: column; gap: 8px; padding: 4px 12px 10px; }
 .dmk-row { display: flex; align-items: center; gap: 10px; }
-.dmk-label { flex: 0 0 80px; font-size: 12px; color: #8b949e; }
-.dmk-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
-.dmk-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.dmk-label { flex: 0 0 80px; font-size: 12px; color: var(--c-text-muted); }
+.dmk-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--c-accent); cursor: pointer; }
+.dmk-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: var(--c-text); font-variant-numeric: tabular-nums; }
 /* datalist は目盛りの指定にだけ使う。中身のテキストは出さない。 */
 .dmk-row datalist { display: none; }
-.dmk-toggle { flex: 1 1 auto; padding: 6px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: #21262d; color: #8b949e; border: 1px solid #30363d; border-radius: 6px; }
-.dmk-toggle.on { background: #0d2818; border-color: #3fb950; color: #3fb950; } /* ON は緑 */
-.dmk-reset { margin: 0 12px 12px; padding: 8px 0; font-family: inherit; font-size: 12px; cursor: pointer; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
-.dmk-reset:hover { background: #30363d; border-color: #58a6ff; }
+.dmk-toggle { flex: 1 1 auto; padding: 6px 0; font-family: inherit; font-size: 13px; cursor: pointer; background: var(--c-surface-2); color: var(--c-text-muted); border: 1px solid var(--c-border); border-radius: 6px; }
+.dmk-toggle.on { background: #0d2818; border-color: var(--c-success); color: var(--c-success); } /* ON は緑 */
+.dmk-reset { margin: 0 12px 12px; padding: 8px 0; font-family: inherit; font-size: 12px; cursor: pointer; background: var(--c-surface-2); color: var(--c-text); border: 1px solid var(--c-border); border-radius: 6px; }
+.dmk-reset:hover { background: var(--c-border); border-color: var(--c-accent); }
 .dmk-reset[hidden] { display: none; }
 
-/* ===== スマホ縦積みモード(body.stack-mode。multiview.js の updateStackMode が付与) ===== */
+/* ===== スマホ縦積みモード(body.stack-mode。js/ の updateStackMode が付与) ===== */
 /* 自由配置をやめ「全幅×16:9 の縦並びタイル」にする(高さ計算は JS の relayoutStack)。
    移動・リサイズ・最大化のUIは封印し、タップとスクロールだけで操作できる形にする。 */
 body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
@@ -789,66 +806,76 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
   top: auto; right: auto; bottom: 8px; left: 10px;
 }
 
-/* 右下の丸ボタン(追加/一覧/整列の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)、その隣が一覧。
-   全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは整列が無意味なので ⊞ を隠す。 */
+/* 右下の丸ボタン(追加/一覧/配置の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)、その隣が一覧。
+   全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは配置を使わないので隠す。
+   */
 #quick-actions {
-  position: fixed; right: 12px; bottom: 12px; z-index: 100001;
+  position: fixed; right: 12px; bottom: 12px; z-index: var(--z-quick);
   display: flex; flex-direction: row; gap: 10px;
   transition: opacity 0.2s ease;
 }
 #quick-actions > button {
   width: 50px; height: 50px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  background: var(--c-panel-soft); color: var(--c-text); border: 1px solid var(--c-border);
   font-family: inherit; font-size: 24px; line-height: 1; cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 14px var(--c-shadow-soft);
 }
-#quick-actions > button:hover { background: #30363d; border-color: #58a6ff; color: #f0f6fc; }
-#qa-add { background: rgba(31,111,235,0.92); border-color: #388bfd; color: #fff; }
-#qa-add:hover { background: #388bfd; border-color: #58a6ff; }
+#quick-actions > button:hover { background: var(--c-border); border-color: var(--c-accent); color: var(--c-text-strong); }
+#qa-add { background: rgba(31,111,235,0.92); border-color: var(--c-accent-strong); color: #fff; }
+#qa-add:hover { background: var(--c-accent-strong); border-color: var(--c-accent); }
 body.has-stack-max #quick-actions { display: none; }
-body.stack-mode #qa-tile { display: none; }
+body.stack-mode #qa-layout { display: none; }
+/* ポップアップが開いている間は、対応するボタンを明るくする。 */
+#quick-actions > button.panel-open { background: #1f3a5f; border-color: var(--c-accent); color: var(--c-text-strong); }
+/* 自動配置がオンの間は、配置ボタンの右上に緑の点を出す(開いているかどうかとは別の情報)。 */
+#qa-layout { position: relative; }
+#qa-layout.auto-on::after {
+  content: ''; position: absolute; top: 2px; right: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--c-success); border: 2px solid var(--c-bg);
+}
 
 /* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
    backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */
 /* メニューを出しっぱなしにできるよう、backdrop は浮動パネル(90000台)より下に置く。これでメニューから
    開いたパネル(追加/配置/一覧/パフォーマンス)はメニューが開いたままでも操作でき、タイル(枠)や
    ステージ余白のタップだけが backdrop に当たってメニューを閉じる(タイルへは流さない)。メニュー自身は z:100004 で最前面。 */
-#main-menu-backdrop { position: fixed; inset: 0; z-index: 89999; background: transparent; }
+#main-menu-backdrop { position: fixed; inset: 0; z-index: var(--z-menu-backdrop); background: transparent; }
 #main-menu-backdrop[hidden] { display: none; }
 #main-menu {
-  position: fixed; left: 10px; bottom: 64px; z-index: 100004;
+  position: fixed; left: 10px; bottom: 64px; z-index: var(--z-menu);
   display: flex; flex-direction: column; gap: 2px; min-width: 250px;
-  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 12px;
+  background: rgba(13,17,23,0.97); border: 1px solid var(--c-border); border-radius: 12px;
   padding: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.7);
 }
 #main-menu[hidden] { display: none; }
 #main-menu button,
 #main-menu a {
   display: flex; align-items: center; gap: 10px;
-  background: transparent; color: #c9d1d9; border: none; border-radius: 8px;
+  background: transparent; color: var(--c-text); border: none; border-radius: 8px;
   padding: 13px 14px; font-family: inherit; font-size: 16px; text-align: left;
   cursor: pointer; white-space: nowrap;
 }
 #main-menu button:hover,
-#main-menu a:hover { background: rgba(88,166,255,0.18); color: #f0f6fc; }
-#main-menu button.on { color: #3fb950; }
+#main-menu a:hover { background: rgba(88,166,255,0.18); color: var(--c-text-strong); }
+#main-menu button.on { color: var(--c-success); }
 #main-menu a { text-decoration: none; }
 #main-menu button[hidden] { display: none; }
 /* 保守用のアイコンだけの列。薄くしておき、乗せたときだけはっきり見せる。 */
 .mm-tools { display: flex; align-items: center; gap: 2px; }
 #main-menu .mm-tools button { padding: 8px 10px; opacity: 0.55; }
 #main-menu .mm-tools button:hover { opacity: 1; }
-.mm-ver { margin-left: auto; font-size: 11px; color: #6e7681; }
+.mm-ver { margin-left: auto; font-size: 11px; color: var(--c-text-faint); }
 /* 版の右隣の GitHub へのリンク。左のボタン(パフォーマンス等)と同じく、控えめに出す。 */
-.mm-repo { display: flex; padding: 8px 10px; color: #c9d1d9; opacity: 0.55; }
+.mm-repo { display: flex; padding: 8px 10px; color: var(--c-text); opacity: 0.55; }
 .mm-repo:hover { opacity: 1; }
 /* 切替の項目と、その設定を開く小さなボタンを1行に並べる(弾幕 + 弾幕設定)。 */
 .mm-row { display: flex; gap: 2px; }
 .mm-row > button:first-child { flex: 1 1 auto; }
 #main-menu .mm-side { padding-left: 10px; padding-right: 10px; color: #7d8590; }
 #main-menu span.mm-side { display: flex; }
-.mm-sep { height: 1px; background: #30363d; margin: 5px 8px; }
+.mm-sep { height: 1px; background: var(--c-border); margin: 5px 8px; }
 /* 版の表示。ラベルの右に小さく添える。古いときだけ色を変えて気づけるようにする。 */
 .mm-sub { flex: 0 0 auto; margin-left: auto; padding-left: 10px; font-size: 12px; color: #7d8590; }
 #mm-update.is-old { color: #e3b341; }
@@ -868,7 +895,7 @@ body.stack-mode #qa-tile { display: none; }
 .pos-dialog-body,
 #toolbar {
   scrollbar-width: thin;
-  scrollbar-color: #30363d transparent;
+  scrollbar-color: var(--c-border) transparent;
 }
 .mixer-list::-webkit-scrollbar,
 .layout-list::-webkit-scrollbar,
@@ -888,7 +915,7 @@ body.stack-mode #qa-tile { display: none; }
 .dmk-adv-body::-webkit-scrollbar-thumb,
 .pos-dialog-body::-webkit-scrollbar-thumb,
 #toolbar::-webkit-scrollbar-thumb {
-  background: #30363d; border-radius: 4px;
+  background: var(--c-border); border-radius: 4px;
   border: 2px solid transparent; background-clip: content-box; /* 細く見せつつ当たり判定は確保 */
 }
 .mixer-list::-webkit-scrollbar-thumb:hover,
@@ -907,26 +934,26 @@ body.stack-mode #qa-tile { display: none; }
 body.stack-mode .dmk-adv { display: none; }
 .dmk-adv-toggle {
   width: 100%; text-align: left;
-  background: transparent; color: #8b949e; border: 0; border-top: 1px solid #21262d;
+  background: transparent; color: var(--c-text-muted); border: 0; border-top: 1px solid var(--c-surface-2);
   padding: 9px 2px; font-family: inherit; font-size: 12px; cursor: pointer;
 }
-.dmk-adv-toggle:hover { color: #c9d1d9; }
+.dmk-adv-toggle:hover { color: var(--c-text); }
 .dmk-adv-body { padding-bottom: 4px; }
 
 /* ===== 🍪 ログインCookie ダイアログ ===== */
 .cookie-row {
   display: flex; align-items: center; gap: 8px;
-  font-size: 13px; color: #c9d1d9; cursor: pointer; margin-bottom: 8px;
+  font-size: 13px; color: var(--c-text); cursor: pointer; margin-bottom: 8px;
 }
-.cookie-row input { width: 16px; height: 16px; accent-color: #3fb950; cursor: pointer; }
+.cookie-row input { width: 16px; height: 16px; accent-color: var(--c-success); cursor: pointer; }
 .cookie-note {
-  margin: 0 0 10px; font-size: 12px; line-height: 1.7; color: #8b949e;
+  margin: 0 0 10px; font-size: 12px; line-height: 1.7; color: var(--c-text-muted);
 }
 .cookie-note code {
-  background: #0d1117; color: #c9d1d9; padding: 1px 5px; border-radius: 4px;
+  background: var(--c-bg); color: var(--c-text); padding: 1px 5px; border-radius: 4px;
   font-family: ui-monospace, Consolas, monospace;
 }
-.cookie-note strong { color: #f0b849; }
+.cookie-note strong { color: var(--c-highlight); }
 body.stack-mode .win { min-width: 0; min-height: 0; } /* 全幅タイルは MIN_W より狭くなる */
 /* 縦積み(スマホ)は常に整列済みでリサイズしないので、つまみは出さない。 */
 body.stack-mode .win-resize-grip,
@@ -982,12 +1009,12 @@ body:not(.stack-mode) .win-quick {
 }
 .win-quick > button {
   /* ✕ と ⋮ は枠の上に重なる小さな的なので、指で外さない大きさにする。 */
-  width: 54px; height: 54px; border-radius: 12px; border: 1px solid #30363d;
-  background: rgba(13,17,23,0.85); color: #c9d1d9; font-size: 24px; cursor: pointer;
+  width: 54px; height: 54px; border-radius: 12px; border: 1px solid var(--c-border);
+  background: rgba(13,17,23,0.85); color: var(--c-text); font-size: 24px; cursor: pointer;
   font-family: inherit; line-height: 1;
 }
-.win-quick > button:hover { background: #30363d; border-color: #58a6ff; }
-.win-quick > button.q-close:hover { background: #3c0d11; border-color: #f85149; color: #f85149; }
+.win-quick > button:hover { background: var(--c-border); border-color: var(--c-accent); }
+.win-quick > button.q-close:hover { background: #3c0d11; border-color: var(--c-danger); color: var(--c-danger); }
 /* 50%幅などの狭いタイル: 背が低く縦並び+下げだと枠外に出るので、横並び・上寄りに戻して収める。
    bottom も戻さないと、上下とも指定されて縦に引き伸ばされる。 */
 .win.cq-narrow .win-quick { flex-direction: row; top: 6px; bottom: auto; left: 4px; gap: 4px; }
@@ -1008,27 +1035,27 @@ body:not(.stack-mode) .win-quick {
     border-color: rgba(240, 246, 252, 0.16);
     color: rgba(240, 246, 252, 0.5);
     box-shadow: none;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* 明るい映像の上でも記号が沈まないように */
+    text-shadow: 0 1px 2px var(--c-shadow); /* 明るい映像の上でも記号が沈まないように */
     transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   }
   .win-quick:hover > button {
     background: rgba(13, 17, 23, 0.82);
     border-color: rgba(240, 246, 252, 0.3);
-    color: #f0f6fc;
+    color: var(--c-text-strong);
   }
   .win-quick > button:hover {
     background: rgba(13, 17, 23, 0.95);
-    border-color: #58a6ff;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    border-color: var(--c-accent);
+    box-shadow: 0 4px 14px var(--c-shadow-soft);
   }
   .win-quick > button.q-close:hover {
-    background: rgba(60, 13, 17, 0.95); border-color: #f85149; color: #f85149;
+    background: rgba(60, 13, 17, 0.95); border-color: var(--c-danger); color: var(--c-danger);
   }
   .win-resize-grip:hover {
     background: rgba(88, 166, 255, 0.3);
     border-color: rgba(88, 166, 255, 0.9);
-    color: #f0f6fc;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    color: var(--c-text-strong);
+    box-shadow: 0 4px 14px var(--c-shadow-soft);
   }
 }
 
@@ -1038,43 +1065,43 @@ body.stack-mode.reordering { user-select: none; }
 body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 .win.dragging {
   transition: none; opacity: 0.92; transform: scale(1.02);
-  border-color: #58a6ff; box-shadow: 0 12px 32px rgba(0,0,0,0.8);
+  border-color: var(--c-accent); box-shadow: 0 12px 32px rgba(0,0,0,0.8);
   user-select: none; /* 移動中はテキスト選択させない(マウス) */
 }
 
 /* ⋮ のドロップダウンメニュー。開く時に JS(positionWinMenu)が position:fixed で画面内へ配置するので、
    タイルの overflow:hidden で切れず、画面端・下端でもはみ出さない(高さ超過時はメニュー内スクロール)。 */
 .win-menu {
-  position: absolute; top: 50px; left: 0; display: none; z-index: 100001; /* ⋮ が左なのでメニューも左から開く */
+  position: absolute; top: 50px; left: 0; display: none; z-index: var(--z-quick); /* ⋮ が左なのでメニューも左から開く */
   flex-direction: column; gap: 2px; min-width: 230px;
   overflow-y: auto; overscroll-behavior: contain;
-  background: rgba(13,17,23,0.97); border: 1px solid #30363d; border-radius: 10px;
-  padding: 6px; box-shadow: 0 8px 22px rgba(0,0,0,0.6);
+  background: rgba(13,17,23,0.97); border: 1px solid var(--c-border); border-radius: 10px;
+  padding: 6px; box-shadow: 0 8px 22px var(--c-shadow);
 }
 .win.menu-open .win-menu { display: flex; }
 .win-menu button {
-  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  background: transparent; color: var(--c-text); border: none; border-radius: 6px;
   padding: 11px 12px; font-family: inherit; font-size: 15px; text-align: left; cursor: pointer;
   white-space: nowrap;
 }
-.win-menu button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: var(--c-text-strong); }
 .win-menu button:disabled { opacity: 0.35; cursor: default; }
 /* トグル項目: 左=項目名、右=現在値。区切り線でグループを分ける。 */
 .win-menu-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.win-menu-toggle .wm-val { flex: 0 0 auto; color: #8b949e; font-variant-numeric: tabular-nums; }
-.win-menu-toggle.on .wm-val { color: #3fb950; font-weight: bold; } /* ON は緑(弾幕など) */
-.win-menu-sep { flex: 0 0 auto; height: 1px; background: #30363d; margin: 5px 8px; }
+.win-menu-toggle .wm-val { flex: 0 0 auto; color: var(--c-text-muted); font-variant-numeric: tabular-nums; }
+.win-menu-toggle.on .wm-val { color: var(--c-success); font-weight: bold; } /* ON は緑(弾幕など) */
+.win-menu-sep { flex: 0 0 auto; height: 1px; background: var(--c-border); margin: 5px 8px; }
 /* 説明の要らない操作は横一列に並べる。縦に積むと項目数ぶんメニューが伸び、
    画面の小さいスマホでは端まで届かなくなる。 */
 .win-menu-row { display: flex; gap: 4px; }
 .win-menu-row > button {
   flex: 1 1 0; min-width: 0;
-  background: transparent; color: #c9d1d9; border: none; border-radius: 6px;
+  background: transparent; color: var(--c-text); border: none; border-radius: 6px;
   padding: 11px 6px; font-family: inherit; font-size: 16px; text-align: center; cursor: pointer;
 }
-.win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: #f0f6fc; }
+.win-menu-row > button:hover:not(:disabled) { background: rgba(88,166,255,0.18); color: var(--c-text-strong); }
 .win-menu-row > button:disabled { opacity: 0.35; cursor: default; }
-.win-menu-row > button.on { color: #3fb950; } /* いま選ばれている側 */
+.win-menu-row > button.on { color: var(--c-success); } /* いま選ばれている側 */
 /* 縦に積む行。幅・高さは値を出さないだけで、並びは他の項目と揃える。 */
 .win-menu-row.col { flex-direction: column; gap: 2px; }
 .win-menu-row.col > button { padding: 11px 12px; font-size: 15px; text-align: left; }
@@ -1084,18 +1111,18 @@ body.stack-mode.reordering .win { transition: left 0.16s ease, top 0.16s ease; }
 .win.stack-max {
   position: fixed !important; left: 0 !important; top: 0 !important;
   width: 100vw !important; height: 100vh !important; height: 100dvh !important;
-  z-index: 99999 !important; border: none; border-radius: 0;
+  z-index: var(--z-fullscreen-win) !important; border: none; border-radius: 0;
 }
 #stack-restore {
-  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 100005;
+  position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: var(--z-restore);
   display: none; align-items: center; gap: 6px;
-  background: rgba(13,17,23,0.92); color: #c9d1d9; border: 1px solid #30363d;
+  background: var(--c-panel-soft); color: var(--c-text); border: 1px solid var(--c-border);
   border-radius: 999px; padding: 12px 24px; font-family: inherit; font-size: 15px; cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  box-shadow: 0 4px 16px var(--c-shadow);
   opacity: 1; transition: opacity 0.2s ease;
 }
 body.has-stack-max #stack-restore { display: inline-flex; }
-#stack-restore:hover { background: #30363d; border-color: #58a6ff; }
+#stack-restore:hover { background: var(--c-border); border-color: var(--c-accent); }
 
 /* カーソル自動非表示(body.idle)に連動して、常駐UI(≡ メニュー / ⛶ 全画面を終了)も一緒にフェードで消す。
    没入感のため。ポインタを動かせば setupIdleHide の arm() が即 body.idle を外して復帰する。
@@ -1123,10 +1150,6 @@ body.idle #main-menu-backdrop { pointer-events: none; }
 /* 追加/配置は overlay 透明・中パネルのみ操作可なので、中パネルの操作も idle 中は無効化する。 */
 body.idle #add-dialog.pos-dialog-overlay.open .pos-dialog,
 body.idle #layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: none; }
-
-/* スマホ(縦積み)では「配置」は使わない(整列/整形/座標保存は自由配置=PC向け)。≡メニューから隠す。
-   タッチPC(coarse だが広い=非 stack)では配置は使えるので、メディアではなく body.stack-mode で判定する。 */
-body.stack-mode #mm-layout { display: none; }
 
 /* ===== スマホ/タッチ環境 ===== */
 /* 主ポインタが指(pointer: coarse)か画面が狭いときは、文字とタップ目標をひと回り大きくする。 */
@@ -1230,14 +1253,20 @@ body.stack-mode .win-menu .pc-only { display: none; }
 #update-dialog .pos-dialog { width: 340px; max-width: calc(100% - 32px); }
 body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
 .upd-rows { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-.upd-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: #8b949e; }
-.upd-row b { color: #c9d1d9; font-variant-numeric: tabular-nums; }
+.upd-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--c-text-muted); }
+.upd-row b { color: var(--c-text); font-variant-numeric: tabular-nums; }
 .upd-dl { display: block; text-align: center; text-decoration: none; margin: 10px 0; }
-.upd-link { display: inline-block; margin-top: 6px; color: #58a6ff; font-size: 12px; }
+.upd-link { display: inline-block; margin-top: 6px; color: var(--c-accent); font-size: 12px; }
 
 /* 「音で合わせる」のダイアログ。説明文が長いので幅を決め打ちする(指定しないと1行に伸びる)。
    対象の枠が足りないときは OK を押せない。 */
 #sync-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
 body.stack-mode #sync-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
-#sync-dialog-ok { display: block; margin-left: auto; min-width: 88px; }
-#sync-dialog-ok:disabled { opacity: 0.4; cursor: default; }
+#sync-dialog-run, #sync-dialog-auto { display: block; width: 100%; }
+#sync-dialog-run { margin-bottom: 8px; }
+#sync-dialog-run:disabled { opacity: 0.4; cursor: default; }
+#sync-dialog-status:empty { display: none; }
+#sync-auto-section { border-top: 1px solid var(--c-border); padding-top: 10px; }
+#sync-dialog-auto.on { border-color: var(--c-success); color: var(--c-success); }
+/* 定期実行がオンの間だけ出す。場所は残して、上下の行と値の位置を揃える。 */
+#mm-sync-auto:not(.on) { visibility: hidden; }

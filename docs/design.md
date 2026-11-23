@@ -1,8 +1,8 @@
 # 設計メモ
 
 素の JavaScript のみで、ビルド不要・npm 依存なしです(Manifest V3)。
-Kick だけはサイトを埋め込まず、[hls.js](https://github.com/video-dev/hls.js) で HLS を直接再生しています
-(拡張ページの文脈だとプレイヤーの内部リクエストが弾かれ、再描画のたびに 404 になるため)。
+Kick の配信は、公式プレイヤー(`player.kick.com`)と popout チャットの2枚組で表示しています
+(再生リストの CORS が Kick の許可オリジンにしか開いておらず、UI ページから HLS を直接読めないため)。
 
 ## UI ページを通常のオリジンに置いている理由
 
@@ -21,14 +21,14 @@ iframe」になり、他の拡張が問題なく動くようになります。
 
 ## ページ ⇔ 拡張の橋渡し
 
-ページから拡張の機能(設定の保存、Cookie 緩和、Kick の再生 URL 取得など)を使うために、
+ページから拡張の機能(設定の保存、Cookie 緩和など)を使うために、
 `ext-bridge.js`(ページ側)と `page-bridge.js`(content script)が `postMessage` で橋渡しをしています。
-`multiview.js` は `chrome.*` を直接呼ばず、`MV.*` 経由で統一しています。
+`js/` のスクリプトは `chrome.*` を直接呼ばず、`MV.*` 経由で統一しています。
 
 | | 担当 |
 | --- | --- |
-| GitHub Pages | UI(`multiview.html` / `.js` / `.css`)の配信のみ |
-| 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、Kick の再生 URL 取得、設定の保存 |
+| GitHub Pages | UI(`multiview.html` / `.css` / `js/`)の配信のみ |
+| 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、設定の保存 |
 
 ## ブランチと公開
 
@@ -57,8 +57,8 @@ git push origin main:release   # これを実行した時だけ、利用者に�
 ## リリース
 
 `node tools/release.mjs` で版を上げ、配布用の ZIP を `dist/` に作ります。版番号は
-`manifest.json` / `multiview.html` の `?v=`(GitHub Pages のキャッシュ避け)/ `multiview.js` の
+`manifest.json` / `multiview.html` の `?v=`(GitHub Pages のキャッシュ避け)/ `js/version.js` の
 `EXPECTED_EXT_VERSION` の3か所にあり、手で合わせるとずれるのでこのスクリプトで一括して書き換えます。
 
-UI ファイル(`multiview.*` / `ext-bridge.js`)を変えたら**必ず版を上げてください**。`?v=` が据え置きだと
+UI ファイル(`multiview.*` / `js/` / `ext-bridge.js`)を変えたら**必ず版を上げてください**。`?v=` が据え置きだと
 GitHub Pages のキャッシュが効いて、古い JS/CSS のまま配られます。
