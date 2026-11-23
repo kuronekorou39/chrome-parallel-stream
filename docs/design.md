@@ -21,14 +21,14 @@ iframe」になり、他の拡張が問題なく動くようになります。
 
 ## ページ ⇔ 拡張の橋渡し
 
-ページから拡張の機能(設定の保存、Cookie 緩和、Kick の再生 URL 取得など)を使うために、
+ページから拡張の機能(設定の保存、Cookie 緩和など)を使うために、
 `ext-bridge.js`(ページ側)と `page-bridge.js`(content script)が `postMessage` で橋渡しをしています。
 `multiview.js` は `chrome.*` を直接呼ばず、`MV.*` 経由で統一しています。
 
 | | 担当 |
 | --- | --- |
 | GitHub Pages | UI(`multiview.html` / `.js` / `.css`)の配信のみ |
-| 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、Kick の再生 URL 取得、設定の保存 |
+| 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、設定の保存 |
 
 ## ブランチと公開
 

@@ -46,7 +46,7 @@ test('manifest.json が指すファイルは実在し、配布 ZIP にも入る'
 
 test('配布 ZIP に入れるファイルは実在する。manifest.json とライセンス類も入る', () => {
   for (const file of PACK) assert.ok(existsSync(join(ROOT, file)), `${file} がありません`);
-  for (const file of ['manifest.json', 'LICENSE', 'THIRD-PARTY-NOTICES.md']) {
+  for (const file of ['manifest.json', 'LICENSE']) {
     assert.ok(PACK.includes(file), `${file} が PACK にありません`);
   }
 });

@@ -9,7 +9,6 @@
 ![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-34A853?style=flat-square)
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
-![hls.js](https://img.shields.io/badge/hls.js-0A7EA4?style=flat-square)
 ![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-222222?style=flat-square&logo=githubpages&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
@@ -77,7 +76,7 @@
 
 ## インストール
 
-1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-1.0.8.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
+1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-1.0.9.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
 2. Chrome のアドレスバーに `chrome://extensions` と入れて開く
 3. 右上の「**デベロッパー モード**」を ON にする
 4. 左上に出てくる「**パッケージ化されていない拡張機能を読み込む**」を押して、1 で展開したフォルダを選ぶ
@@ -102,4 +101,3 @@
 
 [MIT](LICENSE)
 
-同梱しているサードパーティコードとその表示は [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) を参照してください。

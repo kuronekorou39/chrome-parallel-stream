@@ -18,7 +18,7 @@ const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8'
 
 // /dev/ に置く UI 一式。ここに無いものはルート(= 公開版)を見に行くことになるので、
 // 参照している資産はすべて含めること。
-const UI_FILES = ['multiview.html', 'multiview.js', 'multiview.css', 'ext-bridge.js', 'hls.min.js', 'hls.worker.js'];
+const UI_FILES = ['multiview.html', 'multiview.js', 'multiview.css', 'ext-bridge.js'];
 // 配布 ZIP も一緒に置く。ページからのリンクは相対なので、/dev/ からは /dev/dist/ を見に行く。
 // ここに置かないとリンクが 404 になるうえ、置くべきは公開版ではなく「このページに合う版」
 // (確認用ページは main の UI なので、拡張も main のものでないと版が食い違う)。

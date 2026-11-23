@@ -30,8 +30,6 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 | `twitch-chat-ime.js` | Twitch のチャット入力欄で、Android の日本語入力が1文字目で確定してしまうのを避ける MAIN world script(原因は Twitch 側。空の入力欄に空白を1つ入れておく回避策) |
 | `page-bridge.js` / `ext-bridge.js` | ページ(`multiview.js`)⇔拡張機能の `postMessage` 橋渡し。`multiview.js` は `chrome.*` を直接呼ばず `MV.*` 経由 |
 | `rules.json` | `declarativeNetRequest` ルール(埋め込みのための `X-Frame-Options` 除去など) |
-| `hls.min.js` / `hls.worker.js` | third_party/hls.js の同梱ビルド。Kick だけ埋め込みでなくこれで HLS を直接再生(拡張ページ文脈だと内部リクエストが 404 になるため) |
-| `third_party/hls.js/` | 同梱コードのライセンス原本 |
 | `docs/` | `browser-impact.md`(権限・Cookie・可視状態偽装の詳細)、`design.md`(設計メモ)、`images/`(README 用スクリーンショット) |
 | `tools/` | `release.mjs`(版上げ・ZIP 作成)、`publish.mjs`(公開・確認用ページ反映) |
 | `dist/` | 配布用 ZIP。バージョン付きのものは git 管理、展開フォルダ(`dist/parallel-stream-*/`)は生成物なので gitignore |
@@ -80,9 +78,6 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
   戻す」方向の変更は提案しない
 - 広告スキップ機能はこのリポジトリの担当外(別リポジトリ `chrome-ad-skipper` の責務)。
   持ち込まない
-- `hls.min.js` / `hls.worker.js` はコード自体を改変しない(上流のビルド成果物 + ライセンス
-  ヘッダのみ付与)。更新する場合は `third_party/hls.js/` と `THIRD-PARTY-NOTICES.md` を版と
-  合わせて更新する
 - `chromium-repro/` はこのリポジトリの実装とは無関係な、Chromium バグ報告用の最小再現。
   本体の変更のついでに触らない
 - `.repohub/` はユーザーのグローバル gitignore で無視される。ここに置いた資産を版管理したい

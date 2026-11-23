@@ -12,14 +12,14 @@ const browser = ['window', 'document', 'location', 'navigator', 'console', 'fetc
 const globals = (names) => Object.fromEntries(names.map((n) => [n, 'readonly']));
 
 export default [
-  { ignores: ['hls.min.js', 'hls.worker.js', 'dist/', 'third_party/', 'chromium-repro/', '_metadata/', '.publish-dev/'] },
+  { ignores: ['dist/', 'chromium-repro/', '_metadata/', '.publish-dev/'] },
   {
     files: ['*.js'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'script',
-      // chrome = 拡張 API、Hls = hls.min.js、MV = ext-bridge.js が window に置く橋渡し。
-      globals: globals([...browser, 'chrome', 'Hls', 'MV']),
+      // chrome = 拡張 API、MV = ext-bridge.js が window に置く橋渡し。
+      globals: globals([...browser, 'chrome', 'MV']),
     },
     rules: {
       'no-undef': 'error',

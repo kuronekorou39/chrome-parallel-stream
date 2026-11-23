@@ -47,11 +47,8 @@ body.tb-vertical #toolbar {
   flex-direction: column; flex-wrap: nowrap; align-items: stretch;
   width: 240px; max-height: 100%; overflow-y: auto;
 }
-body.tb-vertical .tb-sep { width: 100%; height: 1px; }
 body.tb-vertical .tb-input,
 body.tb-vertical #master-vol { width: 100%; }
-body.tb-vertical .tb-grow,
-body.tb-vertical .tb-hint { display: none; }
 
 /* 出し入れアニメ: 位置に応じた方向へスライド+フェード。初回適用はアニメさせない(tb-ready で有効化)。 */
 body.tb-ready #toolbar { transition: background 0.2s ease, transform 0.28s ease, opacity 0.28s ease; }
@@ -93,9 +90,6 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   font-weight: bold; color: #f0f6fc; font-size: 16px;
   background: #21262d; border-radius: 12px; padding: 4px 13px; min-width: 30px; text-align: center;
 }
-.tb-sep { width: 1px; height: 24px; background: #30363d; }
-.tb-grow { flex: 1 1 auto; }
-.tb-hint { color: #6e7681; font-size: 12px; white-space: nowrap; }
 
 #master-vol { width: 160px; height: 22px; accent-color: #58a6ff; cursor: pointer; }
 
@@ -538,14 +532,6 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
    なる。そこまで縮んだら .cq-hide-chat が付き(判定は JS の updateWinShapeClass)、
    syncChatVisibility が chat-on を外して映像を優先する。💬 の設定自体は変えないので、
    枠を広げれば黙って元に戻る。弾幕 ON の枠は上の chat-feed で取得元として生かされる。 */
-
-/* Kick 用の直接再生 video */
-.win-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; }
-.win-error {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  text-align: center; padding: 16px; color: #ffb4ac; font-size: 12px; line-height: 1.6;
-  background: #161b22;
-}
 
 /* ===== 枠のリサイズ(全辺・四隅。常時有効) ===== */
 /* 当たり判定はオンマウス(または一時表示)時だけ有効化し、普段は配信側のクリックを邪魔しない。

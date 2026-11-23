@@ -372,7 +372,6 @@ function onFrameUrl(e) {
   win.url = d.href;
   pushWinHistory(win, d.href); // ⋮メニューの「戻る」用
   updateWinTitle(win);
-  syncLightBtn(win); // 配信ページへ移動したら⚡が押せるようになる
   saveLineup();
   renderMixer(); // 一覧のラベルも更新
   // 枠の中で一覧から配信・動画を選んだら、その時点で「プレイヤー + チャット」の構成へ移る。
@@ -429,7 +428,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.8';
+const EXPECTED_EXT_VERSION = '1.0.9';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -557,9 +556,7 @@ function goBackWindow(win) {
   win.url = prev;
   win.light = !!toLightUrl(prev);
   win.tall = null;
-  if (win.lightBtn) win.lightBtn.classList.toggle('active', win.light);
   updateWinTitle(win);
-  syncLightBtn(win);
   syncMenuLabels(win);
   remountFrame(win);
   relayoutStack();
@@ -569,12 +566,10 @@ function goBackWindow(win) {
 
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
-  if (win.light || win.video || !toLightUrl(win.url)) return;
+  if (win.light || !toLightUrl(win.url)) return;
   win.light = true;
   win.tall = null;
-  if (win.lightBtn) win.lightBtn.classList.add('active');
   updateWinTitle(win);
-  syncLightBtn(win);
   syncMenuLabels(win);
   remountFrame(win);
   relayoutStack();
@@ -901,16 +896,11 @@ function createWindow(url, opts = {}) {
   const openBtn = mkBtn(':external:', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn(':reload:', '', 'この枠を再読込');
   const chatBtn = hasChatPane ? mkBtn(':chat:', 'active', 'チャットの表示/非表示') : null;
-  // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
-  // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
-  // ⚡ は置かない(モードは映しているもので決まるので、選ばせる場面が無い)。
-  const lightBtn = null;
   const adjustBtn = mkBtn(':adjust:', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn(':fullscreen:', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(openBtn, reloadBtn);
   if (chatBtn) controls.append(chatBtn);
-  if (lightBtn) controls.append(lightBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
   // [グリップ左][ タイトル + 音量 + ボタン = 枠移動ゾーン ] の順で台形ハンドルを組む。
   barMain.append(title, volWrap, controls);
@@ -919,7 +909,6 @@ function createWindow(url, opts = {}) {
   const body = document.createElement('div');
   body.className = 'win-body';
   let frame = null;
-  let video = null;
   let chatFrame = null;
   let mediaEl = null; // チャットと2分割するとき、映像側を入れる箱(無ければ body 直下)
   if (hasChatPane) {
@@ -964,7 +953,7 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider, volIcon,
+    id, url, el, body, frame, chatFrame, mediaEl, chatBtn, bar, barX: 0, titleEl: title, volSlider, volIcon,
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
     // YouTube の通常表示は Chromium が落ちるので、この枠には切替先を出さない。
     // ⋮メニューの生成(buildQuickControls)より前に決まっている必要がある。
@@ -993,9 +982,7 @@ function createWindow(url, opts = {}) {
   const defaultLight = isYouTube || isKick || (isTwitch && opts.light === undefined);
   win.light = (defaultLight || !!opts.light) && !!toLightUrl(url);
   pushWinHistory(win, url); // ⋮メニューの「戻る」用。最初のページを起点にする
-  if (win.light && lightBtn) lightBtn.classList.add('active');
   updateWinTitle(win);
-  syncLightBtn(win);
 
   // 新規枠は中央付近からカスケード(少しずつ右下へずらして)出す。全部中央に重ねると見づらいため。
   // (枠一覧/パフォーマンス等の機能パネルは中央に出す=別扱い。centerPanel)
@@ -1101,61 +1088,7 @@ function hostOf(url) {
   }
 }
 
-// ====== Kick: HLS 直再生 ======
-
-// チャンネルの HLS 再生URLを background(SW)経由で取得し、hls.js で video に流す。
-function setupKickVideo(video, url, body) {
-  const channel = kickChannelOf(url);
-  if (!channel) {
-    showVideoError(body, 'Kick はチャンネルURL(kick.com/<channel>)を入れてください');
-    return;
-  }
-  MV.runtime
-    .sendMessage({ type: 'get-kick-playback', channel })
-    .then((resp) => {
-      if (!resp || !resp.ok) {
-        const m = resp && resp.error ? resp.error.message || JSON.stringify(resp.error) : '不明';
-        showVideoError(body, 'Kick 再生URL取得に失敗: ' + m);
-        return;
-      }
-      playHls(video, resp.playbackUrl, body);
-    })
-    .catch((e) => showVideoError(body, 'Kick 取得エラー: ' + e.message));
-}
-
-function playHls(video, src, body) {
-  // Chrome は HLS ネイティブ非対応。Safari 等のため native を一応分岐し、通常は hls.js。
-  if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = src;
-    video.play().catch(() => {});
-    return;
-  }
-  if (typeof Hls === 'undefined' || !Hls.isSupported()) {
-    showVideoError(body, 'この環境は HLS 再生に未対応(hls.js 未読込)');
-    return;
-  }
-  // capLevelToPlayerSize: PC はサイズ変化で別品質の再取得をしない(無駄/事故防止)が、
-  // スマホはデコード負荷が支配的なので、枠サイズ相応の画質へ自動で抑える。
-  // worker: MV3 の CSP(script-src 'self')は blob worker を弾くため、同梱の hls.worker.js を
-  // workerPath で明示して別スレッド解析にする(メインスレッドのカクつき軽減。失敗時は
-  // hls.js が自動でメインスレッドへフォールバックする)。
-  // スマホはさらにバッファを短くしてメモリを節約する。
-  const hls = new Hls({
-    capLevelToPlayerSize: IS_COARSE,
-    enableWorker: true,
-    workerPath: 'hls.worker.js',
-    ...(IS_COARSE ? { maxBufferLength: 15, backBufferLength: 30 } : {})
-  });
-  hls.on(Hls.Events.ERROR, (_evt, data) => {
-    if (data && data.fatal) {
-      showVideoError(body, 'HLS エラー: ' + data.type + ' / ' + data.details);
-    }
-  });
-  hls.loadSource(src);
-  hls.attachMedia(video);
-  video.play().catch(() => {});
-  video._hls = hls;
-}
+// ====== Kick ======
 
 function kickChannelOf(url) {
   try {
@@ -1175,13 +1108,6 @@ function kickWatchChannel(url) {
   if (!hostOf(url).includes('kick.com')) return '';
   const ch = kickChannelOf(url);
   return ch && !KICK_NON_CHANNEL.includes(ch.toLowerCase()) ? ch : '';
-}
-
-function showVideoError(body, msg) {
-  const d = document.createElement('div');
-  d.className = 'win-error';
-  d.textContent = msg;
-  body.appendChild(d);
 }
 
 // ====== 位置・サイズ ======
@@ -1736,9 +1662,9 @@ function focusWindow(win) {
   if (dp && !dp.hidden) renderDanmakuPanel(); // 開いていれば適用先ドロップダウンのラベル等を最新化
 }
 
-// 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
+// 枠の主メディア(iframe)。色調整はここに CSS filter を当てる。
 function mediaEl(win) {
-  return win.video || win.frame || null;
+  return win.frame || null;
 }
 
 // 明るさ/コントラスト/彩度を CSS filter で適用。cross-origin iframe にも描画結果として効く。
@@ -2335,7 +2261,6 @@ function toggleDanmaku(win) {
 function sendDanmakuEnabled(win, on) {
   // コメントを持っているのは、サイトを丸ごと出している枠か、横に並べたチャット枠のどちらか。
   // YouTube は埋め込みプレイヤー+ live_chat の2枚組なので、映像側だけに送ると届かない。
-  // Kick の映像は <video> 直再生で frame を持たないが、チャット枠はあるのでそちらへ送る。
   const targets = [win.frame, win.chatFrame].filter(Boolean);
   for (const f of targets) {
     try {
@@ -3220,7 +3145,6 @@ function loginDomainOf(host) {
 // 開けないようにする(押しても意味のない操作を残さない)。
 function hasChatContent(win) {
   if (!win.chatFrame) return false;
-  if (win.video) return true; // Kick は生成時にチャットを読み込んでいる
   return !!win.light && !win.chatUnavailable && !win.chatPending;
 }
 
@@ -3283,7 +3207,7 @@ function mountSiteFrame(win) {
     syncFrameDelay(win);    // 遅延を指定してあれば付け直す
     hideWinLoading(win); // 読み込み中スピナーを消す(出ていれば)
   });
-  const src = (win.light && toLightUrl(win.url)) || toEmbedUrl(win.url);
+  const src = (win.light && toLightUrl(win.url)) || win.url;
   // ログインCookieを埋め込みへ通す(SameSite緩和)。対象サイトのみ(src 基準で判定)。
   const loginDomain = loginDomainOf(hostOf(src));
   if (loginDomain) {
@@ -3300,7 +3224,7 @@ function mountSiteFrame(win) {
 // 読み込む前に service worker へ問い合わせ、ライブ / 過去のライブ / 無し を確定させる。
 function mountChatFrame(win) {
   const chat = win.chatFrame;
-  if (!chat || win.video) return; // Kick のチャットは生成時に読み込み済み
+  if (!chat) return;
   if (!win.light) {
     // 通常表示(サイト全体)はページ自身がチャットを持つので、こちらの列は使わない。
     chat.src = 'about:blank';
@@ -3394,22 +3318,9 @@ function remountFrame(win) {
 
 
 
-// ⚡ボタン(台形ヘッダ/⋮メニュー両方)の活性・文言を現在の状態・URLに合わせる。
-function syncLightBtn(win) {
-  // 切替の UI は置いていないので、ここでやることは無い。左上のバッジの文言だけ
-  // updateWinTitle が現在の状態から作る。
-}
-
-// 枠をその場で再読込する(🔄)。iframe は作り直し、Kick は HLS を貼り直す。
+// 枠をその場で再読込する(🔄)。iframe を作り直す。
 function reloadWindow(win) {
-  if (win.frame) {
-    remountFrame(win); // 現在の win.url(と軽量モード)で iframe を作り直す
-  } else if (win.video) {
-    const media = win.video.parentElement;
-    if (win.video._hls) { try { win.video._hls.destroy(); } catch (e) { /* noop */ } win.video._hls = null; }
-    if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
-    setupKickVideo(win.video, win.url, media);
-  }
+  if (win.frame) remountFrame(win); // 現在の win.url(と軽量モード)で iframe を作り直す
   // チャットは映像とは別のフレームなので、映像だけ作り直しても止まったままになる。
   // 「再読み込み」を押す場面はたいていチャットが固まった時なので、こちらも読み直す。
   reloadChatFrame(win);
@@ -3439,8 +3350,6 @@ function openOriginal(win) {
 
 function closeWindow(win) {
   // 遅延読み込み待ちのまま閉じられた枠を、あとから loadWindowMedia が読み込んでしまうのを防ぐ。
-  // Kick 枠だと破棄できない Hls インスタンスが生まれ、タブを閉じるまでセグメント取得が続く
-  // (この枠は既に wins から外れるので closeWindow の destroy は二度と走らない)。
   win.pendingLoad = false;
   clearStackMax(win); // 全画面のまま閉じても body の状態を残さない
   hideWinLoading(win); // 読み込み待ち中に閉じてもスピナー/保険タイマーを残さない
@@ -3460,9 +3369,6 @@ function closeWindow(win) {
   const sameSiteSurvivors = wins.filter((w) => w !== win && w.frame && hostOf(w.url) === closedHost);
   const wasSinkOwner = sameSiteSurvivors.length > 0 && sameSiteSurvivors.every((w) => wins.indexOf(w) > closedIdx);
   if (closedIdx >= 0) wins.splice(closedIdx, 1);
-  if (win.video && win.video._hls) {
-    try { win.video._hls.destroy(); } catch (e) { /* noop */ }
-  }
   win.el.remove();
   if (activeWin === win) {
     activeWin = null;
@@ -3569,16 +3475,11 @@ function syncMasterUI() {
 // プレイヤーUIへ触れないため、スライダーだけで確実に音が出る/消えることを保証する。
 // 「1つだけ聞く」は他の枠の音量を 0 にして行う(プレイヤー自前のミュートには頼らない)。
 // マスタを動かすと全枠が同倍率で増減 → 枠ごとの大小関係(win.vol の比)は保たれる。
-// 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
+// 実際に video.volume を当てるのは枠の中の content script。
 function applyVolume(win, v) {
   // 非表示でも音は止めない(👁は見た目を消すだけ)。実音量 = 枠ごと音量 × マスタ。
   const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * v));
-  if (win.video) {
-    try {
-      win.video.volume = eff;
-      win.video.muted = eff <= 0;
-    } catch (e) { /* noop */ }
-  } else if (win.frame) {
+  if (win.frame) {
     try {
       win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: eff }, '*');
     } catch (e) { /* noop */ }
@@ -4207,22 +4108,7 @@ function toggleHidden(win) { win.hidden ? showWindow(win) : hideWindow(win); }
 
 // まだ読み込んでいない枠(起動時に隠れた状態で復元された枠)を win.url から読み込む。読込済みなら何もしない。
 function resumeMedia(win) {
-  if (win.video) {
-    if (!win.video._hls && !win.video.src) {
-      const media = win.video.parentElement;
-      if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
-      setupKickVideo(win.video, win.url, media);
-    }
-    if (win.chatFrame) {
-      const channel = kickChannelOf(win.url);
-      const src = win.chatFrame.getAttribute('src');
-      if (channel && (!src || src === 'about:blank')) {
-        loadFrameWithLogin(win.chatFrame, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
-      }
-    }
-  } else if (!win.frame) {
-    mountSiteFrame(win);
-  }
+  if (!win.frame) mountSiteFrame(win);
 }
 
 // ====== 読み込み中スピナー / 遅延読み込み ======
@@ -4247,13 +4133,10 @@ function hideWinLoading(win) {
 }
 
 // 遅延読み込み(deferLoad)で待たせていた枠の中身を、今このタイミングで読み込む。
-// スピナーは読み込み完了(iframe load / video の loadeddata)か、保険タイマーで消す。
+// スピナーは読み込み完了(iframe load)か、保険タイマーで消す。
 function loadWindowMedia(win) {
   if (!win || !win.pendingLoad) return;
   win.pendingLoad = false;
-  if (win.video) {
-    win.video.addEventListener('loadeddata', () => hideWinLoading(win), { once: true });
-  }
   // iframe は mountSiteFrame の load ハンドラが hideWinLoading を呼ぶ。
   win.loadingTimer = setTimeout(() => hideWinLoading(win), LOAD_SPINNER_FALLBACK_MS);
   resumeMedia(win);
@@ -5083,12 +4966,6 @@ function setupPerfPanel() {
 }
 
 // ====== URL ヘルパ ======
-
-// iframe で開くサイトの src 変換用(現状は変換不要。Kick は iframe を使わず video 直再生に
-// 分岐済み)。将来サイト別の埋め込みURL変換が要るときの拡張ポイント。
-function toEmbedUrl(rawUrl) {
-  return rawUrl;
-}
 
 // 軽量プレイヤー(⚡)用: 視聴ページの URL を各サイトの公式埋め込みプレイヤー URL に変換する。
 // フルサイトの SPA を丸ごと読まずプレイヤーだけになるので、1枠あたりの負荷が大きく下がる。

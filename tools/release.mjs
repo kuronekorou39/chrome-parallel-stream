@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const p = (...a) => join(ROOT, ...a);
 
-// 拡張機能として必要なファイルだけを入れる。ページ側の資産(multiview.*, ext-bridge.js, hls.*)は
+// 拡張機能として必要なファイルだけを入れる。ページ側の資産(multiview.*, ext-bridge.js)は
 // GitHub Pages が配るので同梱しない。README/ログ/スクリーンショットも入れない。
 const PACK = [
   'manifest.json',
@@ -38,7 +38,6 @@ const PACK = [
   'icon-48.png',
   'icon-128.png',
   'LICENSE',
-  'THIRD-PARTY-NOTICES.md',
 ];
 
 const args = process.argv.slice(2);
