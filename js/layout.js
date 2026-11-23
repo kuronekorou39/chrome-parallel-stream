@@ -201,11 +201,6 @@ function layoutByVolume() {
   const items = vis
     .map((win) => ({ win, r: Math.sqrt(Math.max(VOL_LAYOUT_FLOOR, win.vol != null ? win.vol : WIN_VOLUME_DEFAULT)) }))
     .sort((a, b) => b.r - a.r);
-  if (volumeOverlap) {
-    fillVolumeOverlap(items);
-    saveLineup();
-    return;
-  }
 
   // 画面に収まる範囲でいちばん大きい倍率を探す(行の折り返しが飛び飛びに変わるので二分探索)。
   let lo = 10, hi = Math.max(H, W), best = null;
@@ -221,61 +216,80 @@ function layoutByVolume() {
   // 並べても意味が無い)。詰める計算も同じ大きさで行うので、枠どうしは重ならない。
   const heightOf = (it) => Math.max(MIN_H, best.base * it.r);
   let y = gap + Math.max(0, (H - best.totalH) / 2); // 余りは上下に散らす
+  const placed = []; // 音量の大きい順
   best.rows.forEach((row) => {
     const rowH = Math.max(...row.items.map(heightOf));
     let x = gap + Math.max(0, (W - row.w) / 2); // 行は横中央へ
     row.items.forEach((it) => {
       const h = heightOf(it);
       const w = h * VOL_LAYOUT_ASPECT;
-      it.win.maximized = false;
-      setRect(it.win, Math.round(x), Math.round(y + (rowH - h) / 2), Math.round(w), Math.round(h));
+      placed.push({ win: it.win, r: it.r, x, y: y + (rowH - h) / 2, w, h });
       x += w + gap;
     });
     y += rowH + gap;
   });
+  if (volumeOverlap) {
+    growWithOverlap(placed, overlapLimits(placed.map((p) => p.r)), stage.clientWidth, stage.clientHeight, VOL_LAYOUT_ASPECT);
+    // 音量の大きい枠ほどよく見たいので手前に置く。
+    [...placed].reverse().forEach((p) => { p.win.el.style.zIndex = ++zCounter; });
+  }
+  placed.forEach((p) => {
+    p.win.maximized = false;
+    setRect(p.win, Math.round(p.x), Math.round(p.y), Math.round(p.w), Math.round(p.h));
+  });
   saveLineup();
 }
 
-// 「重ねて隙間を埋める」音量順。画面を音量の比率で隙間なく区画に割り、各枠をその区画を覆う 16:9 に
-// 広げる。全区画が覆われるので隙間は出ない。音量の小さい枠が隠れないよう、小さいほど手前に置く。
-function fillVolumeOverlap(items) {
-  const W = stage.clientWidth;
-  const H = stage.clientHeight;
-  volumeCells(items, 0, 0, W, H).forEach(({ item, ...cell }) => {
-    const r = coverRect(cell, W, H, VOL_LAYOUT_ASPECT, MIN_W, MIN_H);
-    item.win.maximized = false;
-    setRect(item.win, r.x, r.y, r.w, r.h);
-    item.win.el.style.zIndex = ++zCounter; // items は音量の大きい順
+// 「重ねて隙間を埋める」で、枠の面積のうち他の枠と重なってよい割合。音量が大きいほど見たいので厳しくする。
+const VOL_OVERLAP_LOUDEST = 0.2;
+const VOL_OVERLAP_QUIETEST = 0.6;
+function overlapLimits(sizes) {
+  const max = Math.max(...sizes), min = Math.min(...sizes);
+  return sizes.map((s) => {
+    const t = max === min ? 1 : (s - min) / (max - min); // 全部同じ音量なら、全部「一番大きい枠」扱い
+    return VOL_OVERLAP_QUIETEST + (VOL_OVERLAP_LOUDEST - VOL_OVERLAP_QUIETEST) * t;
   });
 }
 
-// 矩形を、重み(r の 2 乗 = 音量)の合計が半々に近くなるよう再帰的に二分する。順序は items のまま。
-function volumeCells(items, x, y, w, h) {
-  if (items.length === 1) return [{ item: items[0], x, y, w, h }];
-  const weightOf = (it) => it.r * it.r;
-  const total = items.reduce((sum, it) => sum + weightOf(it), 0);
-  let k = 1, acc = weightOf(items[0]);
-  while (k < items.length - 1 && Math.abs(acc + weightOf(items[k]) - total / 2) < Math.abs(acc - total / 2)) {
-    acc += weightOf(items[k]);
-    k++;
-  }
-  const head = items.slice(0, k), tail = items.slice(k), ratio = acc / total;
-  if (w / h >= VOL_LAYOUT_ASPECT) { // 横に余るなら左右に割る
-    const wa = w * ratio;
-    return [...volumeCells(head, x, y, wa, h), ...volumeCells(tail, x + wa, y, w - wa, h)];
-  }
-  const ha = h * ratio;
-  return [...volumeCells(head, x, y, w, ha), ...volumeCells(tail, x, y + ha, w, h - ha)];
-}
+// 重ならない配置を起点に、各枠を同じ比率で少しずつ広げる(rects を書き換える)。
+// 広げる向きは、他の枠との重なりが最も増えない向き。どれかの枠が上限を超えるなら、その枠はそこで止める。
+// 重なりは相手ごとの面積の合計で測る(実際の重なり以上の値になるので、上限を超えることはない)。
+function growWithOverlap(rects, limits, W, H, aspect) {
+  const GROW_STEP = 1.02;
+  const MAX_ROUNDS = 200;
+  const ANCHORS = [0, 0.5, 1];
+  const shared = (a, b) =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
+    Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const sharedOf = (list, i) => list.reduce((sum, o, j) => (j === i ? sum : sum + shared(list[i], o)), 0);
+  const withinLimits = (list) => list.every((r, i) => sharedOf(list, i) <= limits[i] * r.w * r.h);
 
-// 区画を覆う、比率 aspect の矩形を返す(区画の中心に置き、画面 W×H の中に収める)。
-// 画面に入らないときだけ比率を崩す(覆うほうを優先)。
-function coverRect(cell, W, H, aspect, minW, minH) {
-  const w = Math.min(W, Math.max(minW, cell.w, cell.h * aspect));
-  const h = Math.min(H, Math.max(minH, cell.h, cell.w / aspect));
-  const x = Math.floor(Math.max(0, Math.min(W - w, cell.x + (cell.w - w) / 2)));
-  const y = Math.floor(Math.max(0, Math.min(H - h, cell.y + (cell.h - h) / 2)));
-  return { x, y, w: Math.min(W - x, Math.ceil(w) + 1), h: Math.min(H - y, Math.ceil(h) + 1) }; // +1 は切り捨てぶんの隙間を防ぐ
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    let grew = false;
+    rects.forEach((r, i) => {
+      const w = r.w * GROW_STEP;
+      const h = w / aspect;
+      if (w > W || h > H) return;
+      let best = null;
+      for (const ax of ANCHORS) {
+        for (const ay of ANCHORS) {
+          const next = {
+            x: Math.max(0, Math.min(W - w, r.x - (w - r.w) * ax)),
+            y: Math.max(0, Math.min(H - h, r.y - (h - r.h) * ay)),
+            w, h
+          };
+          const list = rects.map((o, j) => (j === i ? next : o));
+          if (!withinLimits(list)) continue;
+          const cost = sharedOf(list, i);
+          if (!best || cost < best.cost) best = { next, cost };
+        }
+      }
+      if (!best) return;
+      Object.assign(r, best.next);
+      grew = true;
+    });
+    if (!grew) break;
+  }
 }
 
 // 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
