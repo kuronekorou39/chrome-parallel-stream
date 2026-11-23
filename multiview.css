@@ -789,8 +789,9 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
   top: auto; right: auto; bottom: 8px; left: 10px;
 }
 
-/* 右下の丸ボタン(追加/一覧/整列の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)、その隣が一覧。
-   全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは整列が無意味なので ⊞ を隠す。 */
+/* 右下の丸ボタン(追加/一覧/配置の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)、その隣が一覧。
+   全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは配置を使わないので隠す。
+   自動配置がオンの間は、配置ボタンを緑にして状態を見せる。 */
 #quick-actions {
   position: fixed; right: 12px; bottom: 12px; z-index: 100001;
   display: flex; flex-direction: row; gap: 10px;
@@ -807,7 +808,8 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 #qa-add { background: rgba(31,111,235,0.92); border-color: #388bfd; color: #fff; }
 #qa-add:hover { background: #388bfd; border-color: #58a6ff; }
 body.has-stack-max #quick-actions { display: none; }
-body.stack-mode #qa-tile { display: none; }
+body.stack-mode #qa-layout { display: none; }
+#qa-layout.auto-on { border-color: #3fb950; color: #3fb950; }
 
 /* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
    backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */
@@ -1123,10 +1125,6 @@ body.idle #main-menu-backdrop { pointer-events: none; }
 /* 追加/配置は overlay 透明・中パネルのみ操作可なので、中パネルの操作も idle 中は無効化する。 */
 body.idle #add-dialog.pos-dialog-overlay.open .pos-dialog,
 body.idle #layout-dialog.pos-dialog-overlay.open .pos-dialog { pointer-events: none; }
-
-/* スマホ(縦積み)では「配置」は使わない(整列/整形/座標保存は自由配置=PC向け)。≡メニューから隠す。
-   タッチPC(coarse だが広い=非 stack)では配置は使えるので、メディアではなく body.stack-mode で判定する。 */
-body.stack-mode #mm-layout { display: none; }
 
 /* ===== スマホ/タッチ環境 ===== */
 /* 主ポインタが指(pointer: coarse)か画面が狭いときは、文字とタップ目標をひと回り大きくする。 */

@@ -39,8 +39,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectMoved'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectMoved, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -133,9 +133,10 @@ test('autoLayoutModeOf: 知らない値はオフにする', () => {
   assert.equal(f.autoLayoutModeOf(undefined), 'off');
 });
 
-test('rectMoved: 位置か大きさが変わったときだけ true', () => {
+test('rectResized: 大きさが変わったときだけ true(移動だけなら false)', () => {
   const r = { x: 1, y: 2, w: 3, h: 4 };
-  assert.equal(f.rectMoved(r, { ...r }), false);
-  assert.equal(f.rectMoved(r, { ...r, x: 9 }), true);
-  assert.equal(f.rectMoved(r, { ...r, h: 9 }), true);
+  assert.equal(f.rectResized(r, { ...r }), false);
+  assert.equal(f.rectResized(r, { ...r, x: 9, y: 9 }), false);
+  assert.equal(f.rectResized(r, { ...r, w: 9 }), true);
+  assert.equal(f.rectResized(r, { ...r, h: 9 }), true);
 });

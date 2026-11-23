@@ -23,7 +23,7 @@
 
 **枠を追加** — 右下の `＋` から、サイトのボタンか URL で
 
-<img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左下に ≡ メニュー、右下に丸ボタン(整列・一覧・追加)と「枠を追加」ダイアログ">
+<img src="docs/images/01-empty.jpg" alt="枠がまだ無い状態。左下に ≡ メニュー、右下に丸ボタン(配置・一覧・追加)と「枠を追加」ダイアログ">
 
 **4枠** — 枠一覧で音量、配置パネルで整列
 
@@ -77,7 +77,7 @@
 
 ## インストール
 
-1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-1.0.2.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
+1. **[ZIP をダウンロード](https://kuronekorou39.github.io/chrome-parallel-stream/dist/parallel-stream-1.0.3.zip)**して、右クリック →「すべて展開」でフォルダを取り出す
 2. Chrome のアドレスバーに `chrome://extensions` と入れて開く
 3. 右上の「**デベロッパー モード**」を ON にする
 4. 左上に出てくる「**パッケージ化されていない拡張機能を読み込む**」を押して、1 で展開したフォルダを選ぶ

@@ -255,7 +255,7 @@ const stackMq = window.matchMedia('(pointer: coarse) and (max-width: 940px)');
 let stackMode = false;
 
 // 自動配置: 枠の増減や画面サイズの変更があったら、選んだ方式で並べ直す。定期実行はしない。
-// 手で動かした配置を勝手に戻さないよう、移動・リサイズ・最大化・別の配置の実行でオフになる。
+// 手で決めた大きさを勝手に戻さないよう、リサイズ・最大化・別の配置の実行でオフになる(移動だけなら続く)。
 // init の同期部分から参照されうるので、ここ=init より前で初期化する。
 const AUTO_LAYOUT_KEY = 'autoLayoutMode';
 const AUTO_LAYOUT_MODES = ['off', 'tile', 'volume'];
@@ -457,7 +457,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.2';
+const EXPECTED_EXT_VERSION = '1.0.3';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -807,7 +807,7 @@ async function applyLayout(layout) {
 
 // 配置ダイアログ(#layout-dialog)の開閉と、保存済み一覧の描画。
 function openLayoutDialog() {
-  if (stackMode) return; // スマホ(縦積み)では配置は使わない(メニューでも隠しているが念のため)
+  if (stackMode) return; // スマホ(縦積み)では配置は使わない(丸ボタンも隠しているが念のため)
   const dlg = document.getElementById('layout-dialog');
   if (!dlg) return;
   if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
@@ -1788,8 +1788,6 @@ function finishStackDrag() {
   if (d.mode === 'stack') {
     relayoutStack(); // reordering のアニメが残っている間に席へ滑り込む
     setTimeout(() => document.body.classList.remove('reordering'), 200);
-  } else if (d.lastX !== d.startX || d.lastY !== d.startY) {
-    stopAutoLayout(); // 長押しだけで動かしていないときは、オフにしない
   }
   saveLineup();
   renderMixer();
@@ -2937,7 +2935,6 @@ function makeBarHandle(win, bar) {
     }, () => {
       bar.classList.remove('sliding');
       if (slideMode) return; // スライドのみのときは保存しない
-      if (rectMoved(r, getRect(win))) stopAutoLayout();
       saveLineup(); // 枠を動かしたら位置を保存
     });
   });
@@ -2967,7 +2964,7 @@ function beginResize(win, dir, e) {
     if (dir.includes('n')) { h = Math.max(MIN_H, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
     setRect(win, x, y, w, h);
   }, () => {
-    if (rectMoved(r, getRect(win))) stopAutoLayout();
+    if (rectResized(r, getRect(win))) stopAutoLayout();
     saveLineup(); // リサイズ後のサイズ・位置を保存
   });
 }
@@ -3033,8 +3030,8 @@ function autoLayoutModeOf(v) {
   return AUTO_LAYOUT_MODES.includes(v) ? v : 'off';
 }
 
-function rectMoved(a, b) {
-  return a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
+function rectResized(a, b) {
+  return a.w !== b.w || a.h !== b.h;
 }
 
 function syncAutoLayoutUI() {
@@ -3043,8 +3040,12 @@ function syncAutoLayoutUI() {
     btn.classList.toggle('on', on);
     btn.setAttribute('aria-pressed', String(on));
   });
-  const val = document.getElementById('mm-layout-val');
-  if (val) val.textContent = AUTO_LAYOUT_LABELS[autoLayout] || '';
+  const qa = document.getElementById('qa-layout');
+  if (!qa) return;
+  const label = AUTO_LAYOUT_LABELS[autoLayout];
+  qa.classList.toggle('auto-on', !!label);
+  qa.title = label ? '配置(' + label + ')' : '配置';
+  qa.setAttribute('aria-label', qa.title);
 }
 
 function setAutoLayout(mode) {
@@ -4528,7 +4529,7 @@ function wireToolbar() {
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
-  document.getElementById('qa-tile').addEventListener('click', () => runManualLayout('tile', tileAll)); // 右下の丸ボタン(⊞)
+  document.getElementById('qa-layout').addEventListener('click', openLayoutDialog); // 右下の丸ボタン(配置)
   // 右下の丸ボタン(一覧)。開閉の切替は #mixer-btn と同じ処理に任せる。
   document.getElementById('qa-mixer').addEventListener('click', () => document.getElementById('mixer-btn').click());
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
@@ -4611,7 +4612,7 @@ function wireToolbar() {
 
 // ====== スマホ用メインメニュー(縦リスト) ======
 // スマホ(縦積み)ではツールバーのバー表示をやめ、≡ から右クリックメニュー風の縦リストを出す。
-// 項目: 配置・弾幕・チャット・パフォーマンス・ログインCookie(追加と一覧は右下の丸ボタン、音量/並びはミキサー、軽量は各枠のバッジ)。
+// 項目: 弾幕・チャット・パフォーマンス・ログインCookie(追加・一覧・配置は右下の丸ボタン、音量/並びはミキサー、軽量は各枠のバッジ)。
 // 機能は既存ツールバーボタンを programmatic click して呼ぶ(状態・ロジックの二重化を避ける)。
 
 // ≡メニューの「弾幕」「チャット」に現在の全体既定を出す(値 + ON のときは緑)。
@@ -4657,7 +4658,6 @@ function setupMainMenu() {
       if (stackMode) toggleMainMenu(false);
       fn();
     });
-  act('mm-layout', openLayoutDialog);
   // 弾幕/チャットは全枠まとめて切り替え、そのまま次に追加する枠の既定にもなる。
   // 押しても閉じない(見比べながら両方を切り替えることが多いため)。
   mkAct('mm-danmaku-all', () => setAllDanmaku(!danmakuDefaultOn));
