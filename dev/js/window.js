@@ -442,6 +442,10 @@ function hideWindow(win) {
   saveLineup();
 }
 function showWindow(win) {
+  if (win.autoHidden) { // 自動で隠した枠を手で出した = 終わっていても見ていたい
+    win.autoHidden = false;
+    win.stayVisible = true;
+  }
   win.hidden = false;
   win.el.style.display = '';
   resumeMedia(win); // 未読込(起動時の休止枠)なら読み込む。読込済みなら何もしない=再読み込みされない

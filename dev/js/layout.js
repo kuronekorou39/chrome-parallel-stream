@@ -78,6 +78,11 @@ function syncAutoLayoutUI() {
   qa.setAttribute('aria-label', qa.title);
 }
 
+function syncLayoutOptionsUI() {
+  document.getElementById('layout-overlap').checked = volumeOverlap;
+  document.getElementById('layout-hide-ended').checked = autoHideEnded;
+}
+
 function setAutoLayout(mode) {
   autoLayout = autoLayoutModeOf(mode);
   panelsNeedAvoid = true;
@@ -196,6 +201,11 @@ function layoutByVolume() {
   const items = vis
     .map((win) => ({ win, r: Math.sqrt(Math.max(VOL_LAYOUT_FLOOR, win.vol != null ? win.vol : WIN_VOLUME_DEFAULT)) }))
     .sort((a, b) => b.r - a.r);
+  if (volumeOverlap) {
+    fillVolumeOverlap(items);
+    saveLineup();
+    return;
+  }
 
   // 画面に収まる範囲でいちばん大きい倍率を探す(行の折り返しが飛び飛びに変わるので二分探索)。
   let lo = 10, hi = Math.max(H, W), best = null;
@@ -224,6 +234,48 @@ function layoutByVolume() {
     y += rowH + gap;
   });
   saveLineup();
+}
+
+// 「重ねて隙間を埋める」音量順。画面を音量の比率で隙間なく区画に割り、各枠をその区画を覆う 16:9 に
+// 広げる。全区画が覆われるので隙間は出ない。音量の小さい枠が隠れないよう、小さいほど手前に置く。
+function fillVolumeOverlap(items) {
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  volumeCells(items, 0, 0, W, H).forEach(({ item, ...cell }) => {
+    const r = coverRect(cell, W, H, VOL_LAYOUT_ASPECT, MIN_W, MIN_H);
+    item.win.maximized = false;
+    setRect(item.win, r.x, r.y, r.w, r.h);
+    item.win.el.style.zIndex = ++zCounter; // items は音量の大きい順
+  });
+}
+
+// 矩形を、重み(r の 2 乗 = 音量)の合計が半々に近くなるよう再帰的に二分する。順序は items のまま。
+function volumeCells(items, x, y, w, h) {
+  if (items.length === 1) return [{ item: items[0], x, y, w, h }];
+  const weightOf = (it) => it.r * it.r;
+  const total = items.reduce((sum, it) => sum + weightOf(it), 0);
+  let k = 1, acc = weightOf(items[0]);
+  while (k < items.length - 1 && Math.abs(acc + weightOf(items[k]) - total / 2) < Math.abs(acc - total / 2)) {
+    acc += weightOf(items[k]);
+    k++;
+  }
+  const head = items.slice(0, k), tail = items.slice(k), ratio = acc / total;
+  if (w / h >= VOL_LAYOUT_ASPECT) { // 横に余るなら左右に割る
+    const wa = w * ratio;
+    return [...volumeCells(head, x, y, wa, h), ...volumeCells(tail, x + wa, y, w - wa, h)];
+  }
+  const ha = h * ratio;
+  return [...volumeCells(head, x, y, w, ha), ...volumeCells(tail, x, y + ha, w, h - ha)];
+}
+
+// 区画を覆う、比率 aspect の矩形を返す(区画の中心に置き、画面 W×H の中に収める)。
+// 画面に入らないときだけ比率を崩す(覆うほうを優先)。
+function coverRect(cell, W, H, aspect, minW, minH) {
+  const w = Math.min(W, Math.max(minW, cell.w, cell.h * aspect));
+  const h = Math.min(H, Math.max(minH, cell.h, cell.w / aspect));
+  const x = Math.floor(Math.max(0, Math.min(W - w, cell.x + (cell.w - w) / 2)));
+  const y = Math.floor(Math.max(0, Math.min(H - h, cell.y + (cell.h - h) / 2)));
+  return { x, y, w: Math.min(W - x, Math.ceil(w) + 1), h: Math.min(H - y, Math.ceil(h) + 1) }; // +1 は切り捨てぶんの隙間を防ぐ
 }
 
 // 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
@@ -257,6 +309,13 @@ function setupLayoutDialog() {
     box.addEventListener('change', () => setAutoLayout(box.checked ? box.dataset.auto : 'off'));
   });
   syncAutoLayoutUI();
+  document.getElementById('layout-overlap').addEventListener('change', (e) => {
+    volumeOverlap = e.target.checked;
+    try { MV.storage.local.set({ [VOLUME_OVERLAP_KEY]: volumeOverlap }); } catch (err) { /* noop */ }
+    if (autoLayout === 'volume') runAutoLayout();
+  });
+  document.getElementById('layout-hide-ended').addEventListener('change', (e) => setAutoHideEnded(e.target.checked));
+  syncLayoutOptionsUI();
   const nameInput = document.getElementById('layout-name');
   const save = document.getElementById('layout-save');
   const doSave = async () => {

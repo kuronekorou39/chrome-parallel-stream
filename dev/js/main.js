@@ -49,6 +49,10 @@
   const autoData = await MV.storage.local.get(AUTO_LAYOUT_KEY);
   autoLayout = autoLayoutModeOf(autoData[AUTO_LAYOUT_KEY]);
   syncAutoLayoutUI();
+  const layoutOpts = await MV.storage.local.get([VOLUME_OVERLAP_KEY, AUTO_HIDE_ENDED_KEY]);
+  volumeOverlap = layoutOpts[VOLUME_OVERLAP_KEY] === true;
+  autoHideEnded = layoutOpts[AUTO_HIDE_ENDED_KEY] !== false; // 既定はオン
+  syncLayoutOptionsUI();
 
   // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
   if (saved.danmakuGlobal) dmkGlobal = Object.assign({}, DMK_DEFAULTS, dmkSanitize(saved.danmakuGlobal));
