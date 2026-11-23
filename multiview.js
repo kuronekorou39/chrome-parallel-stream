@@ -457,7 +457,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.3';
+const EXPECTED_EXT_VERSION = '1.0.4';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3115,7 +3115,8 @@ function tileAll() {
 // 行を横幅いっぱいに引き伸ばす方式(写真の敷き詰め)も試したが、行ごとに倍率が変わるせいで
 // 「同じ音量なのに大きさが違う」が起きるので採らない。面積を音量に正確に比例させるほうを優先し、
 // 余りは中央寄せで余白として見せる(隙間なく敷き詰めることとは両立しない)。
-const VOL_LAYOUT_FLOOR = 0.25;   // 音量0の枠の重み。0にすると消えてしまうので下限を置く
+// 重みの下限。0 だと消えるので置くが、高くすると、それ以下の音量をいくら変えても大きさが変わらなくなる。
+const VOL_LAYOUT_FLOOR = 0.04;
 const VOL_LAYOUT_ASPECT = 16 / 9; // 配信は横長。枠はこの比を保つ
 function layoutByVolume() {
   if (stackMode) { relayoutStack(); return; } // 縦積みは全幅固定なので大きさを変えられない
@@ -3133,22 +3134,23 @@ function layoutByVolume() {
   let lo = 10, hi = Math.max(H, W), best = null;
   for (let i = 0; i < 30; i++) {
     const base = (lo + hi) / 2;
-    const p = packVolumeRows(items, W, gap, base);
+    const p = packVolumeRows(items, W, gap, base, MIN_H);
     if (p.totalH <= H && p.rows.every((row) => row.w <= W)) { best = { rows: p.rows, totalH: p.totalH, base }; lo = base; }
     else { hi = base; }
   }
-  if (!best) { const p = packVolumeRows(items, W, gap, 60); best = { rows: p.rows, totalH: p.totalH, base: 60 }; }
+  if (!best) { const p = packVolumeRows(items, W, gap, 60, MIN_H); best = { rows: p.rows, totalH: p.totalH, base: 60 }; }
 
+  // 音量が小さすぎる枠は最小サイズで止める(そのぶん面積の比例は崩れるが、読めない大きさで
+  // 並べても意味が無い)。詰める計算も同じ大きさで行うので、枠どうしは重ならない。
+  const heightOf = (it) => Math.max(MIN_H, best.base * it.r);
   let y = gap + Math.max(0, (H - best.totalH) / 2); // 余りは上下に散らす
   best.rows.forEach((row) => {
-    const rowH = Math.max(...row.items.map((it) => best.base * it.r));
+    const rowH = Math.max(...row.items.map(heightOf));
     let x = gap + Math.max(0, (W - row.w) / 2); // 行は横中央へ
     row.items.forEach((it) => {
-      const h = best.base * it.r;
+      const h = heightOf(it);
       const w = h * VOL_LAYOUT_ASPECT;
       it.win.maximized = false;
-      // setRect が最小サイズ(MIN_W/MIN_H)で下限を切るので、音量が小さすぎる枠も潰れない
-      // (そのぶん面積の比例は崩れるが、読めない大きさで並べても意味が無い)。
       setRect(it.win, Math.round(x), Math.round(y + (rowH - h) / 2), Math.round(w), Math.round(h));
       x += w + gap;
     });
@@ -3158,18 +3160,20 @@ function layoutByVolume() {
 }
 
 // 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
-function packVolumeRows(items, W, gap, base) {
+// minH = 枠の高さの下限(これより小さくは置かない)。
+function packVolumeRows(items, W, gap, base, minH = 0) {
+  const heightOf = (it) => Math.max(minH, base * it.r);
   const rows = [];
   let cur = [], curW = 0;
   for (const it of items) {
-    const w = base * it.r * VOL_LAYOUT_ASPECT;
+    const w = heightOf(it) * VOL_LAYOUT_ASPECT;
     const next = curW ? curW + gap + w : w;
     if (cur.length && next > W) { rows.push({ items: cur, w: curW }); cur = [it]; curW = w; }
     else { cur.push(it); curW = next; }
   }
   if (cur.length) rows.push({ items: cur, w: curW });
   let totalH = 0;
-  rows.forEach((row, i) => { totalH += Math.max(...row.items.map((it) => base * it.r)) + (i ? gap : 0); });
+  rows.forEach((row, i) => { totalH += Math.max(...row.items.map(heightOf)) + (i ? gap : 0); });
   return { rows, totalH };
 }
 

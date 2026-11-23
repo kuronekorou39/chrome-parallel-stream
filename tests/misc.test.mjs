@@ -115,6 +115,12 @@ test('packVolumeRows: 幅より大きい枠でも 1 行に 1 つは置く。空�
   assert.deepEqual(f.packVolumeRows([], 1000, 10, 90), { rows: [], totalH: 0 });
 });
 
+test('packVolumeRows: 高さの下限より小さい枠は、下限の大きさで詰める', () => {
+  const { rows, totalH } = f.packVolumeRows([{ r: 1 }, { r: 0.2 }], 10000, 10, 300, 240);
+  assert.equal(totalH, 300);
+  assert.equal(rows[0].w, 300 * f.VOL_LAYOUT_ASPECT + 10 + 240 * f.VOL_LAYOUT_ASPECT);
+});
+
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
   assert.deepEqual(f.tileGrid(4, 1920, 1080, 4), { cols: 2, rows: 2 });
   assert.deepEqual(f.tileGrid(2, 1920, 400, 4), { cols: 2, rows: 1 });
