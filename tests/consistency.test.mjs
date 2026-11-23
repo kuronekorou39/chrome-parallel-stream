@@ -2,13 +2,15 @@
 // 枠内の MAIN world スクリプトは配信サイトのページと同じ世界で動く。共通ファイルにして global で
 // 共有すると、その global がサイト側から見えてしまうので、値は各ファイルに持ち、ここで一致を保証する。
 import { test } from 'node:test';
+import { uiScripts, uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = (name) => readFileSync(join(ROOT, name), 'utf8');
+const UI = 'js/*.js';
+const read = (name) => (name === UI ? uiSource() : readFileSync(join(ROOT, name), 'utf8'));
 const capture = (file, re) => {
   const m = read(file).match(re);
   assert.ok(m, `${file} に ${re} がありません`);
@@ -32,7 +34,7 @@ test('ポップアップと橋渡しが開くページの URL は同じ', () => 
 });
 
 test('枠とやり取りするメッセージの目印は全ファイルで同じ', () => {
-  const magic = capture('multiview.js', /const MAGIC = '([^']+)'/);
+  const magic = capture(UI, /const MAGIC = '([^']+)'/);
   assert.equal(capture('stream-control.js', /const MAGIC = '([^']+)'/), magic);
   assert.equal(capture('twitch-keepalive.js', /const MAGIC = '([^']+)'/), magic);
   assert.ok(read('keepalive-visibility.js').includes(`{ ${magic}: true,`));
@@ -40,13 +42,30 @@ test('枠とやり取りするメッセージの目印は全ファイルで同�
 
 test('遅延の上限は、ページと枠の中で同じ', () => {
   assert.equal(
-    capture('multiview.js', /const DELAY_MAX_SEC = (\d+)/),
+    capture(UI, /const DELAY_MAX_SEC = (\d+)/),
     capture('twitch-keepalive.js', /const DELAY_MAX_SEC = (\d+)/)
   );
 });
 
 test('枠の最小サイズと、浮動パネルの重なり順は JS と CSS で同じ', () => {
-  assert.equal(capture('multiview.js', /^const MIN_W = (\d+)/m), capture('multiview.css', /min-width: (\d+)px; min-height: \d+px;/));
-  assert.equal(capture('multiview.js', /^const MIN_H = (\d+)/m), capture('multiview.css', /min-width: \d+px; min-height: (\d+)px;/));
-  assert.equal(capture('multiview.js', /^let panelZ = (\d+)/m), capture('multiview.css', /--z-panel: (\d+);/));
+  assert.equal(capture(UI, /^const MIN_W = (\d+)/m), capture('multiview.css', /min-width: (\d+)px; min-height: \d+px;/));
+  assert.equal(capture(UI, /^const MIN_H = (\d+)/m), capture('multiview.css', /min-width: \d+px; min-height: (\d+)px;/));
+  assert.equal(capture(UI, /^let panelZ = (\d+)/m), capture('multiview.css', /--z-panel: (\d+);/));
+});
+
+test('js/ のファイルはすべて読み込まれ、起動処理(main.js)が最後', () => {
+  const scripts = uiScripts();
+  const files = readdirSync(join(ROOT, 'js')).map((f) => 'js/' + f);
+  assert.deepEqual([...scripts].sort(), files.sort());
+  assert.equal(new Set(scripts).size, scripts.length);
+  assert.equal(scripts[scripts.length - 1], 'js/main.js');
+});
+
+test('js/ のトップレベルの名前は重複せず、どれもどこかで使われている', () => {
+  const src = uiSource();
+  const names = [...src.matchAll(/^(?:async )?function (\w+)|^(?:const|let) (\w+)/gm)].map((m) => m[1] || m[2]);
+  assert.deepEqual(names.filter((n, i) => names.indexOf(n) !== i), []);
+  const code = src.replace(/^\s*\/\/.*$/gm, '');
+  const unused = names.filter((n) => (code.match(new RegExp('\\b' + n + '\\b', 'g')) || []).length < 2);
+  assert.deepEqual(unused, []);
 });

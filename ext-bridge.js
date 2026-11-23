@@ -1,4 +1,4 @@
-// multiview の UI ページから拡張機能の機能を使うための薄い橋渡し。multiview.js より先に読むこと。
+// multiview の UI ページから拡張機能の機能を使うための薄い橋渡し。js/ より先に読むこと。
 //
 // UI ページは通常の https オリジン(GitHub Pages)に置く。拡張ページ(chrome-extension://)の中の
 // iframe には他の拡張の content script が一切注入されず(Chrome の仕様。executeScript も
@@ -10,7 +10,7 @@
   'use strict';
 
   const HOSTED_URL = 'https://kuronekorou39.github.io/chrome-parallel-stream/multiview.html';
-  // 開かれたときの URL。multiview.js は受け取った ?add= を URL から消すので、拡張機能を入れた
+  // 開かれたときの URL。js/ は受け取った ?add= を URL から消すので、拡張機能を入れた
   // あとに開き直す先として、消される前のものを控えておく(渡された配信を失わないため)。
   const ENTRY_URL = location.href;
   // リポジトリ全体ではなく、拡張機能のファイルだけを詰めた配布物を指す。
@@ -18,7 +18,7 @@
   // (スマホのファイル操作でこれが効く)。tools/release.mjs が作る。
   // リンク先は版入りのファイル名にする(download 属性で保存名だけ変える方式は、環境によって効かず
   // latest 名のまま落ちて (1)(2) が付く)。版入りの zip は release.mjs が消さずに残すので 404 にならない。
-  const ZIP_NAME = 'parallel-stream-1.0.13.zip'; // release.mjs が版に合わせて書き換える
+  const ZIP_NAME = 'parallel-stream-1.0.14.zip'; // release.mjs が版に合わせて書き換える
   const ZIP_URL = 'dist/' + ZIP_NAME;
 
   // 拡張はリポジトリのルートを丸ごと読み込むため、multiview.html は拡張パッケージにも含まれ、
@@ -28,7 +28,7 @@
   // 例外は ?dev=1。GitHub Pages は release ブランチを配るので、作業中(main)の UI を確かめる
   // 場所がここしか無い。転送せず、拡張ページとして開いたまま動かす。
   // 拡張ページでは page-bridge.js が注入されない代わりに chrome.* をそのまま呼べるので、
-  // MV.* は同じ形のまま中身を直呼びに差し替える(呼び出し側=multiview.js は何も変えない)。
+  // MV.* は同じ形のまま中身を直呼びに差し替える(呼び出し側=js/ は何も変えない)。
   if (location.protocol === 'chrome-extension:') {
     if (!/(^|[?&])dev=1(&|$)/.test(location.search)) {
       location.replace(HOSTED_URL + location.search + location.hash);

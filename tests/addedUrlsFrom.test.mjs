@@ -2,13 +2,10 @@
 // multiview.js はブラウザ専用スクリプトでまるごと import できないため、必要な定義だけを
 // ソースから抜き出して評価する(cmpVersion.test.mjs と同じやり方)。
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const multiviewSrc = readFileSync(join(ROOT, 'multiview.js'), 'utf8');
+const multiviewSrc = uiSource();
 
 function functionSource(src, name) {
   const start = src.indexOf(`function ${name}(`);

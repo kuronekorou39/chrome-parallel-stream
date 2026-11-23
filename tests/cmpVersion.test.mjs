@@ -3,13 +3,10 @@
 // トップレベルの `window.matchMedia(...)` 等で即座に落ちる。そのため関数定義部分だけを
 // ソースから抜き出して評価する(実ファイルの現在のコードをそのまま実行して検証するため)。
 import { test } from 'node:test';
+import { uiSource } from './ui-source.mjs';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const multiviewSrc = readFileSync(join(ROOT, 'multiview.js'), 'utf8');
+const multiviewSrc = uiSource();
 
 function extractFunction(src, name) {
   const start = src.indexOf(`function ${name}(`);

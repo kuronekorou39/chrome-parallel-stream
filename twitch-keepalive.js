@@ -99,8 +99,8 @@
   // ページ側からの書き込みを握り潰す(これをしないと、作った遅延が数分で消える)。
   // 握り潰すにはページと同じ世界に居る必要があるため、content script(stream-control.js)では
   // なく MAIN world のここに置いている。
-  const MAGIC = '__multiviewControl'; // stream-control.js / multiview.js と一致させること
-  const DELAY_MAX_SEC = 20; // multiview.js の DELAY_MAX_SEC と合わせる(戻れるバッファは約30秒)
+  const MAGIC = '__multiviewControl'; // stream-control.js / js/ と一致させること
+  const DELAY_MAX_SEC = 20; // js/ の DELAY_MAX_SEC と合わせる(戻れるバッファは約30秒)
   const DELAY_TICK_MS = 100;
   const DELAY_SEEK_SETTLE_MS = 1500; // シーク直後は再生が落ち着くまで触らない
   const DELAY_JUMP_SEC = 3; // これ以上の不連続は、プレイヤー側の読み直し/シークとみなす

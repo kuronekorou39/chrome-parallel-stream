@@ -23,11 +23,11 @@ iframe」になり、他の拡張が問題なく動くようになります。
 
 ページから拡張の機能(設定の保存、Cookie 緩和など)を使うために、
 `ext-bridge.js`(ページ側)と `page-bridge.js`(content script)が `postMessage` で橋渡しをしています。
-`multiview.js` は `chrome.*` を直接呼ばず、`MV.*` 経由で統一しています。
+`js/` のスクリプトは `chrome.*` を直接呼ばず、`MV.*` 経由で統一しています。
 
 | | 担当 |
 | --- | --- |
-| GitHub Pages | UI(`multiview.html` / `.js` / `.css`)の配信のみ |
+| GitHub Pages | UI(`multiview.html` / `.css` / `js/`)の配信のみ |
 | 拡張機能 | X-Frame-Options の除去、枠内 content script、Cookie 緩和、設定の保存 |
 
 ## ブランチと公開
@@ -57,8 +57,8 @@ git push origin main:release   # これを実行した時だけ、利用者に�
 ## リリース
 
 `node tools/release.mjs` で版を上げ、配布用の ZIP を `dist/` に作ります。版番号は
-`manifest.json` / `multiview.html` の `?v=`(GitHub Pages のキャッシュ避け)/ `multiview.js` の
+`manifest.json` / `multiview.html` の `?v=`(GitHub Pages のキャッシュ避け)/ `js/version.js` の
 `EXPECTED_EXT_VERSION` の3か所にあり、手で合わせるとずれるのでこのスクリプトで一括して書き換えます。
 
-UI ファイル(`multiview.*` / `ext-bridge.js`)を変えたら**必ず版を上げてください**。`?v=` が据え置きだと
+UI ファイル(`multiview.*` / `js/` / `ext-bridge.js`)を変えたら**必ず版を上げてください**。`?v=` が据え置きだと
 GitHub Pages のキャッシュが効いて、古い JS/CSS のまま配られます。

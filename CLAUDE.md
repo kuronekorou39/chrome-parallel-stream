@@ -24,17 +24,17 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 | `manifest.json` | 拡張機能の定義(MV3)。バージョンは3箇所に散っているので手で編集しない → 下記コマンド |
 | `background.js` | service worker |
 | `popup.html/css/js` | ツールバーの拡張アイコンを押したときのポップアップ |
-| `multiview.html/css/js` | マルチビュー本体の UI。GitHub Pages から配信、拡張ページ版も同梱 |
+| `multiview.html/css`, `js/` | マルチビュー本体の UI。GitHub Pages から配信、拡張ページ版も同梱。`js/` は機能ごとの通常 script でトップレベルを共有し、`multiview.html` の読み込み順に意味がある(`config.js` が先、起動処理の `main.js` が最後) |
 | `stream-control.js` | 各配信サイトへの content script(枠内の制御) |
 | `twitch-keepalive.js` / `keepalive-visibility.js` | バックグラウンドでも再生を止めないための MAIN world script。`twitch-keepalive.js` は、枠ごとの遅延(再生位置と速度の制御)と、「音で合わせる」用の音の取り出しも担当する(どちらも MAIN world でないとできないため) |
 | `twitch-chat-ime.js` | Twitch のチャット入力欄で、Android の日本語入力が1文字目で確定してしまうのを避ける MAIN world script(原因は Twitch 側。空の入力欄に空白を1つ入れておく回避策) |
-| `page-bridge.js` / `ext-bridge.js` | ページ(`multiview.js`)⇔拡張機能の `postMessage` 橋渡し。`multiview.js` は `chrome.*` を直接呼ばず `MV.*` 経由 |
+| `page-bridge.js` / `ext-bridge.js` | ページ(`js/`)⇔拡張機能の `postMessage` 橋渡し。`js/` は `chrome.*` を直接呼ばず `MV.*` 経由 |
 | `rules.json` | `declarativeNetRequest` ルール(埋め込みのための `X-Frame-Options` 除去など) |
 | `docs/` | `browser-impact.md`(権限・Cookie・可視状態偽装の詳細)、`design.md`(設計メモ)、`images/`(README 用スクリーンショット) |
 | `tools/` | `release.mjs`(版上げ・ZIP 作成)、`publish.mjs`(公開・確認用ページ反映) |
 | `dist/` | 配布用 ZIP。バージョン付きのものは git 管理、展開フォルダ(`dist/parallel-stream-*/`)は生成物なので gitignore |
 | `chromium-repro/` | Chromium 側のレンダラークラッシュの最小再現(README.md + extension/ + repro.html)。このリポジトリの機能ではなくバグ報告用の別資産 |
-| `tests/` | 自動テスト(Node 標準の test runner)。`multiview.js` 等のブラウザ専用スクリプトから、window/document に依存しない純粋関数だけをソースごと抜き出して検証する |
+| `tests/` | 自動テスト(Node 標準の test runner)。`js/` 等のブラウザ専用スクリプトから、window/document に依存しない純粋関数だけをソースごと抜き出して検証する |
 | `_metadata/` | Chrome が実行時に自動生成する成果物(gitignore、触らない) |
 | `.repohub/` | 作業ログ・backlog の置き場。ユーザーのグローバル gitignore で無視されるため、ここに置いたものは通常 git 管理下に入らない |
 
@@ -61,7 +61,7 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 - 枠の中のスクリプト(`stream-control.js` / `twitch-keepalive.js` など content script)を変えたら、
   ページの反映とは別に、`chrome://extensions` で拡張機能を再読み込みしないと効かない
 - `node tools/release.mjs` — パッチ版を1つ上げ、`manifest.json` / `multiview.html` の `?v=` /
-  `multiview.js` の `EXPECTED_EXT_VERSION` を揃えて `dist/` に配布用 ZIP を作る
+  `js/version.js` の `EXPECTED_EXT_VERSION` を揃えて `dist/` に配布用 ZIP を作る
 - `node tools/release.mjs 1.0.0` — 版を明示指定して同様に行う
 - `node tools/release.mjs --check` — 版を上げずに3箇所の整合だけ確認する
 - `node tools/publish.mjs dev` — 作業中の main の UI を GitHub Pages の `/dev/` へ反映する
@@ -70,7 +70,7 @@ GitHub Pages(`release` ブランチ)から配信している。拡張ページ�
 
 ## 守るべきルール
 
-- **UI ファイル(`multiview.*` / `ext-bridge.js`)を変えたら必ず `node tools/release.mjs` で
+- **UI ファイル(`multiview.*` / `js/` / `ext-bridge.js`)を変えたら必ず `node tools/release.mjs` で
   版を上げる。** `?v=` が据え置きだと GitHub Pages のキャッシュが効いて古い JS/CSS のまま配られる
 - **`main` への push だけでは公開されない。** 公開は `node tools/publish.mjs` を実行した時
   (または `git push origin main:release`)だけ利用者に届く。安易に release へ進めない
