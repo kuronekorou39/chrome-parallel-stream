@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=1.0.1" />
+  <link rel="stylesheet" href="multiview.css?v=1.0.2" />
 </head>
 <body>
   <div id="toolbar">
@@ -43,7 +43,7 @@
   <div id="main-menu-backdrop" hidden></div>
   <div id="main-menu" hidden>
     <!-- 上は「見るための操作」、下は「保守」。使う頻度が違うので区切る。 -->
-    <button id="mm-layout" type="button"><span class="mm-icon"><i data-ic="layout"></i></span><span class="mm-label">配置</span></button>
+    <button id="mm-layout" type="button"><span class="mm-icon"><i data-ic="layout"></i></span><span class="mm-label">配置</span><span class="mm-sub" id="mm-layout-val"></span></button>
     <!-- 弾幕とチャットは「全枠まとめて + 次に足す枠の既定」。枠ごとの切替は各枠の ⋮ から。
          右の値が現在の既定で、押すと全枠がその通りに切り替わる。弾幕の設定は同じ行の右端から開く。 -->
     <div class="mm-row">
@@ -116,7 +116,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.1.zip" download="parallel-stream-1.0.1.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.2.zip" download="parallel-stream-1.0.2.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -216,6 +216,13 @@
             <span class="layout-action-title"><i data-ic="vol-on"></i><span class="ic-text">音量順</span></span>
           </button>
         </div>
+        <!-- 枠の増減や画面サイズの変更で並べ直す。手で動かすとオフに戻る。 -->
+        <div class="layout-sec" title="枠の増減や画面サイズの変更で並べ直します。手で動かすとオフになります">自動で並べる</div>
+        <div id="layout-auto" class="layout-actions">
+          <button class="layout-action" data-auto="off" type="button"><span class="layout-action-title">オフ</span></button>
+          <button class="layout-action" data-auto="tile" type="button"><span class="layout-action-title">整列</span></button>
+          <button class="layout-action" data-auto="volume" type="button"><span class="layout-action-title">音量順</span></button>
+        </div>
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
           <input type="text" id="layout-name" class="tb-input" placeholder="保存名(省略で日時)" />
@@ -290,7 +297,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=1.0.1"></script>
-  <script src="multiview.js?v=1.0.1"></script>
+  <script src="ext-bridge.js?v=1.0.2"></script>
+  <script src="multiview.js?v=1.0.2"></script>
 </body>
 </html>
