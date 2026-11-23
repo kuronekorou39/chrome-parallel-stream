@@ -791,7 +791,7 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 
 /* 右下の丸ボタン(追加/一覧/配置の近道)。≡ と同じ配色で、右端が ＋(いちばん使う)、その隣が一覧。
    全画面(has-stack-max)中は枠の操作に集中させたいので出さない。縦積みでは配置を使わないので隠す。
-   自動配置がオンの間は、配置ボタンを緑にして状態を見せる。 */
+   */
 #quick-actions {
   position: fixed; right: 12px; bottom: 12px; z-index: 100001;
   display: flex; flex-direction: row; gap: 10px;
@@ -809,7 +809,16 @@ body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
 #qa-add:hover { background: #388bfd; border-color: #58a6ff; }
 body.has-stack-max #quick-actions { display: none; }
 body.stack-mode #qa-layout { display: none; }
-#qa-layout.auto-on { border-color: #3fb950; color: #3fb950; }
+/* ポップアップが開いている間は、対応するボタンを明るくする。 */
+#quick-actions > button.panel-open { background: #1f3a5f; border-color: #58a6ff; color: #f0f6fc; }
+#quick-actions > #qa-add.panel-open { background: #58a6ff; border-color: #a5d6ff; color: #0d1117; }
+/* 自動配置がオンの間は、配置ボタンの右上に緑の点を出す(開いているかどうかとは別の情報)。 */
+#qa-layout { position: relative; }
+#qa-layout.auto-on::after {
+  content: ''; position: absolute; top: 2px; right: 2px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: #3fb950; border: 2px solid #0d1117;
+}
 
 /* メインメニュー(≡ の上に出す縦リスト。右クリックメニュー風)。
    backdrop が画面全体を覆い、メニュー外のタップが下のタイル(iframe)へ届くのを防ぐ。 */

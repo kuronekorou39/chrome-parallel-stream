@@ -39,8 +39,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -119,6 +119,38 @@ test('packVolumeRows: 高さの下限より小さい枠は、下限の大きさ�
   const { rows, totalH } = f.packVolumeRows([{ r: 1 }, { r: 0.2 }], 10000, 10, 300, 240);
   assert.equal(totalH, 300);
   assert.equal(rows[0].w, 300 * f.VOL_LAYOUT_ASPECT + 10 + 240 * f.VOL_LAYOUT_ASPECT);
+});
+
+test('panelOverlapCost: 重なった面積 × 重みを足す。接しているだけなら 0', () => {
+  const r = { x: 0, y: 0, w: 10, h: 10 };
+  assert.equal(f.panelOverlapCost(r, [{ x: 5, y: 5, w: 10, h: 10, weight: 2 }]), 50);
+  assert.equal(f.panelOverlapCost(r, [{ x: 10, y: 0, w: 10, h: 10, weight: 1 }]), 0);
+});
+
+test('pickPanelPos: 何も無ければ中央に置く', () => {
+  assert.deepEqual(
+    (({ x, y, cost }) => ({ x, y, cost }))(f.pickPanelPos(100, 100, 1000, 500, [], 10)),
+    { x: 450, y: 200, cost: 0 }
+  );
+});
+
+test('pickPanelPos: 空きがあれば、枠に被らない場所へ置く', () => {
+  const left = { x: 0, y: 0, w: 700, h: 500, weight: 1 };
+  const p = f.pickPanelPos(200, 100, 1000, 500, [left], 10);
+  assert.equal(p.cost, 0);
+  assert.ok(p.x >= 710);
+});
+
+test('pickPanelPos: 空きが無ければ、重みの小さい枠の上を選ぶ', () => {
+  const loud = { x: 0, y: 0, w: 500, h: 500, weight: 1.25 };
+  const quiet = { x: 500, y: 0, w: 500, h: 500, weight: 0.3 };
+  const p = f.pickPanelPos(200, 100, 1000, 500, [loud, quiet], 10);
+  assert.ok(p.x >= 500);
+});
+
+test('pickPanelPos: 画面より大きいパネルでも位置を返す', () => {
+  const p = f.pickPanelPos(2000, 1000, 1000, 500, [], 10);
+  assert.deepEqual([p.x, p.y], [10, 10]);
 });
 
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
