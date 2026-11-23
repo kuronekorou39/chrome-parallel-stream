@@ -190,6 +190,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   display: flex; flex-direction: column; z-index: 90000;
   background: rgba(13,17,23,0.94); border: 1px solid #30363d; border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.6); overflow: hidden; color: #c9d1d9;
+  user-select: none; /* 選択してコピーできるのは URL(.mixer-row-label)だけ */
 }
 .mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
 /* perf-head と同じくフラット(濃い帯・下線なし)。 */
@@ -236,9 +237,8 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .mixer-row-label {
   flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: #c9d1d9;
   border: none; cursor: pointer; font-family: inherit; font-size: 13px; padding: 5px 6px; border-radius: 5px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: text;
 }
-.mixer-row-label:hover { background: rgba(88,166,255,0.18); }
 /* サイト部分は薄く小さく、チャンネル名/動画IDは白太字で強調する。 */
 .mixer-row-label .mx-site { color: #6e7681; font-size: 11px; }
 .mixer-row-label .mx-name { color: #f0f6fc; font-weight: bold; }
@@ -247,7 +247,10 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   width: 34px; height: 34px; font-size: 17px; border-radius: 6px;
 }
 .mixer-row-eye:hover { background: rgba(255,255,255,0.12); }
-.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; padding-left: 4px; }
+.mixer-row-vol-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; }
+/* 音量アイコンはミュートの切り替えボタンを兼ねる。 */
+.vol-toggle { padding: 3px 4px; border-radius: 4px; cursor: pointer; user-select: none; }
+.vol-toggle:hover { background: rgba(255,255,255,0.12); color: #f0f6fc; }
 .mixer-row-vol { flex: 1 1 auto; width: auto; min-width: 0; accent-color: #58a6ff; cursor: pointer; }
 
 /* ===== ステージ ===== */

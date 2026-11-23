@@ -160,7 +160,10 @@ const ICON_PATHS = {
   update: '<path d="M12 3v12M7 10l5 5 5-5M4 20h16"/>',
   perf: '<path d="M5 20v-8M12 20V4M19 20v-5"/>',
   cookie: '<circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 11h.01M10 15h.01M15 16h.01" stroke-width="2.6"/>',
-  'vol-on': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/>',
+  // 音量の段階。音の線が 1〜3 本(volIconName で選ぶ)。
+  'vol-low': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5"/>',
+  'vol-mid': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7.5a6.5 6.5 0 0 1 0 9"/>',
+  'vol-high': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18 7.5a6.5 6.5 0 0 1 0 9M20.5 5a10 10 0 0 1 0 14"/>',
   'vol-off': '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9.5l5 5M22 9.5l-5 5"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   reload: '<path d="M20 12a8 8 0 1 1-2.6-5.9M20 4v4.5h-4.5"/>',
@@ -426,7 +429,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.6';
+const EXPECTED_EXT_VERSION = '1.0.7';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -867,7 +870,7 @@ function createWindow(url, opts = {}) {
   volWrap.className = 'win-vol';
   const volIcon = document.createElement('span');
   volIcon.className = 'win-vol-icon';
-  putLabel(volIcon, ':vol-on:');
+  setVolIcon(volIcon, WIN_VOLUME_DEFAULT);
   const volSlider = document.createElement('input');
   volSlider.type = 'range';
   volSlider.min = '0';
@@ -961,7 +964,7 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider,
+    id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider, volIcon,
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
     // YouTube の通常表示は Chromium が落ちるので、この枠には切替先を出さない。
     // ⋮メニューの生成(buildQuickControls)より前に決まっている必要がある。
@@ -1038,10 +1041,10 @@ function createWindow(url, opts = {}) {
   volSlider.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
   volSlider.addEventListener('input', () => {
     setWinVol(win, Number(volSlider.value) / 100); // 台形/ミキサー両方のスライダーを同期
-    putLabel(volIcon, win.vol <= 0 ? ':vol-off:' : ':vol-on:');
     revealHeader(win); // 操作中はヘッダを消さない(特にタッチ)
   });
   volSlider.addEventListener('change', onWinVolCommitted);
+  wireVolIcon(volIcon, () => { toggleWinMute(win); revealHeader(win); });
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); reloadWindow(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
@@ -3495,7 +3498,55 @@ function updateCount() {
 // クロスオリジン埋め込みはタブ出力音を直接絞れないため、各枠の音量をまとめて設定する形。
 // つまみ操作時にだけ適用(継続的な上書きはしない)ので、以後は各プレイヤーで個別調整も可能。
 
+// 音量アイコン。0 は専用の形、それ以外は大きさで音の線の本数を変える。
+function volIconName(v) {
+  if (v <= 0) return 'vol-off';
+  if (v < 0.34) return 'vol-low';
+  return v < 0.67 ? 'vol-mid' : 'vol-high';
+}
+
+// つまみを動かすたびに呼ばれるので、形が変わるときだけ描き直す。
+function setVolIcon(el, v) {
+  const name = volIconName(v);
+  if (el.dataset.icon === name) return;
+  el.dataset.icon = name;
+  putLabel(el, ':' + name + ':');
+}
+
+// アイコンのクリック。鳴っていれば 0 にして今の音量を覚え、0 なら覚えた音量へ戻す。
+// つまみで 0 にしたときは覚えた音量が無いので fallback にする。
+function nextMuteVolume(cur, remembered, fallback) {
+  if (cur > 0) return { vol: 0, remembered: cur };
+  return { vol: remembered > 0 ? remembered : fallback, remembered: null };
+}
+
+function wireVolIcon(el, onToggle) {
+  el.classList.add('vol-toggle');
+  el.setAttribute('role', 'button');
+  el.title = 'クリックでミュート / 解除';
+  el.addEventListener('click', (e) => { e.stopPropagation(); onToggle(); });
+  el.addEventListener('dblclick', (e) => e.stopPropagation()); // ヘッダのダブルクリック(最大化)にしない
+}
+
+function toggleWinMute(win) {
+  const next = nextMuteVolume(win.vol, win.volBeforeMute, WIN_VOLUME_DEFAULT);
+  setWinVol(win, next.vol);
+  win.volBeforeMute = next.remembered;
+  onWinVolCommitted();
+}
+
+// マスタの解除先の既定は 50% にしない。実音量は マスタ × 枠 なので、普段の 10% から急に大きくなる。
+let masterVolBeforeMute = null;
+function toggleMasterMute() {
+  const next = nextMuteVolume(masterVolume, masterVolBeforeMute, MASTER_VOLUME_DEFAULT);
+  setMasterVolume(next.vol);
+  masterVolBeforeMute = next.remembered;
+  syncMasterUI();
+  saveLineup();
+}
+
 function setMasterVolume(v) {
+  masterVolBeforeMute = null; // つまみで動かしたら、ミュート前の音量は無効
   masterVolume = v;
   for (const win of wins) applyVolume(win, v);
 }
@@ -3509,11 +3560,10 @@ function clampVol(v) {
 // マスタ音量つまみ/アイコンを masterVolume に同期させる(ツールバー + ミキサーの両方)。
 function syncMasterUI() {
   const v = Math.round(masterVolume * 100);
-  const icon = masterVolume <= 0 ? ':vol-off:' : ':vol-on:';
   const s1 = document.getElementById('master-vol'); if (s1) s1.value = v;
-  const i1 = document.getElementById('master-vol-icon'); if (i1) putLabel(i1, icon);
+  const i1 = document.getElementById('master-vol-icon'); if (i1) setVolIcon(i1, masterVolume);
   const s2 = document.getElementById('mixer-master'); if (s2) s2.value = v;
-  const i2 = document.getElementById('mixer-master-icon'); if (i2) putLabel(i2, icon);
+  const i2 = document.getElementById('mixer-master-icon'); if (i2) setVolIcon(i2, masterVolume);
 }
 
 // 音量を枠へ反映。実音量 = 枠ごと音量(win.vol) × マスタ(v)。
@@ -4116,14 +4166,18 @@ function drawSyncViews() {
 // 枠ごとの音量を設定し、台形ハンドルとミキサー両方のスライダー表示を同期させる。
 function setWinVol(win, v01) {
   win.vol = Math.max(0, Math.min(1, v01));
+  win.volBeforeMute = null; // つまみで動かしたら、ミュート前の音量は無効(toggleWinMute は後で入れ直す)
   applyVolume(win, masterVolume);
   syncVolUI(win);
 }
 function syncVolUI(win) {
   const v = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
   if (win.volSlider) win.volSlider.value = v;
-  const row = document.querySelector('#mixer-panel .mixer-row[data-id="' + win.id + '"] .mixer-row-vol');
-  if (row) row.value = v;
+  if (win.volIcon) setVolIcon(win.volIcon, win.vol);
+  const rowEl = document.querySelector('#mixer-panel .mixer-row[data-id="' + win.id + '"]');
+  if (!rowEl) return;
+  rowEl.querySelector('.mixer-row-vol').value = v;
+  setVolIcon(rowEl.querySelector('.mixer-row-vol-icon'), win.vol);
 }
 
 // 枠を「隠す/表示する」。見た目を消すだけで、再生も音も止めない(再マウントもしない)。
@@ -4272,7 +4326,8 @@ function renderMixer() {
     bot.className = 'mixer-row-bot';
     const volIcon = document.createElement('span');
     volIcon.className = 'mixer-row-vol-icon';
-    putLabel(volIcon, ':vol-on:');
+    setVolIcon(volIcon, win.vol);
+    wireVolIcon(volIcon, () => toggleWinMute(win));
     const vol = document.createElement('input');
     vol.type = 'range'; vol.min = '0'; vol.max = '100';
     vol.value = String(Math.round((win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * 100));
@@ -4313,6 +4368,7 @@ function setupMixer() {
   document.getElementById('mixer-btn').addEventListener('click', () => {
     if (panel.hidden) openMixer(); else panel.hidden = true;
   });
+  ['master-vol-icon', 'mixer-master-icon'].forEach((id) => wireVolIcon(document.getElementById(id), toggleMasterMute));
   const mm = document.getElementById('mixer-master');
   mm.addEventListener('input', () => { setMasterVolume(Number(mm.value) / 100); syncMasterUI(); });
   mm.addEventListener('change', () => saveLineup());

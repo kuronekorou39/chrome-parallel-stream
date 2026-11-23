@@ -39,8 +39,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -151,6 +151,26 @@ test('pickPanelPos: 空きが無ければ、重みの小さい枠の上を選ぶ
 test('pickPanelPos: 画面より大きいパネルでも位置を返す', () => {
   const p = f.pickPanelPos(2000, 1000, 1000, 500, [], 10);
   assert.deepEqual([p.x, p.y], [10, 10]);
+});
+
+test('volIconName: 0 は専用、それ以外は大きさで 3 段階', () => {
+  assert.equal(f.volIconName(0), 'vol-off');
+  assert.equal(f.volIconName(0.01), 'vol-low');
+  assert.equal(f.volIconName(0.33), 'vol-low');
+  assert.equal(f.volIconName(0.34), 'vol-mid');
+  assert.equal(f.volIconName(0.66), 'vol-mid');
+  assert.equal(f.volIconName(0.67), 'vol-high');
+  assert.equal(f.volIconName(1), 'vol-high');
+});
+
+test('nextMuteVolume: 鳴っていれば 0 にして音量を覚え、次で元へ戻す', () => {
+  const muted = f.nextMuteVolume(0.8, null, 0.5);
+  assert.deepEqual(muted, { vol: 0, remembered: 0.8 });
+  assert.deepEqual(f.nextMuteVolume(muted.vol, muted.remembered, 0.5), { vol: 0.8, remembered: null });
+});
+
+test('nextMuteVolume: つまみで 0 にした後は既定の音量にする', () => {
+  assert.deepEqual(f.nextMuteVolume(0, null, 0.5), { vol: 0.5, remembered: null });
 });
 
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {
