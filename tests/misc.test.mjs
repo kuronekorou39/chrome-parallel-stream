@@ -38,8 +38,8 @@ const f = new Function(
     constSource('AUTO_LAYOUT_MODES'),
     constSource('VOL_OVERLAP_LOUDEST'),
     constSource('VOL_OVERLAP_QUIETEST'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom', 'overlapLimits', 'growWithOverlap'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, overlapLimits, growWithOverlap, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom', 'overlapLimits', 'growWithOverlap', 'initialAutoLayout'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, overlapLimits, growWithOverlap, initialAutoLayout, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -229,6 +229,13 @@ test('autoLayoutModeOf: 知らない値はオフにする', () => {
   assert.equal(f.autoLayoutModeOf('volume'), 'volume');
   assert.equal(f.autoLayoutModeOf('snap'), 'off');
   assert.equal(f.autoLayoutModeOf(undefined), 'off');
+});
+
+test('initialAutoLayout: 未設定なら音量順。既に並びがある人と、選んだ設定は変えない', () => {
+  assert.equal(f.initialAutoLayout(undefined, false), 'volume');
+  assert.equal(f.initialAutoLayout(undefined, true), 'off');
+  assert.equal(f.initialAutoLayout('off', false), 'off');
+  assert.equal(f.initialAutoLayout('tile', true), 'tile');
 });
 
 test('rectResized: 大きさが変わったときだけ true(移動だけなら false)', () => {
