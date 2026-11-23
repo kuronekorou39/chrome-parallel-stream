@@ -442,7 +442,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.0';
+const EXPECTED_EXT_VERSION = '1.0.1';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -3144,7 +3144,7 @@ function setupCookieDialog() {
     MV.storage.local.set({ [COOKIE_RELAX_KEY]: cookieRelaxOn });
     document.getElementById('cookie-status').textContent = cookieRelaxOn
       ? 'ON にしました。次に枠を読み込むときから適用されます。'
-      : 'OFF にしました。以後は Cookie に触れません(既に変更したぶんは下のボタンで戻せます)。';
+      : 'OFF にしました。変更済みの Cookie は下のボタンで戻せます。';
   });
 
   const status = document.getElementById('cookie-status');
@@ -3159,10 +3159,10 @@ function setupCookieDialog() {
       status.textContent = !resp || !resp.ok
         ? '戻せませんでした。'
         : !resp.recorded
-          ? '戻す記録がありません。まだ Cookie を緩めていないか、既に戻したあとです(記録は戻した時点で消えます)。'
+          ? '戻す Cookie はありません。'
           : resp.restored === resp.recorded
             ? `${resp.restored} 件の Cookie を元の設定に戻しました。枠を読み込み直すと反映されます。`
-            : `${resp.restored} 件を戻しました(記録 ${resp.recorded} 件のうち ${resp.recorded - resp.restored} 件は Cookie 自体が既に無いため対象外)。`;
+            : `${resp.restored} 件を戻しました(${resp.recorded - resp.restored} 件は Cookie が既に無いため対象外)。`;
     } catch (e) {
       status.textContent = '戻せませんでした: ' + e.message;
     } finally {
