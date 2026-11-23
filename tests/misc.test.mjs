@@ -36,8 +36,8 @@ const f = new Function(
     constSource('MASTER_VOLUME_DEFAULT'),
     constSource('VOL_LAYOUT_ASPECT'),
     constSource('AUTO_LAYOUT_MODES'),
-    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom'].map(functionSource),
-    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
+    ...['clampVol', 'dmkParseColor', 'dmkBlendColor', 'packVolumeRows', 'tileGrid', 'autoLayoutModeOf', 'rectResized', 'panelOverlapCost', 'pickPanelPos', 'volIconName', 'nextMuteVolume', 'layoutAnimFrom', 'volumeCells', 'coverRect'].map(functionSource),
+    'return { clampVol, dmkParseColor, dmkBlendColor, packVolumeRows, tileGrid, autoLayoutModeOf, rectResized, panelOverlapCost, pickPanelPos, volIconName, nextMuteVolume, layoutAnimFrom, volumeCells, coverRect, MASTER_VOLUME_DEFAULT, VOL_LAYOUT_ASPECT };',
   ].join('\n')
 )();
 
@@ -181,6 +181,23 @@ test('layoutAnimFrom: 動いていない枠や、大きさの無い枠はアニ�
   assert.equal(f.layoutAnimFrom(r, { ...r }), null);
   assert.equal(f.layoutAnimFrom(r, { ...r, left: 10.5 }), null);
   assert.equal(f.layoutAnimFrom(r, { ...r, width: 0 }), null);
+});
+
+test('volumeCells: 画面を隙間なく割り、面積は音量におおむね比例する', () => {
+  const items = [{ r: 1 }, { r: Math.sqrt(0.5) }, { r: Math.sqrt(0.25) }, { r: Math.sqrt(0.25) }];
+  const cells = f.volumeCells(items, 0, 0, 1600, 900);
+  assert.deepEqual(cells.map((c) => c.item), items);
+  const area = cells.reduce((sum, c) => sum + c.w * c.h, 0);
+  assert.ok(Math.abs(area - 1600 * 900) < 1e-6);
+  assert.ok(Math.abs(cells[0].w * cells[0].h - (1600 * 900) / 2) < 1e-6);
+});
+
+test('coverRect: 区画を覆う 16:9 にして、画面の中に収める', () => {
+  const cell = { x: 800, y: 0, w: 400, h: 900 };
+  const r = f.coverRect(cell, 1600, 900, 16 / 9, 240, 135);
+  assert.ok(r.x <= cell.x && r.y <= cell.y);
+  assert.ok(r.x + r.w >= cell.x + cell.w && r.y + r.h >= cell.y + cell.h);
+  assert.ok(r.x >= 0 && r.y >= 0 && r.x + r.w <= 1600 && r.y + r.h <= 900);
 });
 
 test('tileGrid: 横長の画面は横に、縦長の画面は縦に並べる', () => {

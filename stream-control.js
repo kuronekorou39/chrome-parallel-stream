@@ -514,6 +514,38 @@ function mvInOwnFrame() {
     );
   }
 
+  // ---- 配信が続いているかを親へ知らせる(終わった枠を自動で隠すため) ----
+  // 無音や映像の停止だけでは、回線の乱れや広告と区別できない。サイト自身の「終了」の表示だけを
+  // offline とする。判定できないときは unknown にして、親が隠さない側へ倒れるようにする。
+  //   Twitch … オフライン画面の要素 / Kick … /<channel>/offline へ移る(どちらも 2026-11 に実測)
+  //   YouTube … ライブの目印があるときだけ live。終了は ended-mode(アーカイブの再生終了を除くため)
+  if (isDirectTile && (isPlayerEmbed || host === 'player.kick.com')) {
+    const STREAM_POLL_MS = 5000;
+    const isPlaying = () => {
+      const v = document.querySelector('video');
+      return !!v && !v.paused && v.readyState >= 2 && v.currentTime > 0;
+    };
+    const streamState = () => {
+      if (host.includes('twitch.tv')) {
+        if (new URLSearchParams(location.search).has('video')) return 'unknown'; // アーカイブ
+        if (document.querySelector('.channel-status-info--offline, .offline-embeds')) return 'offline';
+      } else if (host === 'player.kick.com') {
+        if (/\/offline\/?$/.test(location.pathname)) return 'offline';
+      } else if (host.includes('youtube.com')) {
+        if (document.querySelector('.html5-video-player.ended-mode')) return 'offline';
+        if (!document.querySelector('.ytp-live')) return 'unknown';
+      }
+      return isPlaying() ? 'live' : 'unknown';
+    };
+    let streamReported = null;
+    setInterval(() => {
+      const state = streamState();
+      if (state === streamReported) return;
+      streamReported = state;
+      post('stream-state', { state });
+    }, STREAM_POLL_MS);
+  }
+
   // ---- YouTube の live_chat 枠: チャットが使えるかを親へ知らせる ----
   // ライブでない動画では live_chat が「このライブ ストリームではチャットは無効です。」だけを出す。
   // そのとき DOM は一覧(yt-live-chat-item-list-renderer)を持たず、単独の

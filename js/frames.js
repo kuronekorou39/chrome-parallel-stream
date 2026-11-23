@@ -132,6 +132,8 @@ function onFrameState(e) {
     // 枠の中で実際に付いている遅延(twitch-keepalive.js から)。調整パネルの表示に使う。
     win.delayState = d.state || null;
     if (win.syncDelayUI) win.syncDelayUI();
+  } else if (d.type === 'stream-state') {
+    onStreamState(win, d.state);
   } else if (d.type === 'sync-audio') {
     onSyncAudio(win, d);
   } else if (d.type === 'frame-hello') {
@@ -143,6 +145,53 @@ function onFrameState(e) {
     applyVolume(win, masterVolume);
     syncFrameDelay(win); // 再読込した枠にも、指定してあった遅延を付け直す
   }
+}
+
+// ====== 終わった配信を自動で隠す ======
+// この枠で配信が流れるのを一度見てから終わったときだけ隠す。オフラインのチャンネルを追加した直後に
+// 枠が消えると、追加に失敗したように見えるため。再開したら自動で出す。
+// 手で出し直した枠は、次に配信が始まるまで隠さない。
+function onStreamState(win, state) {
+  win.streamState = state;
+  clearTimeout(win.streamEndTimer);
+  if (state === 'live') {
+    win.streamSeenLive = true;
+    win.stayVisible = false;
+    if (win.autoHidden) {
+      win.autoHidden = false;
+      showWindow(win);
+    }
+  } else if (state === 'offline') {
+    armStreamEndHide(win);
+  }
+}
+
+function armStreamEndHide(win) {
+  clearTimeout(win.streamEndTimer);
+  // スマホには切り替えの場所(配置ポップアップ)が無いので、自動では隠さない。
+  if (!autoHideEnded || stackMode || !win.streamSeenLive || win.stayVisible || win.hidden) return;
+  win.streamEndTimer = setTimeout(() => {
+    if (!wins.includes(win) || win.hidden || win.stayVisible || !autoHideEnded || stackMode) return;
+    if (win.streamState !== 'offline') return;
+    win.autoHidden = true; // hideWindow の保存より先に立てる(更新後は隠さず出すため)
+    hideWindow(win);
+  }, STREAM_END_HIDE_MS);
+}
+
+function setAutoHideEnded(on) {
+  autoHideEnded = on;
+  try { MV.storage.local.set({ [AUTO_HIDE_ENDED_KEY]: on }); } catch (e) { /* noop */ }
+  wins.forEach((win) => {
+    if (on) {
+      if (win.streamState === 'offline') armStreamEndHide(win);
+      return;
+    }
+    clearTimeout(win.streamEndTimer);
+    if (win.autoHidden) {
+      win.autoHidden = false;
+      showWindow(win);
+    }
+  });
 }
 
 // ====== 位置・サイズ ======
@@ -223,6 +272,11 @@ function setAllChat(on) {
 // サイト枠(Twitch/YouTube/OPENREC)の iframe を生成して body に載せる。
 // 軽量モード(win.light)の枠は、フルサイトではなく公式埋め込みプレイヤーだけを読み込む。
 function mountSiteFrame(win) {
+  // 読み直すと別の配信になりうるので、終了の判定はやり直す。
+  clearTimeout(win.streamEndTimer);
+  win.streamState = null;
+  win.streamSeenLive = false;
+  win.stayVisible = false;
   const frame = document.createElement('iframe');
   frame.allow = IFRAME_ALLOW;
   // チャットと2分割する枠では、映像は .win-media の中へ入れる(iframe は絶対配置なので
