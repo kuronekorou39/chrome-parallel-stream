@@ -10,11 +10,11 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=1.0.12" />
+  <link rel="stylesheet" href="multiview.css?v=1.0.13" />
 </head>
 <body>
   <div id="toolbar">
-    <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/20</span>
+    <span class="tb-item" title="表示中の配信数">枠 <span id="count">0</span>/<span id="count-max"></span></span>
     <button id="add-open-btn" class="tb-btn tb-btn-primary" title="枠を追加">＋ 追加</button>
     <button id="tile-btn" class="tb-btn" title="全部をタイル状に整列">整列</button>
     <button id="mixer-btn" class="tb-btn" title="枠一覧 / ミキサー(下に隠れた枠を出す・表示切替・音量)"><i data-ic="mixer"></i><span class="ic-text">一覧</span></button>
@@ -115,7 +115,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.12.zip" download="parallel-stream-1.0.12.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.13.zip" download="parallel-stream-1.0.13.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -295,7 +295,7 @@
   </div>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=1.0.12"></script>
-  <script src="multiview.js?v=1.0.12"></script>
+  <script src="ext-bridge.js?v=1.0.13"></script>
+  <script src="multiview.js?v=1.0.13"></script>
 </body>
 </html>

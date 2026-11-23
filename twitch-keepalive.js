@@ -5,7 +5,8 @@
 // 縦積みでスクロールするとタイルが画面外になり、これに引っかかって止まる。
 //
 // クロスオリジンの埋め込みが「親ビューポートでの自分の可視状態」を知る手段は実質 IntersectionObserver と
-// Page Visibility API だけなので、その両方を「常に完全可視」と思い込ませて停止を防ぐ。
+// Page Visibility API だけなので、その両方を「常に完全可視」と思い込ませて停止を防ぐ
+// (Page Visibility 側は keepalive-visibility.js)。
 // MAIN world・document_start で、Twitch のスクリプトが観測を始める前に差し替える。
 //
 // 同じく MAIN world でしかできないこととして、枠ごとの遅延(下の 4)もここが担当する。
@@ -84,19 +85,7 @@
     try { window.IntersectionObserver = Patched; } catch (e) { /* noop */ }
   }
 
-  // 2) Page Visibility を常に「可視」へ偽装(タブが裏でも止めない)。visibilitychange の hidden も握り潰す。
-  try {
-    Object.defineProperty(document, 'hidden', { configurable: true, get: function () { return false; } });
-    Object.defineProperty(document, 'visibilityState', { configurable: true, get: function () { return 'visible'; } });
-    Object.defineProperty(document, 'webkitHidden', { configurable: true, get: function () { return false; } });
-    Object.defineProperty(document, 'webkitVisibilityState', { configurable: true, get: function () { return 'visible'; } });
-  } catch (e) { /* noop */ }
-  const swallow = function (e) { e.stopImmediatePropagation(); };
-  document.addEventListener('visibilitychange', swallow, true);
-  document.addEventListener('webkitvisibilitychange', swallow, true);
-
-  // 3) フォーカス喪失で止める実装にも備え、hasFocus も true に固定。
-  try { document.hasFocus = function () { return true; }; } catch (e) { /* noop */ }
+  // 2) 3) Page Visibility と hasFocus の偽装は keepalive-visibility.js が担当する(このフレームにも入る)。
 
   // 4) 枠ごとの遅延(親からの set-delay)。本配信とミラー配信を並べたときに、進んでいる側を
   // 遅らせて音を揃えるためのもの。
