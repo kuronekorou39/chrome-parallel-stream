@@ -233,17 +233,17 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 }
 .mixer-panel[hidden] { display: none; } /* display:flex を [hidden] より優先しないよう明示 */
 /* perf-head と同じくフラット(濃い帯・下線なし)。 */
-.mixer-head {
+.mixer-head, .pos-dialog-head, .dmk-head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
   cursor: move; user-select: none; touch-action: none;
 }
 .mixer-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); } /* perf-title と同じ */
 /* perf-close と同じく枠なしの小さな✕。 */
-.mixer-x {
+.mixer-x, .adj-x, .pos-dialog-x, .dmk-x {
   flex: 0 0 auto; background: transparent; color: var(--c-text-muted); border: none; border-radius: 6px;
   font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
 }
-.mixer-x:hover { color: var(--c-danger); }
+.mixer-x:hover, .adj-x:hover, .pos-dialog-x:hover, .dmk-x:hover { color: var(--c-danger); }
 .mixer-master {
   flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--c-surface-2);
 }
@@ -423,11 +423,6 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
   cursor: move; user-select: none; touch-action: none;
 }
 .adj-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); }
-.adj-x { /* mixer-x / dmk-x と同じ、枠なしの小さな✕。 */
-  flex: 0 0 auto; background: transparent; color: var(--c-text-muted); border: none; border-radius: 6px;
-  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
-}
-.adj-x:hover { color: var(--c-danger); }
 /* パネルを開いている間はヘッダを出し続ける(自動で消さない) */
 .win.adjust-open .win-bar { opacity: 1; transform: translate(calc(-50% + var(--bar-x, 0px)), 0); pointer-events: auto; }
 .adj-row { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--c-text); cursor: pointer; }
@@ -665,18 +660,9 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
   box-shadow: 0 8px 24px var(--c-shadow); color: var(--c-text);
 }
 /* ヘッダ帯 = ドラッグの取っ手。mixer-head と同じくフラット(濃い帯・下線なし)。 */
-.pos-dialog-head {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px;
-  cursor: move; user-select: none; touch-action: none;
-}
 .pos-dialog-movable .pos-dialog-title { /* mixer-title と同じ。中央寄せの基本形を上書きして左寄せに。 */
   flex: 1 1 auto; text-align: left; font-size: 12px; color: var(--c-text); margin: 0;
 }
-.pos-dialog-x { /* mixer-x / perf-close と同じ、枠なしの小さな✕。 */
-  flex: 0 0 auto; background: transparent; color: var(--c-text-muted); border: none; border-radius: 6px;
-  font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer;
-}
-.pos-dialog-x:hover { color: var(--c-danger); }
 .pos-dialog-body { padding: 4px 12px 14px; }
 .pos-dialog-body > :first-child { margin-top: 0; } /* 先頭セクション(見出し等)の上余白を詰める */
 /* 枠一覧/パフォーマンスと同じフロート挙動: 背景を暗転せず、オーバーレイはクリックを透過(pointer-events:none)
@@ -753,10 +739,7 @@ body:not(.stack-mode) .win.chat-below .win-body .win-chat-slot { flex: 0 0 max(3
 }
 .dmk-panel[hidden] { display: none; }
 body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロールに連れられない */
-.dmk-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: move; user-select: none; touch-action: none; }
 .dmk-title { flex: 1 1 auto; font-size: 12px; color: var(--c-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dmk-x { flex: 0 0 auto; background: transparent; color: var(--c-text-muted); border: none; border-radius: 6px; font-size: 14px; line-height: 1; padding: 2px 6px; cursor: pointer; }
-.dmk-x:hover { color: var(--c-danger); }
 /* 適用先ドロップダウン(全体の既定 / 個別の枠を名前で選ぶ)。 */
 .dmk-scope-row { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
 .dmk-scope-label { flex: 0 0 auto; font-size: 12px; color: var(--c-text-muted); }

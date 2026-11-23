@@ -428,7 +428,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.10';
+const EXPECTED_EXT_VERSION = '1.0.11';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -775,16 +775,11 @@ async function applyLayout(layout) {
 // 配置ダイアログ(#layout-dialog)の開閉と、保存済み一覧の描画。
 function openLayoutDialog() {
   if (stackMode) return; // スマホ(縦積み)では配置は使わない(丸ボタンも隠しているが念のため)
-  const dlg = document.getElementById('layout-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  const name = document.getElementById('layout-name');
-  if (name) name.value = '';
-  const panel = dlg.querySelector('.pos-dialog');
-  delete panel.dataset.pinned;
-  placePanelClear(panel); // まず今の内容の大きさで置く
-  raisePanel(dlg);     // 開いたら最前面(z は overlay 側)
-  dlg.classList.add('open');
+  const panel = toggleDialog('layout-dialog', {
+    place: placePanelClear, // まず今の内容の大きさで置く
+    beforeOpen: () => { document.getElementById('layout-name').value = ''; }
+  });
+  if (!panel) return;
   renderLayoutList().then(() => { if (!panel.dataset.pinned) placePanelClear(panel); }); // 一覧の高さが確定してから置き直す
 }
 
@@ -1111,6 +1106,14 @@ function kickWatchChannel(url) {
 }
 
 // ====== 位置・サイズ ======
+
+// 枠の中の content script へ送る。読み込み前や閉じた枠でも落ちないようにする。
+function postToFrame(frame, msg) {
+  if (!frame) return;
+  try {
+    frame.contentWindow.postMessage({ [MAGIC]: true, ...msg }, '*');
+  } catch (e) { /* noop */ }
+}
 
 function setRect(win, x, y, w, h) {
   const sw = stage.clientWidth;
@@ -2052,18 +2055,12 @@ function syncMenuLabels(win) {
 // 枠内シアター(視聴ページで video を枠いっぱいに固定)はスタックモード=スマホ縦積みのとき有効。
 // 有効化は親主導で frame へ伝える(iframe 内の pointer:coarse 判定に頼らない)。
 function sendTheaterEnabled(win, on) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-theater-enabled', value: !!on }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'set-theater-enabled', value: !!on });
 }
 
 // ⛶全画面の間だけシアターを止めて素のサイトを操作できるようにする。
 function sendTheaterSuspend(win, suspended) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-theater-suspend', value: !!suspended }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'set-theater-suspend', value: !!suspended });
 }
 
 // frame の現在あるべきシアター状態をまとめて送る。
@@ -2261,12 +2258,7 @@ function toggleDanmaku(win) {
 function sendDanmakuEnabled(win, on) {
   // コメントを持っているのは、サイトを丸ごと出している枠か、横に並べたチャット枠のどちらか。
   // YouTube は埋め込みプレイヤー+ live_chat の2枚組なので、映像側だけに送ると届かない。
-  const targets = [win.frame, win.chatFrame].filter(Boolean);
-  for (const f of targets) {
-    try {
-      f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: !!on }, '*');
-    } catch (e) { /* noop */ }
-  }
+  [win.frame, win.chatFrame].forEach((f) => postToFrame(f, { type: 'set-danmaku-enabled', value: !!on }));
 }
 // frame の読込/挨拶のすれ違い対策。現在の弾幕状態を frame へ送り直す(theater と同型)。
 function syncFrameDanmaku(win) {
@@ -3039,46 +3031,22 @@ function packVolumeRows(items, W, gap, base, minH = 0) {
 // 枠内のログインは対象サイトの Cookie の SameSite 変更に依存し、その変更はブラウザ全体へ効く。
 // 黙って変えるのではなく、利用者が選べて戻せる状態にしておく。
 function openCookieDialog() {
-  const dlg = document.getElementById('cookie-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  document.getElementById('cookie-relax').checked = cookieRelaxOn;
-  document.getElementById('cookie-status').textContent = '';
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel); // 他のダイアログと同じく、開くたび中央へ置き直す
-  raisePanel(dlg);
-  dlg.classList.add('open');
+  toggleDialog('cookie-dialog', {
+    beforeOpen: () => {
+      document.getElementById('cookie-relax').checked = cookieRelaxOn;
+      document.getElementById('cookie-status').textContent = '';
+    }
+  });
 }
 
 // 拡張機能ダイアログ。押した瞬間にダウンロードが始まると何が落ちてきたのか分からないので、
 // 版と手順を見せてから落とさせる。中身は checkExtVersion が埋めている。
 function openUpdateDialog() {
-  const dlg = document.getElementById('update-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; }
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel);
-  raisePanel(dlg);
-  dlg.classList.add('open');
-}
-
-function setupUpdateDialog() {
-  const dlg = document.getElementById('update-dialog');
-  if (!dlg) return;
-  document.getElementById('update-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  toggleDialog('update-dialog');
 }
 
 function setupCookieDialog() {
-  const dlg = document.getElementById('cookie-dialog');
-  if (!dlg) return;
-  const close = () => dlg.classList.remove('open');
-  document.getElementById('cookie-dialog-close').addEventListener('click', close);
-  // 枠外クリックでは閉じない(枠を追加/配置と同じ扱い)。≡メニューから開くと、
-  // メニューを閉じた直後の click がここへ落ちて、開いた瞬間に閉じていた。
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  setupDialog('cookie-dialog');
 
   const toggle = document.getElementById('cookie-relax');
   toggle.addEventListener('change', () => {
@@ -3479,11 +3447,7 @@ function syncMasterUI() {
 function applyVolume(win, v) {
   // 非表示でも音は止めない(👁は見た目を消すだけ)。実音量 = 枠ごと音量 × マスタ。
   const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * v));
-  if (win.frame) {
-    try {
-      win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: eff }, '*');
-    } catch (e) { /* noop */ }
-  }
+  postToFrame(win.frame, { type: 'set-volume', value: eff });
 }
 
 // ====== 枠ごとの遅延 ======
@@ -3510,12 +3474,8 @@ function setWinDelay(win, sec) {
 }
 
 function syncFrameDelay(win) {
-  if (!win.frame || !delaySupported(win)) return;
-  try {
-    win.frame.contentWindow.postMessage(
-      { [MAGIC]: true, type: 'set-delay', value: win.delay || 0, hold: !!win.delayHold }, '*'
-    );
-  } catch (e) { /* noop */ }
+  if (!delaySupported(win)) return;
+  postToFrame(win.frame, { type: 'set-delay', value: win.delay || 0, hold: !!win.delayHold });
 }
 
 // ====== 音で合わせる ======
@@ -3753,24 +3713,19 @@ function syncDialogUI() {
 
 // めったに使わない機能なので、押してすぐ動かさず、何をするものかを見せてから実行する。
 function openSyncDialog() {
-  const dlg = document.getElementById('sync-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  syncDialogRan = false;
-  document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
-    ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
-    : syncRun ? 'いま測っている最中です。' : '';
-  syncDialogUI();
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel);
-  raisePanel(dlg);
-  dlg.classList.add('open');
+  toggleDialog('sync-dialog', {
+    beforeOpen: () => {
+      syncDialogRan = false;
+      document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
+        ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
+        : syncRun ? 'いま測っている最中です。' : '';
+      syncDialogUI();
+    }
+  });
 }
 
 function setupSyncDialog() {
-  const dlg = document.getElementById('sync-dialog');
-  if (!dlg) return;
-  document.getElementById('sync-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
+  setupDialog('sync-dialog');
   // 実行しても閉じない(結果と、定期実行の案内を下に出す)。
   document.getElementById('sync-dialog-run').addEventListener('click', () => {
     syncDialogRan = true;
@@ -3778,15 +3733,10 @@ function setupSyncDialog() {
     syncDialogUI();
   });
   document.getElementById('sync-dialog-auto').addEventListener('click', () => setSyncAuto(!syncAuto));
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
 }
 
 function postSyncListen(win, on) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'sync-listen', value: on }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'sync-listen', value: on });
 }
 
 // auto = 定期実行。枠の上の表示もメニューの経過も出さず、静かに測って必要なぶんだけ直す。
@@ -4459,6 +4409,35 @@ function setupQuickButtonState() {
   });
 }
 
+// ====== 移動できるダイアログ(.pos-dialog-overlay > .pos-dialog)の共通処理 ======
+// 開くたびに置き直して最前面へ出す。もう一度押したら閉じる。開いたときはパネルを、それ以外は null を返す。
+function toggleDialog(id, { place = centerPanel, beforeOpen } = {}) {
+  const dlg = document.getElementById(id);
+  if (!dlg) return null;
+  if (dlg.classList.contains('open')) {
+    dlg.classList.remove('open');
+    return null;
+  }
+  const panel = dlg.querySelector('.pos-dialog');
+  delete panel.dataset.pinned;
+  if (beforeOpen) beforeOpen(panel);
+  place(panel);
+  raisePanel(dlg); // z は overlay 側で上げる
+  dlg.classList.add('open');
+  return panel;
+}
+
+// ✕(id + '-close')で閉じ、ヘッダ帯で動かせるようにする。枠外クリックでは閉じない
+// (下のステージを操作できるようにするため。≡メニューから開いた直後の click で閉じる事故も防ぐ)。
+function setupDialog(id) {
+  const dlg = document.getElementById(id);
+  if (!dlg) return;
+  document.getElementById(id + '-close').addEventListener('click', () => dlg.classList.remove('open'));
+  const panel = dlg.querySelector('.pos-dialog');
+  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  wirePanelRaise(panel, dlg);
+}
+
 function makePanelDraggable(el, handle) {
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !e.isPrimary) return;
@@ -4543,19 +4522,10 @@ function wireToolbar() {
   setupMainMenu();
 
   // 「＋追加」→ 追加ダイアログ(サイトボタン / URL入力)。ツールバーをすっきりさせるため別モーダルに。
-  const addDialog = document.getElementById('add-dialog');
-  const addPanel = addDialog.querySelector('.pos-dialog');
-  const closeAdd = () => addDialog.classList.remove('open');
-  // 開くたび置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば同じ位置から始まる)。
-  // 表示中にもう一度押したら閉じる(≡メニューの項目どうしで挙動を揃える)。
   // 縦積み(スマホ)だけ下寄せ。タイルが上から積まれるので、中央だと追加した枠にすぐ隠れる。
   const openAdd = (e) => {
     if (e) e.stopPropagation();
-    if (addDialog.classList.contains('open')) { closeAdd(); return; }
-    delete addPanel.dataset.pinned;
-    if (stackMode) placePanelBottom(addPanel); else placePanelClear(addPanel);
-    raisePanel(addDialog);
-    addDialog.classList.add('open');
+    toggleDialog('add-dialog', { place: (panel) => (stackMode ? placePanelBottom(panel) : placePanelClear(panel)) });
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
@@ -4564,14 +4534,7 @@ function wireToolbar() {
   document.getElementById('qa-mixer').addEventListener('click', () => document.getElementById('mixer-btn').click());
   setupQuickButtonState();
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
-  document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
-  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので
-  // 出しっぱなしで連続追加でき、下のステージ操作もできる(オーバーレイは CSS で pointer-events:none)。
-  // ヘッダ帯を掴んでドラッグ移動(配置ダイアログ/枠一覧と同じ仕組み)。掴む/フォーカスで最前面へ。
-  if (addPanel) {
-    makePanelDraggable(addPanel, addPanel.querySelector('.pos-dialog-head'));
-    wirePanelRaise(addPanel, addDialog); // z は overlay(#add-dialog)側で上げる
-  }
+  setupDialog('add-dialog');
 
   const addUrl = document.getElementById('add-url');
   const addNote = document.getElementById('add-note');
@@ -4632,7 +4595,7 @@ function wireToolbar() {
   setupMixer();
   setupDanmakuPanel();
   setupCookieDialog();
-  setupUpdateDialog();
+  setupDialog('update-dialog');
   setupSyncDialog();
   MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     // 読込前にユーザーが位置を選んでいたら、その操作を保存値で巻き戻さない。
@@ -4731,15 +4694,7 @@ function setupLayoutDialog() {
   };
   if (save) save.addEventListener('click', doSave);
   if (nameInput) nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
-  const close = document.getElementById('layout-dialog-close');
-  if (close) close.addEventListener('click', closeLayoutDialog);
-  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動。枠外クリックでは閉じない)。
-  // ヘッダ帯を掴んでドラッグ移動(枠一覧/パフォーマンスと同じ makePanelDraggable)。掴む/フォーカスで最前面へ。
-  const panel = dlg.querySelector('.pos-dialog');
-  if (panel) {
-    makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
-    wirePanelRaise(panel, dlg); // z は overlay(#layout-dialog)側で上げる
-  }
+  setupDialog('layout-dialog');
 }
 
 // ポインタが一定時間動かなかったら、まずカーソル+常駐UI(≡メニュー/⛶全画面を終了)を消し(IDLE_CURSOR_MS)、
@@ -4767,8 +4722,7 @@ function setupIdleHide() {
   // 文書が管理するので、idle の変化を各 frame へ通知して中のカーソルも消す/戻す(stream-control が set-idle を処理)。
   const broadcastIdle = (on) => {
     wins.forEach((w) => {
-      try { if (w.frame) w.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
-      try { if (w.chatFrame) w.chatFrame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
+      [w.frame, w.chatFrame].forEach((f) => postToFrame(f, { type: 'set-idle', value: on }));
     });
   };
   const setIdle = (on) => {
