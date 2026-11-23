@@ -100,14 +100,40 @@ const DMK_CONTROLS = [
   { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色', adv: true }
 ];
 
+// 対応サイトの定義。サイトごとの情報はここに集める。
+//   url: 「枠を追加」のボタンで開くトップ / hosts: このサイトのドメイン(サブドメインも含む)
+//   login: 枠の中でログイン状態を使う(Cookie の SameSite を緩める)か。YouTube は埋め込みログインの
+//          仕組みが別で、緩和がむしろ逆効果になりうるので対象にしない。
+//          Kick は配信を選ぶ一覧を枠で開くので、ログインしていないとフォロー中が出ない。
+const SITES = {
+  twitch: { name: 'Twitch', letter: 'T', color: '#9147ff', url: 'https://www.twitch.tv/', hosts: ['twitch.tv'], login: true },
+  youtube: { name: 'YouTube', letter: 'Y', color: '#ff0033', url: 'https://www.youtube.com/', hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'], login: false },
+  kick: { name: 'Kick', letter: 'K', color: '#53fc18', url: 'https://kick.com/', hosts: ['kick.com'], login: true },
+  openrec: { name: 'mellow-fan', letter: 'M', color: '#ffd200', url: 'https://www.mellow-fan.com/', hosts: ['mellow-fan.com', 'openrec.tv'], login: true }
+};
+
+function hostMatches(host, domain) {
+  const h = String(host || '').toLowerCase();
+  return h === domain || h.endsWith('.' + domain);
+}
+
+// ホスト名から SITES のキーを返す。対応サイトでなければ null。
+function siteKeyOf(host) {
+  return Object.keys(SITES).find((key) => SITES[key].hosts.some((d) => hostMatches(host, d))) || null;
+}
+
+// 視聴ページを持つ YouTube のホストか(youtube-nocookie.com は埋め込み専用なので含めない)。
+function isYouTubeWatchHost(host) {
+  return host === 'youtu.be' || hostMatches(host, 'youtube.com');
+}
+
 // 枠(iframe)に表示できるサイト。rules.json が X-Frame-Options / CSP を剥がしている対象と
 // 一致させること。ここに無いサイトは、サイト側の埋め込み拒否がそのまま効いて「接続拒否」になる。
 // 対象を増やすことは、そのドメインの埋め込み防御を利用者のブラウザで外すことを意味するので、
 // 安易に足さない(README の「この拡張がブラウザに与える影響」も合わせて更新すること)。
-const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv', 'mellow-fan.com'];
+const EMBEDDABLE_HOSTS = Object.values(SITES).flatMap((site) => site.hosts);
 function isEmbeddableHost(host) {
-  const h = String(host || '').toLowerCase();
-  return EMBEDDABLE_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+  return EMBEDDABLE_HOSTS.some((d) => hostMatches(host, d));
 }
 
 // 枠として読み込んでよい URL か(スキームとホストの両方を見る)。
@@ -211,14 +237,6 @@ function putLabel(el, label) {
 
 // HTML に置いた目印(<i data-ic="名前">)を SVG に差し替える。
 document.querySelectorAll('i[data-ic]').forEach((el) => el.replaceWith(iconEl(el.dataset.ic)));
-
-// ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
-const SITES = {
-  twitch: { url: 'https://www.twitch.tv/' },
-  youtube: { url: 'https://www.youtube.com/' },
-  kick: { url: 'https://kick.com/' },
-  openrec: { url: 'https://www.mellow-fan.com/' }
-};
 
 const stage = document.getElementById('stage');
 const stageEmpty = document.getElementById('stage-empty');
@@ -372,7 +390,6 @@ function onFrameUrl(e) {
   win.url = d.href;
   pushWinHistory(win, d.href); // ⋮メニューの「戻る」用
   updateWinTitle(win);
-  syncLightBtn(win); // 配信ページへ移動したら⚡が押せるようになる
   saveLineup();
   renderMixer(); // 一覧のラベルも更新
   // 枠の中で一覧から配信・動画を選んだら、その時点で「プレイヤー + チャット」の構成へ移る。
@@ -429,7 +446,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.8';
+const EXPECTED_EXT_VERSION = '1.0.13';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -557,9 +574,7 @@ function goBackWindow(win) {
   win.url = prev;
   win.light = !!toLightUrl(prev);
   win.tall = null;
-  if (win.lightBtn) win.lightBtn.classList.toggle('active', win.light);
   updateWinTitle(win);
-  syncLightBtn(win);
   syncMenuLabels(win);
   remountFrame(win);
   relayoutStack();
@@ -569,12 +584,10 @@ function goBackWindow(win) {
 
 // 枠を埋め込み構成(映像=embed / チャット=live_chat)へ切り替える。既にそうなら何もしない。
 function switchToEmbed(win) {
-  if (win.light || win.video || !toLightUrl(win.url)) return;
+  if (win.light || !toLightUrl(win.url)) return;
   win.light = true;
   win.tall = null;
-  if (win.lightBtn) win.lightBtn.classList.add('active');
   updateWinTitle(win);
-  syncLightBtn(win);
   syncMenuLabels(win);
   remountFrame(win);
   relayoutStack();
@@ -780,16 +793,11 @@ async function applyLayout(layout) {
 // 配置ダイアログ(#layout-dialog)の開閉と、保存済み一覧の描画。
 function openLayoutDialog() {
   if (stackMode) return; // スマホ(縦積み)では配置は使わない(丸ボタンも隠しているが念のため)
-  const dlg = document.getElementById('layout-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  const name = document.getElementById('layout-name');
-  if (name) name.value = '';
-  const panel = dlg.querySelector('.pos-dialog');
-  delete panel.dataset.pinned;
-  placePanelClear(panel); // まず今の内容の大きさで置く
-  raisePanel(dlg);     // 開いたら最前面(z は overlay 側)
-  dlg.classList.add('open');
+  const panel = toggleDialog('layout-dialog', {
+    place: placePanelClear, // まず今の内容の大きさで置く
+    beforeOpen: () => { document.getElementById('layout-name').value = ''; }
+  });
+  if (!panel) return;
   renderLayoutList().then(() => { if (!panel.dataset.pinned) placePanelClear(panel); }); // 一覧の高さが確定してから置き直す
 }
 
@@ -888,11 +896,12 @@ function createWindow(url, opts = {}) {
   // 2分割の器は枠の生成時にしか作れないので、トップページ等でも YouTube なら先に用意しておく
   // (枠の中で動画を選んだ時点で埋め込みへ切り替わり、そのままチャットも出せるように)。
   const siteHost = hostOf(url);
-  const isYouTube = siteHost.includes('youtube.com') || siteHost === 'youtu.be';
+  const siteKey = siteKeyOf(siteHost);
+  const isYouTube = isYouTubeWatchHost(siteHost);
   // Twitch も軽量表示では「プレイヤー + 埋め込みチャット」の2枚組にする。サイト全体を出すと
   // レイアウトも書き込みもサイト側の都合に左右され、縦長のときに使い物にならないため。
-  const isTwitch = siteHost.includes('twitch.tv') && !siteHost.startsWith('player.');
-  const hasChatPane = isYouTube || isTwitch || siteHost.includes('kick.com');
+  const isTwitch = siteKey === 'twitch' && !siteHost.startsWith('player.');
+  const hasChatPane = isYouTube || isTwitch || siteKey === 'kick';
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
@@ -901,16 +910,11 @@ function createWindow(url, opts = {}) {
   const openBtn = mkBtn(':external:', '', '元サイトを新しいタブで開く(ログイン/操作用)');
   const reloadBtn = mkBtn(':reload:', '', 'この枠を再読込');
   const chatBtn = hasChatPane ? mkBtn(':chat:', 'active', 'チャットの表示/非表示') : null;
-  // ⚡(軽量⇄通常)は YouTube では出さない。通常表示は Chromium が落ちることが確定していて、
-  // 押せば必ず壊れるボタンを置く意味が無いため(切替先が1つしかないので選択肢にならない)。
-  // ⚡ は置かない(モードは映しているもので決まるので、選ばせる場面が無い)。
-  const lightBtn = null;
   const adjustBtn = mkBtn(':adjust:', '', 'この枠の透明度・画質を調整');
   const maxBtn = mkBtn(':fullscreen:', 'max', '最大化/復元'); // 縦積みモードでは CSS で隠す
   const closeBtn = mkBtn('✕', 'close', '閉じる');
   controls.append(openBtn, reloadBtn);
   if (chatBtn) controls.append(chatBtn);
-  if (lightBtn) controls.append(lightBtn);
   controls.append(adjustBtn, maxBtn, closeBtn);
   // [グリップ左][ タイトル + 音量 + ボタン = 枠移動ゾーン ] の順で台形ハンドルを組む。
   barMain.append(title, volWrap, controls);
@@ -919,7 +923,6 @@ function createWindow(url, opts = {}) {
   const body = document.createElement('div');
   body.className = 'win-body';
   let frame = null;
-  let video = null;
   let chatFrame = null;
   let mediaEl = null; // チャットと2分割するとき、映像側を入れる箱(無ければ body 直下)
   if (hasChatPane) {
@@ -964,7 +967,7 @@ function createWindow(url, opts = {}) {
   stage.appendChild(el);
 
   const win = {
-    id, url, el, body, frame, video, chatFrame, mediaEl, chatBtn, lightBtn, bar, barX: 0, titleEl: title, volSlider, volIcon,
+    id, url, el, body, frame, chatFrame, mediaEl, chatBtn, bar, barX: 0, titleEl: title, volSlider, volIcon,
     maximized: false, hidden: false, light: false, tall: null, span: 'full', zoom: null,
     // YouTube の通常表示は Chromium が落ちるので、この枠には切替先を出さない。
     // ⋮メニューの生成(buildQuickControls)より前に決まっている必要がある。
@@ -993,9 +996,7 @@ function createWindow(url, opts = {}) {
   const defaultLight = isYouTube || isKick || (isTwitch && opts.light === undefined);
   win.light = (defaultLight || !!opts.light) && !!toLightUrl(url);
   pushWinHistory(win, url); // ⋮メニューの「戻る」用。最初のページを起点にする
-  if (win.light && lightBtn) lightBtn.classList.add('active');
   updateWinTitle(win);
-  syncLightBtn(win);
 
   // 新規枠は中央付近からカスケード(少しずつ右下へずらして)出す。全部中央に重ねると見づらいため。
   // (枠一覧/パフォーマンス等の機能パネルは中央に出す=別扱い。centerPanel)
@@ -1101,61 +1102,7 @@ function hostOf(url) {
   }
 }
 
-// ====== Kick: HLS 直再生 ======
-
-// チャンネルの HLS 再生URLを background(SW)経由で取得し、hls.js で video に流す。
-function setupKickVideo(video, url, body) {
-  const channel = kickChannelOf(url);
-  if (!channel) {
-    showVideoError(body, 'Kick はチャンネルURL(kick.com/<channel>)を入れてください');
-    return;
-  }
-  MV.runtime
-    .sendMessage({ type: 'get-kick-playback', channel })
-    .then((resp) => {
-      if (!resp || !resp.ok) {
-        const m = resp && resp.error ? resp.error.message || JSON.stringify(resp.error) : '不明';
-        showVideoError(body, 'Kick 再生URL取得に失敗: ' + m);
-        return;
-      }
-      playHls(video, resp.playbackUrl, body);
-    })
-    .catch((e) => showVideoError(body, 'Kick 取得エラー: ' + e.message));
-}
-
-function playHls(video, src, body) {
-  // Chrome は HLS ネイティブ非対応。Safari 等のため native を一応分岐し、通常は hls.js。
-  if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    video.src = src;
-    video.play().catch(() => {});
-    return;
-  }
-  if (typeof Hls === 'undefined' || !Hls.isSupported()) {
-    showVideoError(body, 'この環境は HLS 再生に未対応(hls.js 未読込)');
-    return;
-  }
-  // capLevelToPlayerSize: PC はサイズ変化で別品質の再取得をしない(無駄/事故防止)が、
-  // スマホはデコード負荷が支配的なので、枠サイズ相応の画質へ自動で抑える。
-  // worker: MV3 の CSP(script-src 'self')は blob worker を弾くため、同梱の hls.worker.js を
-  // workerPath で明示して別スレッド解析にする(メインスレッドのカクつき軽減。失敗時は
-  // hls.js が自動でメインスレッドへフォールバックする)。
-  // スマホはさらにバッファを短くしてメモリを節約する。
-  const hls = new Hls({
-    capLevelToPlayerSize: IS_COARSE,
-    enableWorker: true,
-    workerPath: 'hls.worker.js',
-    ...(IS_COARSE ? { maxBufferLength: 15, backBufferLength: 30 } : {})
-  });
-  hls.on(Hls.Events.ERROR, (_evt, data) => {
-    if (data && data.fatal) {
-      showVideoError(body, 'HLS エラー: ' + data.type + ' / ' + data.details);
-    }
-  });
-  hls.loadSource(src);
-  hls.attachMedia(video);
-  video.play().catch(() => {});
-  video._hls = hls;
-}
+// ====== Kick ======
 
 function kickChannelOf(url) {
   try {
@@ -1172,19 +1119,20 @@ const KICK_NON_CHANNEL = [
   'subscriptions', 'messages', 'dashboard', 'about', 'help', 'faq', 'terms', 'privacy'
 ];
 function kickWatchChannel(url) {
-  if (!hostOf(url).includes('kick.com')) return '';
+  if (siteKeyOf(hostOf(url)) !== 'kick') return '';
   const ch = kickChannelOf(url);
   return ch && !KICK_NON_CHANNEL.includes(ch.toLowerCase()) ? ch : '';
 }
 
-function showVideoError(body, msg) {
-  const d = document.createElement('div');
-  d.className = 'win-error';
-  d.textContent = msg;
-  body.appendChild(d);
-}
-
 // ====== 位置・サイズ ======
+
+// 枠の中の content script へ送る。読み込み前や閉じた枠でも落ちないようにする。
+function postToFrame(frame, msg) {
+  if (!frame) return;
+  try {
+    frame.contentWindow.postMessage({ [MAGIC]: true, ...msg }, '*');
+  } catch (e) { /* noop */ }
+}
 
 function setRect(win, x, y, w, h) {
   const sw = stage.clientWidth;
@@ -1736,9 +1684,9 @@ function focusWindow(win) {
   if (dp && !dp.hidden) renderDanmakuPanel(); // 開いていれば適用先ドロップダウンのラベル等を最新化
 }
 
-// 枠の主メディア(Kick は <video>、それ以外は iframe)。色調整はここに CSS filter を当てる。
+// 枠の主メディア(iframe)。色調整はここに CSS filter を当てる。
 function mediaEl(win) {
-  return win.video || win.frame || null;
+  return win.frame || null;
 }
 
 // 明るさ/コントラスト/彩度を CSS filter で適用。cross-origin iframe にも描画結果として効く。
@@ -2126,18 +2074,12 @@ function syncMenuLabels(win) {
 // 枠内シアター(視聴ページで video を枠いっぱいに固定)はスタックモード=スマホ縦積みのとき有効。
 // 有効化は親主導で frame へ伝える(iframe 内の pointer:coarse 判定に頼らない)。
 function sendTheaterEnabled(win, on) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-theater-enabled', value: !!on }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'set-theater-enabled', value: !!on });
 }
 
 // ⛶全画面の間だけシアターを止めて素のサイトを操作できるようにする。
 function sendTheaterSuspend(win, suspended) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-theater-suspend', value: !!suspended }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'set-theater-suspend', value: !!suspended });
 }
 
 // frame の現在あるべきシアター状態をまとめて送る。
@@ -2335,13 +2277,7 @@ function toggleDanmaku(win) {
 function sendDanmakuEnabled(win, on) {
   // コメントを持っているのは、サイトを丸ごと出している枠か、横に並べたチャット枠のどちらか。
   // YouTube は埋め込みプレイヤー+ live_chat の2枚組なので、映像側だけに送ると届かない。
-  // Kick の映像は <video> 直再生で frame を持たないが、チャット枠はあるのでそちらへ送る。
-  const targets = [win.frame, win.chatFrame].filter(Boolean);
-  for (const f of targets) {
-    try {
-      f.contentWindow.postMessage({ [MAGIC]: true, type: 'set-danmaku-enabled', value: !!on }, '*');
-    } catch (e) { /* noop */ }
-  }
+  [win.frame, win.chatFrame].forEach((f) => postToFrame(f, { type: 'set-danmaku-enabled', value: !!on }));
 }
 // frame の読込/挨拶のすれ違い対策。現在の弾幕状態を frame へ送り直す(theater と同型)。
 function syncFrameDanmaku(win) {
@@ -3114,46 +3050,22 @@ function packVolumeRows(items, W, gap, base, minH = 0) {
 // 枠内のログインは対象サイトの Cookie の SameSite 変更に依存し、その変更はブラウザ全体へ効く。
 // 黙って変えるのではなく、利用者が選べて戻せる状態にしておく。
 function openCookieDialog() {
-  const dlg = document.getElementById('cookie-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  document.getElementById('cookie-relax').checked = cookieRelaxOn;
-  document.getElementById('cookie-status').textContent = '';
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel); // 他のダイアログと同じく、開くたび中央へ置き直す
-  raisePanel(dlg);
-  dlg.classList.add('open');
+  toggleDialog('cookie-dialog', {
+    beforeOpen: () => {
+      document.getElementById('cookie-relax').checked = cookieRelaxOn;
+      document.getElementById('cookie-status').textContent = '';
+    }
+  });
 }
 
 // 拡張機能ダイアログ。押した瞬間にダウンロードが始まると何が落ちてきたのか分からないので、
 // 版と手順を見せてから落とさせる。中身は checkExtVersion が埋めている。
 function openUpdateDialog() {
-  const dlg = document.getElementById('update-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; }
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel);
-  raisePanel(dlg);
-  dlg.classList.add('open');
-}
-
-function setupUpdateDialog() {
-  const dlg = document.getElementById('update-dialog');
-  if (!dlg) return;
-  document.getElementById('update-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  toggleDialog('update-dialog');
 }
 
 function setupCookieDialog() {
-  const dlg = document.getElementById('cookie-dialog');
-  if (!dlg) return;
-  const close = () => dlg.classList.remove('open');
-  document.getElementById('cookie-dialog-close').addEventListener('click', close);
-  // 枠外クリックでは閉じない(枠を追加/配置と同じ扱い)。≡メニューから開くと、
-  // メニューを閉じた直後の click がここへ落ちて、開いた瞬間に閉じていた。
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  setupDialog('cookie-dialog');
 
   const toggle = document.getElementById('cookie-relax');
   toggle.addEventListener('change', () => {
@@ -3205,13 +3117,9 @@ function loadFrameWithLogin(frameEl, domain, src) {
 // 埋め込み内でログインを使いたいサイトの cookie 緩和対象ドメインを返す(対象外は null)。
 // YouTube は埋め込みログインの仕組みが別で、緩和がむしろ逆効果になりうるため対象にしない。
 function loginDomainOf(host) {
-  if (host.includes('twitch.tv')) return 'twitch.tv';
-  if (host.includes('mellow-fan.com')) return 'mellow-fan.com';
-  if (host.includes('openrec.tv')) return 'openrec.tv';
-  // Kick は配信を選ぶための一覧を枠で開く。ログイン状態でないとフォロー中が出ず、
-  // 「自分が見たい配信を選ぶ」という用途が果たせない。
-  if (host.includes('kick.com')) return 'kick.com';
-  return null;
+  const site = SITES[siteKeyOf(host)];
+  if (!site || !site.login) return null;
+  return site.hosts.find((d) => hostMatches(host, d));
 }
 
 // Kick 枠のチャット表示/非表示を切り替える。
@@ -3220,7 +3128,6 @@ function loginDomainOf(host) {
 // 開けないようにする(押しても意味のない操作を残さない)。
 function hasChatContent(win) {
   if (!win.chatFrame) return false;
-  if (win.video) return true; // Kick は生成時にチャットを読み込んでいる
   return !!win.light && !win.chatUnavailable && !win.chatPending;
 }
 
@@ -3283,7 +3190,7 @@ function mountSiteFrame(win) {
     syncFrameDelay(win);    // 遅延を指定してあれば付け直す
     hideWinLoading(win); // 読み込み中スピナーを消す(出ていれば)
   });
-  const src = (win.light && toLightUrl(win.url)) || toEmbedUrl(win.url);
+  const src = (win.light && toLightUrl(win.url)) || win.url;
   // ログインCookieを埋め込みへ通す(SameSite緩和)。対象サイトのみ(src 基準で判定)。
   const loginDomain = loginDomainOf(hostOf(src));
   if (loginDomain) {
@@ -3300,7 +3207,7 @@ function mountSiteFrame(win) {
 // 読み込む前に service worker へ問い合わせ、ライブ / 過去のライブ / 無し を確定させる。
 function mountChatFrame(win) {
   const chat = win.chatFrame;
-  if (!chat || win.video) return; // Kick のチャットは生成時に読み込み済み
+  if (!chat) return;
   if (!win.light) {
     // 通常表示(サイト全体)はページ自身がチャットを持つので、こちらの列は使わない。
     chat.src = 'about:blank';
@@ -3394,22 +3301,9 @@ function remountFrame(win) {
 
 
 
-// ⚡ボタン(台形ヘッダ/⋮メニュー両方)の活性・文言を現在の状態・URLに合わせる。
-function syncLightBtn(win) {
-  // 切替の UI は置いていないので、ここでやることは無い。左上のバッジの文言だけ
-  // updateWinTitle が現在の状態から作る。
-}
-
-// 枠をその場で再読込する(🔄)。iframe は作り直し、Kick は HLS を貼り直す。
+// 枠をその場で再読込する(🔄)。iframe を作り直す。
 function reloadWindow(win) {
-  if (win.frame) {
-    remountFrame(win); // 現在の win.url(と軽量モード)で iframe を作り直す
-  } else if (win.video) {
-    const media = win.video.parentElement;
-    if (win.video._hls) { try { win.video._hls.destroy(); } catch (e) { /* noop */ } win.video._hls = null; }
-    if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
-    setupKickVideo(win.video, win.url, media);
-  }
+  if (win.frame) remountFrame(win); // 現在の win.url(と軽量モード)で iframe を作り直す
   // チャットは映像とは別のフレームなので、映像だけ作り直しても止まったままになる。
   // 「再読み込み」を押す場面はたいていチャットが固まった時なので、こちらも読み直す。
   reloadChatFrame(win);
@@ -3439,8 +3333,6 @@ function openOriginal(win) {
 
 function closeWindow(win) {
   // 遅延読み込み待ちのまま閉じられた枠を、あとから loadWindowMedia が読み込んでしまうのを防ぐ。
-  // Kick 枠だと破棄できない Hls インスタンスが生まれ、タブを閉じるまでセグメント取得が続く
-  // (この枠は既に wins から外れるので closeWindow の destroy は二度と走らない)。
   win.pendingLoad = false;
   clearStackMax(win); // 全画面のまま閉じても body の状態を残さない
   hideWinLoading(win); // 読み込み待ち中に閉じてもスピナー/保険タイマーを残さない
@@ -3460,9 +3352,6 @@ function closeWindow(win) {
   const sameSiteSurvivors = wins.filter((w) => w !== win && w.frame && hostOf(w.url) === closedHost);
   const wasSinkOwner = sameSiteSurvivors.length > 0 && sameSiteSurvivors.every((w) => wins.indexOf(w) > closedIdx);
   if (closedIdx >= 0) wins.splice(closedIdx, 1);
-  if (win.video && win.video._hls) {
-    try { win.video._hls.destroy(); } catch (e) { /* noop */ }
-  }
   win.el.remove();
   if (activeWin === win) {
     activeWin = null;
@@ -3487,6 +3376,7 @@ function closeWindow(win) {
 
 function updateCount() {
   countEl.textContent = wins.length;
+  document.getElementById('count-max').textContent = MAX_WINDOWS;
   stageEmpty.style.display = wins.length ? 'none' : 'flex';
   document.getElementById('add-btn').disabled = wins.length >= MAX_WINDOWS;
 }
@@ -3569,20 +3459,11 @@ function syncMasterUI() {
 // プレイヤーUIへ触れないため、スライダーだけで確実に音が出る/消えることを保証する。
 // 「1つだけ聞く」は他の枠の音量を 0 にして行う(プレイヤー自前のミュートには頼らない)。
 // マスタを動かすと全枠が同倍率で増減 → 枠ごとの大小関係(win.vol の比)は保たれる。
-// 確実に効く video.volume を当てる(Kick の <video> はここ=親で、iframe 内は content script 経由で)。
+// 実際に video.volume を当てるのは枠の中の content script。
 function applyVolume(win, v) {
   // 非表示でも音は止めない(👁は見た目を消すだけ)。実音量 = 枠ごと音量 × マスタ。
   const eff = Math.max(0, Math.min(1, (win.vol != null ? win.vol : WIN_VOLUME_DEFAULT) * v));
-  if (win.video) {
-    try {
-      win.video.volume = eff;
-      win.video.muted = eff <= 0;
-    } catch (e) { /* noop */ }
-  } else if (win.frame) {
-    try {
-      win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-volume', value: eff }, '*');
-    } catch (e) { /* noop */ }
-  }
+  postToFrame(win.frame, { type: 'set-volume', value: eff });
 }
 
 // ====== 枠ごとの遅延 ======
@@ -3609,12 +3490,8 @@ function setWinDelay(win, sec) {
 }
 
 function syncFrameDelay(win) {
-  if (!win.frame || !delaySupported(win)) return;
-  try {
-    win.frame.contentWindow.postMessage(
-      { [MAGIC]: true, type: 'set-delay', value: win.delay || 0, hold: !!win.delayHold }, '*'
-    );
-  } catch (e) { /* noop */ }
+  if (!delaySupported(win)) return;
+  postToFrame(win.frame, { type: 'set-delay', value: win.delay || 0, hold: !!win.delayHold });
 }
 
 // ====== 音で合わせる ======
@@ -3852,24 +3729,19 @@ function syncDialogUI() {
 
 // めったに使わない機能なので、押してすぐ動かさず、何をするものかを見せてから実行する。
 function openSyncDialog() {
-  const dlg = document.getElementById('sync-dialog');
-  if (!dlg) return;
-  if (dlg.classList.contains('open')) { dlg.classList.remove('open'); return; } // もう一度押したら閉じる
-  syncDialogRan = false;
-  document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
-    ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
-    : syncRun ? 'いま測っている最中です。' : '';
-  syncDialogUI();
-  const panel = dlg.querySelector('.pos-dialog');
-  centerPanel(panel);
-  raisePanel(dlg);
-  dlg.classList.add('open');
+  toggleDialog('sync-dialog', {
+    beforeOpen: () => {
+      syncDialogRan = false;
+      document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
+        ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
+        : syncRun ? 'いま測っている最中です。' : '';
+      syncDialogUI();
+    }
+  });
 }
 
 function setupSyncDialog() {
-  const dlg = document.getElementById('sync-dialog');
-  if (!dlg) return;
-  document.getElementById('sync-dialog-close').addEventListener('click', () => dlg.classList.remove('open'));
+  setupDialog('sync-dialog');
   // 実行しても閉じない(結果と、定期実行の案内を下に出す)。
   document.getElementById('sync-dialog-run').addEventListener('click', () => {
     syncDialogRan = true;
@@ -3877,15 +3749,10 @@ function setupSyncDialog() {
     syncDialogUI();
   });
   document.getElementById('sync-dialog-auto').addEventListener('click', () => setSyncAuto(!syncAuto));
-  const panel = dlg.querySelector('.pos-dialog');
-  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
 }
 
 function postSyncListen(win, on) {
-  if (!win.frame) return;
-  try {
-    win.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'sync-listen', value: on }, '*');
-  } catch (e) { /* noop */ }
+  postToFrame(win.frame, { type: 'sync-listen', value: on });
 }
 
 // auto = 定期実行。枠の上の表示もメニューの経過も出さず、静かに測って必要なぶんだけ直す。
@@ -4113,6 +3980,15 @@ function closeSyncView(win) {
 }
 
 // env を、時刻 from(秒)が左端になるように描く。shift 秒だけ右へずらす。上下対称の棒で波形に見せる。
+// canvas には CSS の var() を渡せないので、:root の値を読む。
+const themeColors = new Map();
+function themeColor(name) {
+  if (!themeColors.has(name)) {
+    themeColors.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  }
+  return themeColors.get(name);
+}
+
 function drawSyncWave(g, env, from, shift, pps, h, color) {
   let peak = 1e-4;
   for (const x of env) peak = Math.max(peak, x);
@@ -4147,13 +4023,13 @@ function drawSyncViews() {
       const p = Math.min(1, (now - v.slideAt) / SYNC_SLIDE_MS);
       const eased = 1 - Math.pow(1 - p, 3);
       drawSyncWave(g, v.slide.ref, v.slide.from, 0, pps, h, 'rgba(255,255,255,0.32)');
-      drawSyncWave(g, v.slide.own, v.slide.from, v.slide.shift * eased, pps, h, p >= 1 ? '#3fb950' : '#58a6ff');
+      drawSyncWave(g, v.slide.own, v.slide.from, v.slide.shift * eased, pps, h, themeColor(p >= 1 ? '--c-success' : '--c-accent'));
     } else {
       // 音は 0.5 秒ごとにまとめて届く。届いた分を一度に出すとカクつくので、1 回分だけ遅らせて
       // 右端を時間で進め、なめらかに流れて見えるようにする。
       const shown = v.el.classList.contains('listen') ? Math.min(v.batchSec, (now - v.batchAt) / 1000) : v.batchSec;
       const right = v.env.length / SYNC_ENV_HZ - v.batchSec + shown;
-      drawSyncWave(g, v.env, right - SYNC_VIEW_SEC, 0, pps, h, v.el.classList.contains('listen') ? '#58a6ff' : 'rgba(255,255,255,0.4)');
+      drawSyncWave(g, v.env, right - SYNC_VIEW_SEC, 0, pps, h, v.el.classList.contains('listen') ? themeColor('--c-accent') : 'rgba(255,255,255,0.4)');
     }
   }
   if (alive) syncViewRaf = requestAnimationFrame(drawSyncViews);
@@ -4207,22 +4083,7 @@ function toggleHidden(win) { win.hidden ? showWindow(win) : hideWindow(win); }
 
 // まだ読み込んでいない枠(起動時に隠れた状態で復元された枠)を win.url から読み込む。読込済みなら何もしない。
 function resumeMedia(win) {
-  if (win.video) {
-    if (!win.video._hls && !win.video.src) {
-      const media = win.video.parentElement;
-      if (media) media.querySelectorAll('.win-error').forEach((el) => el.remove());
-      setupKickVideo(win.video, win.url, media);
-    }
-    if (win.chatFrame) {
-      const channel = kickChannelOf(win.url);
-      const src = win.chatFrame.getAttribute('src');
-      if (channel && (!src || src === 'about:blank')) {
-        loadFrameWithLogin(win.chatFrame, 'kick.com', 'https://kick.com/popout/' + encodeURIComponent(channel) + '/chat');
-      }
-    }
-  } else if (!win.frame) {
-    mountSiteFrame(win);
-  }
+  if (!win.frame) mountSiteFrame(win);
 }
 
 // ====== 読み込み中スピナー / 遅延読み込み ======
@@ -4247,13 +4108,10 @@ function hideWinLoading(win) {
 }
 
 // 遅延読み込み(deferLoad)で待たせていた枠の中身を、今このタイミングで読み込む。
-// スピナーは読み込み完了(iframe load / video の loadeddata)か、保険タイマーで消す。
+// スピナーは読み込み完了(iframe load)か、保険タイマーで消す。
 function loadWindowMedia(win) {
   if (!win || !win.pendingLoad) return;
   win.pendingLoad = false;
-  if (win.video) {
-    win.video.addEventListener('loadeddata', () => hideWinLoading(win), { once: true });
-  }
   // iframe は mountSiteFrame の load ハンドラが hideWinLoading を呼ぶ。
   win.loadingTimer = setTimeout(() => hideWinLoading(win), LOAD_SPINNER_FALLBACK_MS);
   resumeMedia(win);
@@ -4567,6 +4425,35 @@ function setupQuickButtonState() {
   });
 }
 
+// ====== 移動できるダイアログ(.pos-dialog-overlay > .pos-dialog)の共通処理 ======
+// 開くたびに置き直して最前面へ出す。もう一度押したら閉じる。開いたときはパネルを、それ以外は null を返す。
+function toggleDialog(id, { place = centerPanel, beforeOpen } = {}) {
+  const dlg = document.getElementById(id);
+  if (!dlg) return null;
+  if (dlg.classList.contains('open')) {
+    dlg.classList.remove('open');
+    return null;
+  }
+  const panel = dlg.querySelector('.pos-dialog');
+  delete panel.dataset.pinned;
+  if (beforeOpen) beforeOpen(panel);
+  place(panel);
+  raisePanel(dlg); // z は overlay 側で上げる
+  dlg.classList.add('open');
+  return panel;
+}
+
+// ✕(id + '-close')で閉じ、ヘッダ帯で動かせるようにする。枠外クリックでは閉じない
+// (下のステージを操作できるようにするため。≡メニューから開いた直後の click で閉じる事故も防ぐ)。
+function setupDialog(id) {
+  const dlg = document.getElementById(id);
+  if (!dlg) return;
+  document.getElementById(id + '-close').addEventListener('click', () => dlg.classList.remove('open'));
+  const panel = dlg.querySelector('.pos-dialog');
+  makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
+  wirePanelRaise(panel, dlg);
+}
+
 function makePanelDraggable(el, handle) {
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !e.isPrimary) return;
@@ -4651,19 +4538,10 @@ function wireToolbar() {
   setupMainMenu();
 
   // 「＋追加」→ 追加ダイアログ(サイトボタン / URL入力)。ツールバーをすっきりさせるため別モーダルに。
-  const addDialog = document.getElementById('add-dialog');
-  const addPanel = addDialog.querySelector('.pos-dialog');
-  const closeAdd = () => addDialog.classList.remove('open');
-  // 開くたび置き直し、最前面にしてから表示(ドラッグで動かしても、開き直せば同じ位置から始まる)。
-  // 表示中にもう一度押したら閉じる(≡メニューの項目どうしで挙動を揃える)。
   // 縦積み(スマホ)だけ下寄せ。タイルが上から積まれるので、中央だと追加した枠にすぐ隠れる。
   const openAdd = (e) => {
     if (e) e.stopPropagation();
-    if (addDialog.classList.contains('open')) { closeAdd(); return; }
-    delete addPanel.dataset.pinned;
-    if (stackMode) placePanelBottom(addPanel); else placePanelClear(addPanel);
-    raisePanel(addDialog);
-    addDialog.classList.add('open');
+    toggleDialog('add-dialog', { place: (panel) => (stackMode ? placePanelBottom(panel) : placePanelClear(panel)) });
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
@@ -4672,14 +4550,7 @@ function wireToolbar() {
   document.getElementById('qa-mixer').addEventListener('click', () => document.getElementById('mixer-btn').click());
   setupQuickButtonState();
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
-  document.getElementById('add-dialog-close').addEventListener('click', closeAdd);
-  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動)。枠外クリックでは閉じず、背景も覆わないので
-  // 出しっぱなしで連続追加でき、下のステージ操作もできる(オーバーレイは CSS で pointer-events:none)。
-  // ヘッダ帯を掴んでドラッグ移動(配置ダイアログ/枠一覧と同じ仕組み)。掴む/フォーカスで最前面へ。
-  if (addPanel) {
-    makePanelDraggable(addPanel, addPanel.querySelector('.pos-dialog-head'));
-    wirePanelRaise(addPanel, addDialog); // z は overlay(#add-dialog)側で上げる
-  }
+  setupDialog('add-dialog');
 
   const addUrl = document.getElementById('add-url');
   const addNote = document.getElementById('add-note');
@@ -4740,7 +4611,7 @@ function wireToolbar() {
   setupMixer();
   setupDanmakuPanel();
   setupCookieDialog();
-  setupUpdateDialog();
+  setupDialog('update-dialog');
   setupSyncDialog();
   MV.storage.local.get(TOOLBAR_POS_KEY, (d) => {
     // 読込前にユーザーが位置を選んでいたら、その操作を保存値で巻き戻さない。
@@ -4817,8 +4688,6 @@ function setupMainMenu() {
 
 // 配置ダイアログ(📐 配置)の配線。整列・整形は即実行して閉じ、保存は一覧へ反映する。
 function setupLayoutDialog() {
-  const dlg = document.getElementById('layout-dialog');
-  if (!dlg) return;
   // 整列/整形を実行してもダイアログは閉じない(× だけで閉じる)。実行後すぐ別の操作・微調整ができる。
   const tile = document.getElementById('layout-tile');
   if (tile) tile.addEventListener('click', () => runManualLayout('tile', tileAll));
@@ -4839,15 +4708,7 @@ function setupLayoutDialog() {
   };
   if (save) save.addEventListener('click', doSave);
   if (nameInput) nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSave(); } });
-  const close = document.getElementById('layout-dialog-close');
-  if (close) close.addEventListener('click', closeLayoutDialog);
-  // 閉じるのは ✕ のみ(枠一覧/パフォーマンスと同じフロート挙動。枠外クリックでは閉じない)。
-  // ヘッダ帯を掴んでドラッグ移動(枠一覧/パフォーマンスと同じ makePanelDraggable)。掴む/フォーカスで最前面へ。
-  const panel = dlg.querySelector('.pos-dialog');
-  if (panel) {
-    makePanelDraggable(panel, panel.querySelector('.pos-dialog-head'));
-    wirePanelRaise(panel, dlg); // z は overlay(#layout-dialog)側で上げる
-  }
+  setupDialog('layout-dialog');
 }
 
 // ポインタが一定時間動かなかったら、まずカーソル+常駐UI(≡メニュー/⛶全画面を終了)を消し(IDLE_CURSOR_MS)、
@@ -4875,8 +4736,7 @@ function setupIdleHide() {
   // 文書が管理するので、idle の変化を各 frame へ通知して中のカーソルも消す/戻す(stream-control が set-idle を処理)。
   const broadcastIdle = (on) => {
     wins.forEach((w) => {
-      try { if (w.frame) w.frame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
-      try { if (w.chatFrame) w.chatFrame.contentWindow.postMessage({ [MAGIC]: true, type: 'set-idle', value: on }, '*'); } catch (e) { /* noop */ }
+      [w.frame, w.chatFrame].forEach((f) => postToFrame(f, { type: 'set-idle', value: on }));
     });
   };
   const setIdle = (on) => {
@@ -5003,7 +4863,7 @@ function setupPerfPanel() {
       const y = h - 1 - Math.max(0, Math.min(v, max)) / max * (h - 2);
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
-    ctx.strokeStyle = warn ? '#f85149' : color; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = themeColor(warn ? '--c-danger' : color); ctx.lineWidth = 1.5; ctx.stroke();
   };
 
   let frames = 0, rafId = null, tickId = null, prevCpu = null;
@@ -5054,10 +4914,10 @@ function setupPerfPanel() {
     ui.cpu.val.classList.toggle('warn', cpu > 85);
     ui.mem.val.classList.toggle('warn', mem > 90);
 
-    drawSpark(ui.fps.canvas, hist.fps, 60, '#3fb950', fps < 30);
-    drawSpark(ui.cpu.canvas, hist.cpu, 100, '#58a6ff', cpu > 85);
-    drawSpark(ui.mem.canvas, hist.mem, 100, '#d29922', mem > 90);
-    drawSpark(ui.heap.canvas, hist.heap, heapMax || Math.max(1, ...hist.heap), '#a371f7', false);
+    drawSpark(ui.fps.canvas, hist.fps, 60, '--c-success', fps < 30);
+    drawSpark(ui.cpu.canvas, hist.cpu, 100, '--c-accent', cpu > 85);
+    drawSpark(ui.mem.canvas, hist.mem, 100, '--c-warning', mem > 90);
+    drawSpark(ui.heap.canvas, hist.heap, heapMax || Math.max(1, ...hist.heap), '--c-purple', false);
   };
 
   const start = () => {
@@ -5084,12 +4944,6 @@ function setupPerfPanel() {
 
 // ====== URL ヘルパ ======
 
-// iframe で開くサイトの src 変換用(現状は変換不要。Kick は iframe を使わず video 直再生に
-// 分岐済み)。将来サイト別の埋め込みURL変換が要るときの拡張ポイント。
-function toEmbedUrl(rawUrl) {
-  return rawUrl;
-}
-
 // 軽量プレイヤー(⚡)用: 視聴ページの URL を各サイトの公式埋め込みプレイヤー URL に変換する。
 // フルサイトの SPA を丸ごと読まずプレイヤーだけになるので、1枠あたりの負荷が大きく下がる。
 // 変換先が無い URL(サイトのトップ・一覧ページ等)は null(=切替不可)。
@@ -5103,7 +4957,7 @@ function youtubeVideoIdOf(url) {
   try {
     const u = new URL(url);
     const host = u.hostname;
-    if (!host.includes('youtube.com') && host !== 'youtu.be') return null;
+    if (!isYouTubeWatchHost(host)) return null;
     const segs = u.pathname.split('/').filter(Boolean);
     if (host === 'youtu.be') return segs[0] || null;
     if (segs[0] === 'watch') return u.searchParams.get('v');
@@ -5131,7 +4985,7 @@ const TWITCH_NON_CHANNEL = ['directory', 'search', 'settings', 'subscriptions', 
 function twitchChannelOf(url) {
   try {
     const u = new URL(url);
-    if (!u.hostname.includes('twitch.tv') || u.hostname.startsWith('player.')) return null;
+    if (siteKeyOf(u.hostname) !== 'twitch' || u.hostname.startsWith('player.')) return null;
     const segs = u.pathname.split('/').filter(Boolean);
     if (!segs.length || TWITCH_NON_CHANNEL.includes(segs[0])) return null;
     return segs[0];
@@ -5163,7 +5017,8 @@ function toLightUrl(url) {
 
   // 自動再生は「ミュート付き」で要求する。モバイルは音あり自動再生が禁止のため、ミュート無しだと
   // 一時停止で止まったまま開く。本アプリは元々「起動時は全ミュート」方針なので挙動も一致する。
-  if (host.includes('youtube.com') || host === 'youtu.be') {
+  const siteKey = siteKeyOf(host);
+  if (isYouTubeWatchHost(host)) {
     const id = youtubeVideoIdOf(url);
     if (!id) return null;
     // enablejsapi: 親が再生位置を受け取るため(アーカイブのチャット再生の同期に使う)。
@@ -5176,7 +5031,7 @@ function toLightUrl(url) {
     );
   }
 
-  if (host.includes('twitch.tv')) {
+  if (siteKey === 'twitch') {
     if (host.startsWith('player.')) return null; // 既に埋め込みプレイヤー
     // parent は埋め込み元ホスト名(=拡張ID)。検証用の frame-ancestors CSP は rules.json が
     // sub_frame で剥がすため、形式さえ合っていれば拡張ページからでも再生できる(実機確認済み)。
@@ -5191,13 +5046,13 @@ function toLightUrl(url) {
     return null;
   }
 
-  if (host.includes('kick.com')) {
+  if (siteKey === 'kick') {
     const channel = kickWatchChannel(url);
     return channel ? 'https://player.kick.com/' + encodeURIComponent(channel) + '?autoplay=true&muted=true' : null;
   }
 
   // mellow-fan(旧 OPENREC)。URL 形式は改名後も /live/<id> ・ /movie/<id> のまま。
-  if (host.includes('mellow-fan.com') || host.includes('openrec.tv')) {
+  if (siteKey === 'openrec') {
     if ((segs[0] === 'live' || segs[0] === 'movie') && segs[1]) {
       return 'https://www.mellow-fan.com/embed/' + encodeURIComponent(segs[1]);
     }
@@ -5230,12 +5085,13 @@ function channelParts(url) {
     const host = u.hostname.replace(/^www\./, '');
     const segs = u.pathname.split('/').filter(Boolean);
     let name = '';
-    if (host.includes('youtube') || host === 'youtu.be') {
+    const siteKey = siteKeyOf(host);
+    if (siteKey === 'youtube') {
       if (host === 'youtu.be') name = segs[0] || '';
       else if (segs[0] === 'watch') name = u.searchParams.get('v') || 'watch';
       else if (['live', 'shorts', 'embed'].includes(segs[0])) name = segs[1] || segs[0];
       else name = segs[0] || '';
-    } else if (host.includes('openrec') || host.includes('mellow-fan')) {
+    } else if (siteKey === 'openrec') {
       name = segs[segs.length - 1] || '';
     } else if (host.startsWith('player.twitch')) {
       name = u.searchParams.get('channel') || u.searchParams.get('video') || '';
@@ -5251,11 +5107,7 @@ function channelParts(url) {
 // URL からサイトを判定し、一覧用の色・頭文字・名前を返す。
 function siteOf(url) {
   const h = hostOf(url);
-  if (h.includes('twitch')) return { letter: 'T', color: '#9147ff', name: 'Twitch' };
-  if (h.includes('youtube') || h === 'youtu.be') return { letter: 'Y', color: '#ff0033', name: 'YouTube' };
-  if (h.includes('kick')) return { letter: 'K', color: '#53fc18', name: 'Kick' };
-  if (h.includes('mellow-fan') || h.includes('openrec')) return { letter: 'M', color: '#ffd200', name: 'mellow-fan' };
-  return { letter: '•', color: '#6e7681', name: h || 'その他' };
+  return SITES[siteKeyOf(h)] || { letter: '•', color: '#6e7681', name: h || 'その他' };
 }
 
 // 枠を一時的にパルス(光る枠)で強調する。ミキサーで項目をクリックした時に「これがその枠」を示す。
