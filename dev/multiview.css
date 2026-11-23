@@ -23,7 +23,7 @@
   --c-hover: rgba(255,255,255,0.12); /* ホバーの地 */
 
   --z-menu-backdrop: 89999; /* ≡ メニューの外側 */
-  --z-panel: 90000; /* 浮動パネルの起点(multiview.js の panelZ と一致させる) */
+  --z-panel: 90000; /* 浮動パネルの起点(js/ の panelZ と一致させる) */
   --z-fullscreen-win: 99999; /* 縦積みの全画面枠 */
   --z-toolbar: 100000; /* ツールバー */
   --z-quick: 100001; /* 常駐ボタン */
@@ -47,7 +47,7 @@ body { display: flex; flex-direction: column; }
 /* マウスを一定時間動かさないとカーソルを消す(視聴の没入用。JS が body.idle を付ける)。 */
 body.idle, body.idle * { cursor: none !important; }
 
-/* ===== アイコン(線画の SVG。定義は multiview.js の ICON_PATHS) ===== */
+/* ===== アイコン(線画の SVG。定義は js/ の ICON_PATHS) ===== */
 /* 大きさは文字に合わせ、色は文字色に従う。文字と並べるときは .ic-text との間を少し空ける。 */
 .ic {
   width: 1.1em; height: 1.1em; vertical-align: -0.18em; flex: 0 0 auto;
@@ -463,7 +463,7 @@ body.tb-pos-left #toolbar-show   { top: 8px; left: 10px; bottom: auto; right: au
 .win-danmaku .dmk-emote { display: inline-block; vertical-align: middle; width: auto; margin: 0 2px; }
 
 /* 「音で合わせる」の経過と結果。映像の下端に重ねる(弾幕 z:2 の上、スピナーや操作UIの下)。
-   ポインタは透過。消すときは .out を付けてフェードさせる(時間は multiview.js の SYNC_FADE_MS と合わせる)。 */
+   ポインタは透過。消すときは .out を付けてフェードさせる(時間は js/ の SYNC_FADE_MS と合わせる)。 */
 .win-sync {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
   height: 36%; min-height: 64px; max-height: 150px;
@@ -795,7 +795,7 @@ body.stack-mode .dmk-panel { position: fixed; } /* ステージのスクロー�
 .dmk-reset:hover { background: var(--c-border); border-color: var(--c-accent); }
 .dmk-reset[hidden] { display: none; }
 
-/* ===== スマホ縦積みモード(body.stack-mode。multiview.js の updateStackMode が付与) ===== */
+/* ===== スマホ縦積みモード(body.stack-mode。js/ の updateStackMode が付与) ===== */
 /* 自由配置をやめ「全幅×16:9 の縦並びタイル」にする(高さ計算は JS の relayoutStack)。
    移動・リサイズ・最大化のUIは封印し、タップとスクロールだけで操作できる形にする。 */
 body.stack-mode #stage { overflow-y: auto; overscroll-behavior: contain; }
