@@ -1,8 +1,8 @@
 # 設計メモ
 
 素の JavaScript のみで、ビルド不要・npm 依存なしです(Manifest V3)。
-Kick だけはサイトを埋め込まず、[hls.js](https://github.com/video-dev/hls.js) で HLS を直接再生しています
-(拡張ページの文脈だとプレイヤーの内部リクエストが弾かれ、再描画のたびに 404 になるため)。
+Kick の配信は、公式プレイヤー(`player.kick.com`)と popout チャットの2枚組で表示しています
+(再生リストの CORS が Kick の許可オリジンにしか開いておらず、UI ページから HLS を直接読めないため)。
 
 ## UI ページを通常のオリジンに置いている理由
 

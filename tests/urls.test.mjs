@@ -110,6 +110,12 @@ test('twitchChannelOf: 配信ページのときだけチャンネル名を返す
   assert.equal(f.twitchChannelOf('not a url'), null);
 });
 
+test('toLightUrl: Kick の配信ページだけ公式プレイヤーにする', () => {
+  assert.equal(f.toLightUrl('https://kick.com/foo'), 'https://player.kick.com/foo?autoplay=true&muted=true');
+  assert.equal(f.toLightUrl('https://kick.com/'), null);
+  assert.equal(f.toLightUrl('https://kick.com/browse'), null);
+});
+
 test('kickWatchChannel: 配信ページのときだけチャンネル名を返す', () => {
   assert.equal(f.kickWatchChannel('https://kick.com/foo'), 'foo');
   assert.equal(f.kickWatchChannel('https://kick.com/'), '');
@@ -141,7 +147,6 @@ test('toLightUrl: mellow-fan(旧 OPENREC)は埋め込みへ。それ以外は nu
   assert.equal(f.toLightUrl('https://www.openrec.tv/live/xyz'), 'https://www.mellow-fan.com/embed/xyz');
   assert.equal(f.toLightUrl('https://www.mellow-fan.com/movie/xyz'), 'https://www.mellow-fan.com/embed/xyz');
   assert.equal(f.toLightUrl('https://www.mellow-fan.com/'), null);
-  assert.equal(f.toLightUrl('https://kick.com/foo'), null); // Kick は埋め込みでなく HLS で直接再生する
   assert.equal(f.toLightUrl('not a url'), null);
 });
 

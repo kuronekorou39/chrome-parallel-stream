@@ -1237,5 +1237,11 @@ body.stack-mode #update-dialog .pos-dialog { width: min(320px, calc(100vw - 24px
    対象の枠が足りないときは OK を押せない。 */
 #sync-dialog .pos-dialog { width: 360px; max-width: calc(100% - 32px); }
 body.stack-mode #sync-dialog .pos-dialog { width: min(320px, calc(100vw - 24px)); }
-#sync-dialog-ok { display: block; margin-left: auto; min-width: 88px; }
-#sync-dialog-ok:disabled { opacity: 0.4; cursor: default; }
+#sync-dialog-run, #sync-dialog-auto { display: block; width: 100%; }
+#sync-dialog-run { margin-bottom: 8px; }
+#sync-dialog-run:disabled { opacity: 0.4; cursor: default; }
+#sync-dialog-status:empty { display: none; }
+#sync-auto-section { border-top: 1px solid #30363d; padding-top: 10px; }
+#sync-dialog-auto.on { border-color: #3fb950; color: #3fb950; }
+/* 定期実行がオンの間だけ出す。場所は残して、上下の行と値の位置を揃える。 */
+#mm-sync-auto:not(.on) { visibility: hidden; }
