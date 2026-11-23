@@ -428,7 +428,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.9';
+const EXPECTED_EXT_VERSION = '1.0.10';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -4014,6 +4014,15 @@ function closeSyncView(win) {
 }
 
 // env を、時刻 from(秒)が左端になるように描く。shift 秒だけ右へずらす。上下対称の棒で波形に見せる。
+// canvas には CSS の var() を渡せないので、:root の値を読む。
+const themeColors = new Map();
+function themeColor(name) {
+  if (!themeColors.has(name)) {
+    themeColors.set(name, getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+  }
+  return themeColors.get(name);
+}
+
 function drawSyncWave(g, env, from, shift, pps, h, color) {
   let peak = 1e-4;
   for (const x of env) peak = Math.max(peak, x);
@@ -4048,13 +4057,13 @@ function drawSyncViews() {
       const p = Math.min(1, (now - v.slideAt) / SYNC_SLIDE_MS);
       const eased = 1 - Math.pow(1 - p, 3);
       drawSyncWave(g, v.slide.ref, v.slide.from, 0, pps, h, 'rgba(255,255,255,0.32)');
-      drawSyncWave(g, v.slide.own, v.slide.from, v.slide.shift * eased, pps, h, p >= 1 ? '#3fb950' : '#58a6ff');
+      drawSyncWave(g, v.slide.own, v.slide.from, v.slide.shift * eased, pps, h, themeColor(p >= 1 ? '--c-success' : '--c-accent'));
     } else {
       // 音は 0.5 秒ごとにまとめて届く。届いた分を一度に出すとカクつくので、1 回分だけ遅らせて
       // 右端を時間で進め、なめらかに流れて見えるようにする。
       const shown = v.el.classList.contains('listen') ? Math.min(v.batchSec, (now - v.batchAt) / 1000) : v.batchSec;
       const right = v.env.length / SYNC_ENV_HZ - v.batchSec + shown;
-      drawSyncWave(g, v.env, right - SYNC_VIEW_SEC, 0, pps, h, v.el.classList.contains('listen') ? '#58a6ff' : 'rgba(255,255,255,0.4)');
+      drawSyncWave(g, v.env, right - SYNC_VIEW_SEC, 0, pps, h, v.el.classList.contains('listen') ? themeColor('--c-accent') : 'rgba(255,255,255,0.4)');
     }
   }
   if (alive) syncViewRaf = requestAnimationFrame(drawSyncViews);
@@ -4886,7 +4895,7 @@ function setupPerfPanel() {
       const y = h - 1 - Math.max(0, Math.min(v, max)) / max * (h - 2);
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
-    ctx.strokeStyle = warn ? '#f85149' : color; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.strokeStyle = themeColor(warn ? '--c-danger' : color); ctx.lineWidth = 1.5; ctx.stroke();
   };
 
   let frames = 0, rafId = null, tickId = null, prevCpu = null;
@@ -4937,10 +4946,10 @@ function setupPerfPanel() {
     ui.cpu.val.classList.toggle('warn', cpu > 85);
     ui.mem.val.classList.toggle('warn', mem > 90);
 
-    drawSpark(ui.fps.canvas, hist.fps, 60, '#3fb950', fps < 30);
-    drawSpark(ui.cpu.canvas, hist.cpu, 100, '#58a6ff', cpu > 85);
-    drawSpark(ui.mem.canvas, hist.mem, 100, '#d29922', mem > 90);
-    drawSpark(ui.heap.canvas, hist.heap, heapMax || Math.max(1, ...hist.heap), '#a371f7', false);
+    drawSpark(ui.fps.canvas, hist.fps, 60, '--c-success', fps < 30);
+    drawSpark(ui.cpu.canvas, hist.cpu, 100, '--c-accent', cpu > 85);
+    drawSpark(ui.mem.canvas, hist.mem, 100, '--c-warning', mem > 90);
+    drawSpark(ui.heap.canvas, hist.heap, heapMax || Math.max(1, ...hist.heap), '--c-purple', false);
   };
 
   const start = () => {
