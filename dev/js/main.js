@@ -47,10 +47,11 @@
   const data = await MV.storage.local.get(MULTIVIEW_ACTIVE_KEY);
   const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
   const autoData = await MV.storage.local.get(AUTO_LAYOUT_KEY);
-  autoLayout = autoLayoutModeOf(autoData[AUTO_LAYOUT_KEY]);
+  autoLayout = initialAutoLayout(autoData[AUTO_LAYOUT_KEY], (saved.wins || saved.urls || []).length > 0);
+  if (autoData[AUTO_LAYOUT_KEY] === undefined) MV.storage.local.set({ [AUTO_LAYOUT_KEY]: autoLayout }); // 判定を次回へ持ち越さない
   syncAutoLayoutUI();
   const layoutOpts = await MV.storage.local.get([VOLUME_OVERLAP_KEY, AUTO_HIDE_ENDED_KEY]);
-  volumeOverlap = layoutOpts[VOLUME_OVERLAP_KEY] === true;
+  volumeOverlap = layoutOpts[VOLUME_OVERLAP_KEY] !== false; // 既定はオン
   autoHideEnded = layoutOpts[AUTO_HIDE_ENDED_KEY] !== false; // 既定はオン
   syncLayoutOptionsUI();
 

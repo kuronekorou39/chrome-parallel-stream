@@ -62,6 +62,13 @@ function autoLayoutModeOf(v) {
   return AUTO_LAYOUT_MODES.includes(v) ? v : 'off';
 }
 
+// 起動時の自動配置。未設定の既定は音量順だが、既に枠の並びを持っている人は手で置いた配置が
+// 更新で崩れないようオフのままにする。
+function initialAutoLayout(stored, hasLineup) {
+  if (stored !== undefined) return autoLayoutModeOf(stored);
+  return hasLineup ? 'off' : 'volume';
+}
+
 function rectResized(a, b) {
   return a.w !== b.w || a.h !== b.h;
 }
