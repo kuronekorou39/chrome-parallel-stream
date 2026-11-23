@@ -100,14 +100,40 @@ const DMK_CONTROLS = [
   { key: 'colorStrength', label: '色の強さ', type: 'range', min: 0, max: 100, unit: '%', group: '色', adv: true }
 ];
 
+// 対応サイトの定義。サイトごとの情報はここに集める。
+//   url: 「枠を追加」のボタンで開くトップ / hosts: このサイトのドメイン(サブドメインも含む)
+//   login: 枠の中でログイン状態を使う(Cookie の SameSite を緩める)か。YouTube は埋め込みログインの
+//          仕組みが別で、緩和がむしろ逆効果になりうるので対象にしない。
+//          Kick は配信を選ぶ一覧を枠で開くので、ログインしていないとフォロー中が出ない。
+const SITES = {
+  twitch: { name: 'Twitch', letter: 'T', color: '#9147ff', url: 'https://www.twitch.tv/', hosts: ['twitch.tv'], login: true },
+  youtube: { name: 'YouTube', letter: 'Y', color: '#ff0033', url: 'https://www.youtube.com/', hosts: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'], login: false },
+  kick: { name: 'Kick', letter: 'K', color: '#53fc18', url: 'https://kick.com/', hosts: ['kick.com'], login: true },
+  openrec: { name: 'mellow-fan', letter: 'M', color: '#ffd200', url: 'https://www.mellow-fan.com/', hosts: ['mellow-fan.com', 'openrec.tv'], login: true }
+};
+
+function hostMatches(host, domain) {
+  const h = String(host || '').toLowerCase();
+  return h === domain || h.endsWith('.' + domain);
+}
+
+// ホスト名から SITES のキーを返す。対応サイトでなければ null。
+function siteKeyOf(host) {
+  return Object.keys(SITES).find((key) => SITES[key].hosts.some((d) => hostMatches(host, d))) || null;
+}
+
+// 視聴ページを持つ YouTube のホストか(youtube-nocookie.com は埋め込み専用なので含めない)。
+function isYouTubeWatchHost(host) {
+  return host === 'youtu.be' || hostMatches(host, 'youtube.com');
+}
+
 // 枠(iframe)に表示できるサイト。rules.json が X-Frame-Options / CSP を剥がしている対象と
 // 一致させること。ここに無いサイトは、サイト側の埋め込み拒否がそのまま効いて「接続拒否」になる。
 // 対象を増やすことは、そのドメインの埋め込み防御を利用者のブラウザで外すことを意味するので、
 // 安易に足さない(README の「この拡張がブラウザに与える影響」も合わせて更新すること)。
-const EMBEDDABLE_HOSTS = ['twitch.tv', 'youtube.com', 'youtu.be', 'youtube-nocookie.com', 'kick.com', 'openrec.tv', 'mellow-fan.com'];
+const EMBEDDABLE_HOSTS = Object.values(SITES).flatMap((site) => site.hosts);
 function isEmbeddableHost(host) {
-  const h = String(host || '').toLowerCase();
-  return EMBEDDABLE_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+  return EMBEDDABLE_HOSTS.some((d) => hostMatches(host, d));
 }
 
 // 枠として読み込んでよい URL か(スキームとホストの両方を見る)。
@@ -211,14 +237,6 @@ function putLabel(el, label) {
 
 // HTML に置いた目印(<i data-ic="名前">)を SVG に差し替える。
 document.querySelectorAll('i[data-ic]').forEach((el) => el.replaceWith(iconEl(el.dataset.ic)));
-
-// ツールバーのワンクリックで開く主要4サイト(各サイトのトップを開き、枠内でライブを選ぶ)。
-const SITES = {
-  twitch: { url: 'https://www.twitch.tv/' },
-  youtube: { url: 'https://www.youtube.com/' },
-  kick: { url: 'https://kick.com/' },
-  openrec: { url: 'https://www.mellow-fan.com/' }
-};
 
 const stage = document.getElementById('stage');
 const stageEmpty = document.getElementById('stage-empty');
@@ -428,7 +446,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.11';
+const EXPECTED_EXT_VERSION = '1.0.12';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -878,11 +896,12 @@ function createWindow(url, opts = {}) {
   // 2分割の器は枠の生成時にしか作れないので、トップページ等でも YouTube なら先に用意しておく
   // (枠の中で動画を選んだ時点で埋め込みへ切り替わり、そのままチャットも出せるように)。
   const siteHost = hostOf(url);
-  const isYouTube = siteHost.includes('youtube.com') || siteHost === 'youtu.be';
+  const siteKey = siteKeyOf(siteHost);
+  const isYouTube = isYouTubeWatchHost(siteHost);
   // Twitch も軽量表示では「プレイヤー + 埋め込みチャット」の2枚組にする。サイト全体を出すと
   // レイアウトも書き込みもサイト側の都合に左右され、縦長のときに使い物にならないため。
-  const isTwitch = siteHost.includes('twitch.tv') && !siteHost.startsWith('player.');
-  const hasChatPane = isYouTube || isTwitch || siteHost.includes('kick.com');
+  const isTwitch = siteKey === 'twitch' && !siteHost.startsWith('player.');
+  const hasChatPane = isYouTube || isTwitch || siteKey === 'kick';
 
   const controls = document.createElement('div');
   controls.className = 'win-controls';
@@ -1100,7 +1119,7 @@ const KICK_NON_CHANNEL = [
   'subscriptions', 'messages', 'dashboard', 'about', 'help', 'faq', 'terms', 'privacy'
 ];
 function kickWatchChannel(url) {
-  if (!hostOf(url).includes('kick.com')) return '';
+  if (siteKeyOf(hostOf(url)) !== 'kick') return '';
   const ch = kickChannelOf(url);
   return ch && !KICK_NON_CHANNEL.includes(ch.toLowerCase()) ? ch : '';
 }
@@ -3098,13 +3117,9 @@ function loadFrameWithLogin(frameEl, domain, src) {
 // 埋め込み内でログインを使いたいサイトの cookie 緩和対象ドメインを返す(対象外は null)。
 // YouTube は埋め込みログインの仕組みが別で、緩和がむしろ逆効果になりうるため対象にしない。
 function loginDomainOf(host) {
-  if (host.includes('twitch.tv')) return 'twitch.tv';
-  if (host.includes('mellow-fan.com')) return 'mellow-fan.com';
-  if (host.includes('openrec.tv')) return 'openrec.tv';
-  // Kick は配信を選ぶための一覧を枠で開く。ログイン状態でないとフォロー中が出ず、
-  // 「自分が見たい配信を選ぶ」という用途が果たせない。
-  if (host.includes('kick.com')) return 'kick.com';
-  return null;
+  const site = SITES[siteKeyOf(host)];
+  if (!site || !site.login) return null;
+  return site.hosts.find((d) => hostMatches(host, d));
 }
 
 // Kick 枠のチャット表示/非表示を切り替える。
@@ -4672,8 +4687,6 @@ function setupMainMenu() {
 
 // 配置ダイアログ(📐 配置)の配線。整列・整形は即実行して閉じ、保存は一覧へ反映する。
 function setupLayoutDialog() {
-  const dlg = document.getElementById('layout-dialog');
-  if (!dlg) return;
   // 整列/整形を実行してもダイアログは閉じない(× だけで閉じる)。実行後すぐ別の操作・微調整ができる。
   const tile = document.getElementById('layout-tile');
   if (tile) tile.addEventListener('click', () => runManualLayout('tile', tileAll));
@@ -4943,7 +4956,7 @@ function youtubeVideoIdOf(url) {
   try {
     const u = new URL(url);
     const host = u.hostname;
-    if (!host.includes('youtube.com') && host !== 'youtu.be') return null;
+    if (!isYouTubeWatchHost(host)) return null;
     const segs = u.pathname.split('/').filter(Boolean);
     if (host === 'youtu.be') return segs[0] || null;
     if (segs[0] === 'watch') return u.searchParams.get('v');
@@ -4971,7 +4984,7 @@ const TWITCH_NON_CHANNEL = ['directory', 'search', 'settings', 'subscriptions', 
 function twitchChannelOf(url) {
   try {
     const u = new URL(url);
-    if (!u.hostname.includes('twitch.tv') || u.hostname.startsWith('player.')) return null;
+    if (siteKeyOf(u.hostname) !== 'twitch' || u.hostname.startsWith('player.')) return null;
     const segs = u.pathname.split('/').filter(Boolean);
     if (!segs.length || TWITCH_NON_CHANNEL.includes(segs[0])) return null;
     return segs[0];
@@ -5003,7 +5016,8 @@ function toLightUrl(url) {
 
   // 自動再生は「ミュート付き」で要求する。モバイルは音あり自動再生が禁止のため、ミュート無しだと
   // 一時停止で止まったまま開く。本アプリは元々「起動時は全ミュート」方針なので挙動も一致する。
-  if (host.includes('youtube.com') || host === 'youtu.be') {
+  const siteKey = siteKeyOf(host);
+  if (isYouTubeWatchHost(host)) {
     const id = youtubeVideoIdOf(url);
     if (!id) return null;
     // enablejsapi: 親が再生位置を受け取るため(アーカイブのチャット再生の同期に使う)。
@@ -5016,7 +5030,7 @@ function toLightUrl(url) {
     );
   }
 
-  if (host.includes('twitch.tv')) {
+  if (siteKey === 'twitch') {
     if (host.startsWith('player.')) return null; // 既に埋め込みプレイヤー
     // parent は埋め込み元ホスト名(=拡張ID)。検証用の frame-ancestors CSP は rules.json が
     // sub_frame で剥がすため、形式さえ合っていれば拡張ページからでも再生できる(実機確認済み)。
@@ -5031,13 +5045,13 @@ function toLightUrl(url) {
     return null;
   }
 
-  if (host.includes('kick.com')) {
+  if (siteKey === 'kick') {
     const channel = kickWatchChannel(url);
     return channel ? 'https://player.kick.com/' + encodeURIComponent(channel) + '?autoplay=true&muted=true' : null;
   }
 
   // mellow-fan(旧 OPENREC)。URL 形式は改名後も /live/<id> ・ /movie/<id> のまま。
-  if (host.includes('mellow-fan.com') || host.includes('openrec.tv')) {
+  if (siteKey === 'openrec') {
     if ((segs[0] === 'live' || segs[0] === 'movie') && segs[1]) {
       return 'https://www.mellow-fan.com/embed/' + encodeURIComponent(segs[1]);
     }
@@ -5070,12 +5084,13 @@ function channelParts(url) {
     const host = u.hostname.replace(/^www\./, '');
     const segs = u.pathname.split('/').filter(Boolean);
     let name = '';
-    if (host.includes('youtube') || host === 'youtu.be') {
+    const siteKey = siteKeyOf(host);
+    if (siteKey === 'youtube') {
       if (host === 'youtu.be') name = segs[0] || '';
       else if (segs[0] === 'watch') name = u.searchParams.get('v') || 'watch';
       else if (['live', 'shorts', 'embed'].includes(segs[0])) name = segs[1] || segs[0];
       else name = segs[0] || '';
-    } else if (host.includes('openrec') || host.includes('mellow-fan')) {
+    } else if (siteKey === 'openrec') {
       name = segs[segs.length - 1] || '';
     } else if (host.startsWith('player.twitch')) {
       name = u.searchParams.get('channel') || u.searchParams.get('video') || '';
@@ -5091,11 +5106,7 @@ function channelParts(url) {
 // URL からサイトを判定し、一覧用の色・頭文字・名前を返す。
 function siteOf(url) {
   const h = hostOf(url);
-  if (h.includes('twitch')) return { letter: 'T', color: '#9147ff', name: 'Twitch' };
-  if (h.includes('youtube') || h === 'youtu.be') return { letter: 'Y', color: '#ff0033', name: 'YouTube' };
-  if (h.includes('kick')) return { letter: 'K', color: '#53fc18', name: 'Kick' };
-  if (h.includes('mellow-fan') || h.includes('openrec')) return { letter: 'M', color: '#ffd200', name: 'mellow-fan' };
-  return { letter: '•', color: '#6e7681', name: h || 'その他' };
+  return SITES[siteKeyOf(h)] || { letter: '•', color: '#6e7681', name: h || 'その他' };
 }
 
 // 枠を一時的にパルス(光る枠)で強調する。ミキサーで項目をクリックした時に「これがその枠」を示す。

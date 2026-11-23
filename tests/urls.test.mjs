@@ -39,10 +39,12 @@ function constSource(name) {
 // 埋め込み用 URL の parent / embed_domain には、このページのホスト名が入る。
 const HOST = 'pages.example';
 const SOURCES = [
+  constSource('SITES'),
   constSource('EMBEDDABLE_HOSTS'),
   constSource('TWITCH_NON_CHANNEL'),
   constSource('KICK_NON_CHANNEL'),
   ...[
+    'hostMatches', 'siteKeyOf', 'isYouTubeWatchHost', 'loginDomainOf',
     'isEmbeddableHost', 'isAllowedFrameUrl', 'hostOf', 'kickChannelOf', 'kickWatchChannel',
     'youtubeVideoIdOf', 'toYouTubeChatUrl', 'twitchChannelOf', 'toTwitchChatUrl', 'toLightUrl',
     'labelFor', 'channelParts', 'siteOf',
@@ -51,7 +53,7 @@ const SOURCES = [
 const f = new Function(
   'location',
   `${SOURCES}\nreturn { isAllowedFrameUrl, kickWatchChannel, youtubeVideoIdOf, toYouTubeChatUrl,
-    twitchChannelOf, toTwitchChatUrl, toLightUrl, labelFor, channelParts, siteOf };`
+    twitchChannelOf, toTwitchChatUrl, toLightUrl, labelFor, channelParts, siteOf, siteKeyOf, loginDomainOf };`
 )({ hostname: HOST });
 
 test('isAllowedFrameUrl: 対応サイトの http(s) だけ通す', () => {
@@ -173,6 +175,23 @@ test('channelParts: サイト部分と、チャンネル名や動画 ID に分�
   assert.deepEqual(f.channelParts('https://kick.com/foo'), { site: 'kick.com/', name: 'foo' });
   assert.deepEqual(f.channelParts('https://www.twitch.tv/'), { site: 'twitch.tv', name: '' });
   assert.deepEqual(f.channelParts('not a url'), { site: '', name: 'not a url' });
+});
+
+test('siteKeyOf: ドメインとサブドメインだけを対応サイトとみなす', () => {
+  assert.equal(f.siteKeyOf('www.twitch.tv'), 'twitch');
+  assert.equal(f.siteKeyOf('youtu.be'), 'youtube');
+  assert.equal(f.siteKeyOf('www.openrec.tv'), 'openrec');
+  assert.equal(f.siteKeyOf('nottwitch.tv'), null);
+  assert.equal(f.siteKeyOf('twitch.tv.example.com'), null);
+});
+
+test('loginDomainOf: ログインを使うサイトだけ、そのドメインを返す', () => {
+  assert.equal(f.loginDomainOf('player.twitch.tv'), 'twitch.tv');
+  assert.equal(f.loginDomainOf('player.kick.com'), 'kick.com');
+  assert.equal(f.loginDomainOf('www.openrec.tv'), 'openrec.tv');
+  assert.equal(f.loginDomainOf('www.mellow-fan.com'), 'mellow-fan.com');
+  assert.equal(f.loginDomainOf('www.youtube.com'), null);
+  assert.equal(f.loginDomainOf('example.com'), null);
 });
 
 test('siteOf: URL からサイトを判定する', () => {

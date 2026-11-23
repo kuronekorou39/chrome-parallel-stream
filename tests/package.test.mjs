@@ -22,7 +22,12 @@ function arrayConst(file, name) {
 }
 
 const PACK = arrayConst('tools/release.mjs', 'PACK');
-const EMBEDDABLE_HOSTS = arrayConst('multiview.js', 'EMBEDDABLE_HOSTS');
+// EMBEDDABLE_HOSTS は SITES から作っているので、定義ごと評価して取り出す。
+const EMBEDDABLE_HOSTS = (() => {
+  const src = read('multiview.js');
+  const part = (name) => src.match(new RegExp(`^const ${name} = [\\s\\S]*?;`, 'm'))[0];
+  return new Function(`${part('SITES')}\n${part('EMBEDDABLE_HOSTS')}\nreturn EMBEDDABLE_HOSTS;`)();
+})();
 const PAGES_HOST = 'kuronekorou39.github.io';
 
 function manifestFiles() {

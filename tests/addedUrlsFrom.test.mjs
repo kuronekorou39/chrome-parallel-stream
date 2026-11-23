@@ -23,14 +23,16 @@ function functionSource(src, name) {
 }
 
 function constSource(src, name) {
-  const found = src.match(new RegExp(`^const ${name} = .*;$`, 'm'));
+  const found = src.match(new RegExp(`^const ${name} = [\\s\\S]*?;`, 'm'));
   if (!found) throw new Error(`${name} が見つかりません`);
   return found[0];
 }
 
 const addedUrlsFrom = new Function([
   constSource(multiviewSrc, 'MAX_WINDOWS'),
+  constSource(multiviewSrc, 'SITES'),
   constSource(multiviewSrc, 'EMBEDDABLE_HOSTS'),
+  functionSource(multiviewSrc, 'hostMatches'),
   functionSource(multiviewSrc, 'isEmbeddableHost'),
   functionSource(multiviewSrc, 'isAllowedFrameUrl'),
   functionSource(multiviewSrc, 'addedUrlsFrom'),
