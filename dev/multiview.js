@@ -254,6 +254,16 @@ const DMK_PRESETS_KEY = 'mvDanmakuPresets';
 const stackMq = window.matchMedia('(pointer: coarse) and (max-width: 940px)');
 let stackMode = false;
 
+// 自動配置: 枠の増減や画面サイズの変更があったら、選んだ方式で並べ直す。定期実行はしない。
+// 手で動かした配置を勝手に戻さないよう、移動・リサイズ・最大化・別の配置の実行でオフになる。
+// init の同期部分から参照されうるので、ここ=init より前で初期化する。
+const AUTO_LAYOUT_KEY = 'autoLayoutMode';
+const AUTO_LAYOUT_MODES = ['off', 'tile', 'volume'];
+const AUTO_LAYOUT_LABELS = { tile: '自動・整列', volume: '自動・音量順' };
+const AUTO_LAYOUT_DEBOUNCE_MS = 150; // 連続した変化(複数枠の追加・窓のリサイズ)を 1 回にまとめる
+let autoLayout = 'off';
+let autoLayoutTimer = 0;
+
 (async function init() {
   wireToolbar();
   setupIdleHide();
@@ -300,6 +310,9 @@ let stackMode = false;
 
   const data = await MV.storage.local.get(MULTIVIEW_ACTIVE_KEY);
   const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
+  const autoData = await MV.storage.local.get(AUTO_LAYOUT_KEY);
+  autoLayout = autoLayoutModeOf(autoData[AUTO_LAYOUT_KEY]);
+  syncAutoLayoutUI();
 
   // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
   if (saved.danmakuGlobal) dmkGlobal = Object.assign({}, DMK_DEFAULTS, dmkSanitize(saved.danmakuGlobal));
@@ -337,6 +350,8 @@ let stackMode = false;
   // 復元した枠は silent で作る(= 1枠ごとには一覧を描き直さない)ので、ここで一度だけ作り直す。
   // これが無いと、1枠目が出来た時点で自動表示した枠一覧が「1件」のまま止まる。
   renderMixer();
+
+  scheduleAutoLayout(); // 前回と画面サイズが違っていても、開いた時点で合わせる
 
   // 表示枠を 1 枠ずつ間隔をあけて読み込む(同時読込の 429/初期化ピーク回避)。各枠はスピナーを出して待つ。
   await loadDeferred(deferred);
@@ -442,7 +457,7 @@ window.addEventListener('message', onPlayerInfo);
 // ずれていると「直したはずの不具合が直らない」状態になり、原因を探る時間が丸ごと無駄になる。
 // ページが期待する版と、実際に入っている拡張の版を突き合わせて、古ければその場で知らせる。
 // この値はリリース手順で manifest.json と一緒に更新すること。
-const EXPECTED_EXT_VERSION = '1.0.1';
+const EXPECTED_EXT_VERSION = '1.0.2';
 // リンク先は版入りのファイル名にする。download 属性で保存名だけ変える方式は、別オリジンからの
 // リンクや一部のブラウザ(Android の自作ブラウザ等)で効かず、latest 名のまま落ちて (1)(2) が付く。
 // 版入りの zip は tools/release.mjs が消さずに残すので、古いページを開いたままの利用者も 404 にならない。
@@ -778,6 +793,7 @@ let applyLayoutGen = 0;
 async function applyLayout(layout) {
   if (!layout || !Array.isArray(layout.wins)) return;
   const gen = ++applyLayoutGen;
+  stopAutoLayout(); // 呼び出した配置を、自動で崩さない
   restoring = true; // 復元中は自動保存を抑止(途中経過で上書きしないため)
   [...wins].forEach((w) => closeWindow(w));
   const deferred = restoreLineup(layout);
@@ -1097,7 +1113,7 @@ function createWindow(url, opts = {}) {
     putLabel(volIcon, win.vol <= 0 ? ':vol-off:' : ':vol-on:');
     revealHeader(win); // 操作中はヘッダを消さない(特にタッチ)
   });
-  volSlider.addEventListener('change', () => saveLineup());
+  volSlider.addEventListener('change', onWinVolCommitted);
   openBtn.addEventListener('click', (e) => { e.stopPropagation(); openOriginal(win); });
   reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); reloadWindow(win); });
   if (chatBtn) chatBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleChat(win); });
@@ -1130,6 +1146,7 @@ function createWindow(url, opts = {}) {
     }
   }
   if (!opts.silent) {
+    scheduleAutoLayout();
     updateCount();
     saveLineup();
     renderMixer();
@@ -1339,6 +1356,7 @@ function relayoutOnResize() {
       setRect(w, r.x, r.y, r.w, r.h);
     }
   }
+  scheduleAutoLayout();
 }
 
 // ====== スマホ縦積みモード ======
@@ -1366,6 +1384,7 @@ function updateStackMode() {
       w.freeRect = null;
       if (r) setRect(w, r.x, r.y, r.w, r.h);
     });
+    scheduleAutoLayout(); // 縦積みの間に枠が増減していても合わせる
   }
   wins.forEach((w) => sendTheaterEnabled(w, on && !w.light)); // モード切替を各フレームへ(軽量はシアター不要)
   wins.forEach((w) => applyFrameZoom(w)); // 既定縮小率がモードで変わる(自由配置=等倍 / 縦積み=75/50%)
@@ -1769,6 +1788,8 @@ function finishStackDrag() {
   if (d.mode === 'stack') {
     relayoutStack(); // reordering のアニメが残っている間に席へ滑り込む
     setTimeout(() => document.body.classList.remove('reordering'), 200);
+  } else if (d.lastX !== d.startX || d.lastY !== d.startY) {
+    stopAutoLayout(); // 長押しだけで動かしていないときは、オフにしない
   }
   saveLineup();
   renderMixer();
@@ -2915,7 +2936,9 @@ function makeBarHandle(win, bar) {
       }
     }, () => {
       bar.classList.remove('sliding');
-      if (!slideMode) saveLineup(); // 枠を動かしたら位置を保存(スライドのみのときは保存しない)
+      if (slideMode) return; // スライドのみのときは保存しない
+      if (rectMoved(r, getRect(win))) stopAutoLayout();
+      saveLineup(); // 枠を動かしたら位置を保存
     });
   });
 }
@@ -2943,11 +2966,15 @@ function beginResize(win, dir, e) {
     if (dir.includes('w')) { w = Math.max(MIN_W, r.w - dx); x = r.x + r.w - w; } // 右辺を固定
     if (dir.includes('n')) { h = Math.max(MIN_H, r.h - dy); y = r.y + r.h - h; } // 下辺を固定
     setRect(win, x, y, w, h);
-  }, () => saveLineup()); // リサイズ後のサイズ・位置を保存
+  }, () => {
+    if (rectMoved(r, getRect(win))) stopAutoLayout();
+    saveLineup(); // リサイズ後のサイズ・位置を保存
+  });
 }
 
 function toggleMax(win) {
   if (stackMode) return; // 縦積み中は常に整列済み(⛶ボタン自体も CSS で隠している)
+  if (!restoring) stopAutoLayout(); // 最大化を、次の自動配置で解除してしまわないように
   if (win.maximized) {
     if (win.prevRect) setRect(win, win.prevRect.x, win.prevRect.y, win.prevRect.w, win.prevRect.h);
     win.maximized = false;
@@ -2983,21 +3010,10 @@ function snapLayout() {
   saveLineup();
 }
 
-// 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。
-function tileAll() {
-  if (stackMode) {
-    relayoutStack(); // 縦積み中の「整列」= 積み直し
-    return;
-  }
-  const n = wins.length;
-  if (!n) return;
-  const gap = 4;
-  const W = stage.clientWidth;
-  const H = stage.clientHeight;
+// n 枠を並べる行数・列数を決める。cols を 1..n で総当たりし、セルの比が 16:9 に最も近い分割を選ぶ。
+// これにより縦長ステージでは縦積み(1列)になり、各枠が横長を保つ。
+function tileGrid(n, W, H, gap) {
   const TARGET = 16 / 9; // 配信は横長動画なので各枠を 16:9 に近づける
-
-  // cols を 1..n で総当たりし、セルのアスペクト比が 16:9 に最も近い分割を選ぶ。
-  // これにより縦長ステージでは縦積み(1列)になり、各枠が横長を保つ。
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
@@ -3008,15 +3024,80 @@ function tileAll() {
     const score = Math.abs(Math.log(cw / ch / TARGET));
     if (!best || score < best.score) best = { cols, rows, score };
   }
-  if (!best) {
-    const cols = Math.ceil(Math.sqrt(n));
-    best = { cols, rows: Math.ceil(n / cols) };
-  }
+  if (best) return { cols: best.cols, rows: best.rows };
+  const cols = Math.ceil(Math.sqrt(n));
+  return { cols, rows: Math.ceil(n / cols) };
+}
 
-  const { cols, rows } = best;
+function autoLayoutModeOf(v) {
+  return AUTO_LAYOUT_MODES.includes(v) ? v : 'off';
+}
+
+function rectMoved(a, b) {
+  return a.x !== b.x || a.y !== b.y || a.w !== b.w || a.h !== b.h;
+}
+
+function syncAutoLayoutUI() {
+  document.querySelectorAll('#layout-auto [data-auto]').forEach((btn) => {
+    const on = btn.dataset.auto === autoLayout;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
+  const val = document.getElementById('mm-layout-val');
+  if (val) val.textContent = AUTO_LAYOUT_LABELS[autoLayout] || '';
+}
+
+function setAutoLayout(mode) {
+  autoLayout = autoLayoutModeOf(mode);
+  clearTimeout(autoLayoutTimer);
+  syncAutoLayoutUI();
+  try { MV.storage.local.set({ [AUTO_LAYOUT_KEY]: autoLayout }); } catch (e) { /* noop */ }
+  runAutoLayout();
+}
+
+function stopAutoLayout() {
+  if (autoLayout !== 'off') setAutoLayout('off');
+}
+
+function runAutoLayout() {
+  if (autoLayout === 'off' || stackMode || restoring || stackDrag) return;
+  if (autoLayout === 'tile') tileAll();
+  else layoutByVolume();
+}
+
+function scheduleAutoLayout() {
+  if (autoLayout === 'off' || stackMode || restoring) return;
+  clearTimeout(autoLayoutTimer);
+  autoLayoutTimer = setTimeout(runAutoLayout, AUTO_LAYOUT_DEBOUNCE_MS);
+}
+
+// 枠の音量を確定したとき(つまみを離したとき)。動かしている最中に枠が動くと操作できないので、ここで並べ直す。
+function onWinVolCommitted() {
+  saveLineup();
+  if (autoLayout === 'volume') scheduleAutoLayout();
+}
+
+// 配置ボタンを手で押したとき。自動と違う方式を選んだら、次の変化で戻されないよう自動をオフにする。
+function runManualLayout(kind, run) {
+  if (!stackMode && autoLayout !== kind) stopAutoLayout();
+  run();
+}
+
+// 複数窓をタイル整列(2つメイン+残りサブにしたい時の起点)。
+function tileAll() {
+  if (stackMode) {
+    relayoutStack(); // 縦積み中の「整列」= 積み直し
+    return;
+  }
+  const vis = wins.filter((w) => !w.hidden); // 隠している枠にマスを割り当てると、空きができる
+  if (!vis.length) return;
+  const gap = 4;
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
+  const { cols, rows } = tileGrid(vis.length, W, H, gap);
   const cw = Math.floor((W - gap * (cols + 1)) / cols);
   const ch = Math.floor((H - gap * (rows + 1)) / rows);
-  wins.forEach((win, i) => {
+  vis.forEach((win, i) => {
     win.maximized = false;
     const c = i % cols;
     const r = Math.floor(i / cols);
@@ -3450,6 +3531,7 @@ function closeWindow(win) {
   updateCount();
   saveLineup();
   renderMixer();
+  scheduleAutoLayout();
   if (wasSinkOwner) {
     // 共有シンクのオーナー枠を閉じた → 残りの同サイト枠を作り直して音声を復帰(=手動リロードの自動化)。
     setTimeout(() => { sameSiteSurvivors.forEach((w) => { if (wins.indexOf(w) >= 0) remountFrame(w); }); }, 150);
@@ -4091,6 +4173,7 @@ function hideWindow(win) {
   win.hidden = true;
   win.el.style.display = 'none'; // メディアはそのまま(再生・音・通信を継続)
   if (stackMode) relayoutStack(); // 空いた分を詰める
+  scheduleAutoLayout();
   renderMixer();
   saveLineup();
 }
@@ -4100,6 +4183,7 @@ function showWindow(win) {
   resumeMedia(win); // 未読込(起動時の休止枠)なら読み込む。読込済みなら何もしない=再読み込みされない
   applyVolume(win, masterVolume);
   focusWindow(win); // 出したら最前面へ
+  scheduleAutoLayout();
   if (stackMode) {
     relayoutStack();
     win.el.scrollIntoView({ block: 'nearest' });
@@ -4235,7 +4319,7 @@ function renderMixer() {
     vol.className = 'mixer-row-vol';
     vol.title = 'この枠の音量';
     vol.addEventListener('input', () => setWinVol(win, Number(vol.value) / 100));
-    vol.addEventListener('change', () => saveLineup());
+    vol.addEventListener('change', onWinVolCommitted);
     bot.append(volIcon, vol);
 
     row.append(top, bot);
@@ -4413,7 +4497,7 @@ function wireToolbar() {
   });
   // つまみを離した時に保存(input 連発で storage を叩かないよう change で一度だけ)。
   masterSlider.addEventListener('change', () => saveLineup());
-  document.getElementById('tile-btn').addEventListener('click', tileAll);
+  document.getElementById('tile-btn').addEventListener('click', () => runManualLayout('tile', tileAll));
 
   // ⚡ 軽量プレイヤー一括切替(押すたびに 全部軽量 ⇄ 全部通常。枠ごとの個別切替はヘッダの⚡)。
   // 縦積みの「全画面」からの復帰ボタン(全画面中だけ画面下に出る)。
@@ -4444,7 +4528,7 @@ function wireToolbar() {
   };
   document.getElementById('add-open-btn').addEventListener('click', openAdd);
   document.getElementById('qa-add').addEventListener('click', openAdd); // 右下の丸ボタン(＋)
-  document.getElementById('qa-tile').addEventListener('click', () => tileAll()); // 右下の丸ボタン(⊞)
+  document.getElementById('qa-tile').addEventListener('click', () => runManualLayout('tile', tileAll)); // 右下の丸ボタン(⊞)
   // 右下の丸ボタン(一覧)。開閉の切替は #mixer-btn と同じ処理に任せる。
   document.getElementById('qa-mixer').addEventListener('click', () => document.getElementById('mixer-btn').click());
   document.getElementById('empty-add-btn').addEventListener('click', openAdd); // 空ステージの大ボタンからも開ける
@@ -4598,11 +4682,15 @@ function setupLayoutDialog() {
   if (!dlg) return;
   // 整列/整形を実行してもダイアログは閉じない(× だけで閉じる)。実行後すぐ別の操作・微調整ができる。
   const tile = document.getElementById('layout-tile');
-  if (tile) tile.addEventListener('click', () => tileAll());
+  if (tile) tile.addEventListener('click', () => runManualLayout('tile', tileAll));
   const snap = document.getElementById('layout-snap');
-  if (snap) snap.addEventListener('click', () => snapLayout());
+  if (snap) snap.addEventListener('click', () => runManualLayout('snap', snapLayout));
   const byVol = document.getElementById('layout-volume');
-  if (byVol) byVol.addEventListener('click', () => layoutByVolume());
+  if (byVol) byVol.addEventListener('click', () => runManualLayout('volume', layoutByVolume));
+  document.querySelectorAll('#layout-auto [data-auto]').forEach((btn) => {
+    btn.addEventListener('click', () => setAutoLayout(btn.dataset.auto));
+  });
+  syncAutoLayoutUI();
   const nameInput = document.getElementById('layout-name');
   const save = document.getElementById('layout-save');
   const doSave = async () => {
