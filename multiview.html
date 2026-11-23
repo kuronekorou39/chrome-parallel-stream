@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        multiview.js / .css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=1.0.7" />
+  <link rel="stylesheet" href="multiview.css?v=1.0.8" />
 </head>
 <body>
   <div id="toolbar">
@@ -115,7 +115,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.7.zip" download="parallel-stream-1.0.7.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.8.zip" download="parallel-stream-1.0.8.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -203,23 +203,24 @@
         <button id="layout-dialog-close" class="pos-dialog-x" type="button" title="閉じる">✕</button>
       </div>
       <div class="pos-dialog-body">
-        <div class="layout-actions">
-          <button id="layout-tile" class="layout-action" type="button" title="全部を均等に並べ直す">
-            <span class="layout-action-title"><i data-ic="grid"></i><span class="ic-text">整列</span></span>
-          </button>
-          <button id="layout-snap" class="layout-action" type="button" title="今の配置を保ったまま隙間をそろえる">
-            <span class="layout-action-title"><i data-ic="sparkle"></i><span class="ic-text">整形</span></span>
-          </button>
-          <button id="layout-volume" class="layout-action" type="button" title="音量の大きい枠ほど大きく並べ直す">
-            <span class="layout-action-title"><i data-ic="vol-high"></i><span class="ic-text">音量順</span></span>
-          </button>
-        </div>
-        <!-- 枠の増減や画面サイズの変更で並べ直す。枠のサイズを手で変えるとオフに戻る(移動だけなら続く)。 -->
-        <div class="layout-sec" title="枠の増減や画面サイズの変更で並べ直します。枠のサイズを変えるとオフになります">自動で並べる</div>
-        <div id="layout-auto" class="layout-actions">
-          <button class="layout-action" data-auto="off" type="button"><span class="layout-action-title">オフ</span></button>
-          <button class="layout-action" data-auto="tile" type="button"><span class="layout-action-title">整列</span></button>
-          <button class="layout-action" data-auto="volume" type="button"><span class="layout-action-title">音量順</span></button>
+        <!-- 1 行が 1 つの並べ方。左のボタンは今すぐ実行、右のスイッチはその並べ方を自動で続ける。
+             自動は同時に 1 つだけ。枠のサイズを手で変えるとオフに戻る(移動だけなら続く)。 -->
+        <div class="layout-sec">並べ方</div>
+        <div id="layout-auto" class="layout-methods">
+          <button id="layout-tile" class="layout-run" type="button" title="全部を均等に並べ直す"><i data-ic="grid"></i><span class="ic-text">整列</span></button>
+          <label class="layout-switch" title="枠の増減や画面サイズの変更で整列し直します。枠のサイズを変えるとオフになります">
+            <input type="checkbox" data-auto="tile" />
+            <span class="layout-switch-track"></span>
+            <span>自動</span>
+          </label>
+          <button id="layout-volume" class="layout-run" type="button" title="音量の大きい枠ほど大きく並べ直す"><i data-ic="vol-high"></i><span class="ic-text">音量順</span></button>
+          <label class="layout-switch" title="枠の増減や画面サイズの変更で音量順に並べ直します。枠のサイズを変えるとオフになります">
+            <input type="checkbox" data-auto="volume" />
+            <span class="layout-switch-track"></span>
+            <span>自動</span>
+          </label>
+          <button id="layout-snap" class="layout-run" type="button" title="今の配置を保ったまま隙間をそろえる"><i data-ic="sparkle"></i><span class="ic-text">整形</span></button>
+          <span aria-hidden="true"></span>
         </div>
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
@@ -295,7 +296,7 @@
   <script src="hls.min.js"></script>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        multiview.js より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=1.0.7"></script>
-  <script src="multiview.js?v=1.0.7"></script>
+  <script src="ext-bridge.js?v=1.0.8"></script>
+  <script src="multiview.js?v=1.0.8"></script>
 </body>
 </html>
