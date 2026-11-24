@@ -62,6 +62,13 @@ function autoLayoutModeOf(v) {
   return AUTO_LAYOUT_MODES.includes(v) ? v : 'off';
 }
 
+// 起動時の自動配置。未設定の既定は音量順だが、既に枠の並びを持っている人は手で置いた配置が
+// 更新で崩れないようオフのままにする。
+function initialAutoLayout(stored, hasLineup) {
+  if (stored !== undefined) return autoLayoutModeOf(stored);
+  return hasLineup ? 'off' : 'volume';
+}
+
 function rectResized(a, b) {
   return a.w !== b.w || a.h !== b.h;
 }
@@ -76,6 +83,11 @@ function syncAutoLayoutUI() {
   qa.classList.toggle('auto-on', !!label);
   qa.title = label ? '配置(' + label + ')' : '配置';
   qa.setAttribute('aria-label', qa.title);
+}
+
+function syncLayoutOptionsUI() {
+  document.getElementById('layout-overlap').checked = volumeOverlap;
+  document.getElementById('layout-hide-ended').checked = autoHideEnded;
 }
 
 function setAutoLayout(mode) {
@@ -211,19 +223,82 @@ function layoutByVolume() {
   // 並べても意味が無い)。詰める計算も同じ大きさで行うので、枠どうしは重ならない。
   const heightOf = (it) => Math.max(MIN_H, best.base * it.r);
   let y = gap + Math.max(0, (H - best.totalH) / 2); // 余りは上下に散らす
+  const placed = []; // 音量の大きい順
   best.rows.forEach((row) => {
     const rowH = Math.max(...row.items.map(heightOf));
     let x = gap + Math.max(0, (W - row.w) / 2); // 行は横中央へ
     row.items.forEach((it) => {
       const h = heightOf(it);
       const w = h * VOL_LAYOUT_ASPECT;
-      it.win.maximized = false;
-      setRect(it.win, Math.round(x), Math.round(y + (rowH - h) / 2), Math.round(w), Math.round(h));
+      placed.push({ win: it.win, r: it.r, x, y: y + (rowH - h) / 2, w, h });
       x += w + gap;
     });
     y += rowH + gap;
   });
+  if (volumeOverlap) {
+    growWithOverlap(placed, overlapLimits(placed.map((p) => p.r)), stage.clientWidth, stage.clientHeight, VOL_LAYOUT_ASPECT);
+    // 音量の大きい枠ほどよく見たいので手前に置く。
+    [...placed].reverse().forEach((p) => { p.win.el.style.zIndex = ++zCounter; });
+    // ただし選択中(追加した直後・クリックした枠)は操作中なので、奥へ回さずいちばん手前に残す。
+    if (activeWin && placed.some((p) => p.win === activeWin)) activeWin.el.style.zIndex = ++zCounter;
+  }
+  placed.forEach((p) => {
+    p.win.maximized = false;
+    setRect(p.win, Math.round(p.x), Math.round(p.y), Math.round(p.w), Math.round(p.h));
+  });
   saveLineup();
+}
+
+// 「重ねて隙間を埋める」で、枠の面積のうち他の枠と重なってよい割合。音量が大きいほど見たいので厳しくする。
+const VOL_OVERLAP_LOUDEST = 0.2;
+const VOL_OVERLAP_QUIETEST = 0.6;
+function overlapLimits(sizes) {
+  const max = Math.max(...sizes), min = Math.min(...sizes);
+  return sizes.map((s) => {
+    const t = max === min ? 1 : (s - min) / (max - min); // 全部同じ音量なら、全部「一番大きい枠」扱い
+    return VOL_OVERLAP_QUIETEST + (VOL_OVERLAP_LOUDEST - VOL_OVERLAP_QUIETEST) * t;
+  });
+}
+
+// 重ならない配置を起点に、各枠を同じ比率で少しずつ広げる(rects を書き換える)。
+// 広げる向きは、他の枠との重なりが最も増えない向き。どれかの枠が上限を超えるなら、その枠はそこで止める。
+// 重なりは相手ごとの面積の合計で測る(実際の重なり以上の値になるので、上限を超えることはない)。
+function growWithOverlap(rects, limits, W, H, aspect) {
+  const GROW_STEP = 1.02;
+  const MAX_ROUNDS = 200;
+  const ANCHORS = [0, 0.5, 1];
+  const shared = (a, b) =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
+    Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const sharedOf = (list, i) => list.reduce((sum, o, j) => (j === i ? sum : sum + shared(list[i], o)), 0);
+  const withinLimits = (list) => list.every((r, i) => sharedOf(list, i) <= limits[i] * r.w * r.h);
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    let grew = false;
+    rects.forEach((r, i) => {
+      const w = r.w * GROW_STEP;
+      const h = w / aspect;
+      if (w > W || h > H) return;
+      let best = null;
+      for (const ax of ANCHORS) {
+        for (const ay of ANCHORS) {
+          const next = {
+            x: Math.max(0, Math.min(W - w, r.x - (w - r.w) * ax)),
+            y: Math.max(0, Math.min(H - h, r.y - (h - r.h) * ay)),
+            w, h
+          };
+          const list = rects.map((o, j) => (j === i ? next : o));
+          if (!withinLimits(list)) continue;
+          const cost = sharedOf(list, i);
+          if (!best || cost < best.cost) best = { next, cost };
+        }
+      }
+      if (!best) return;
+      Object.assign(r, best.next);
+      grew = true;
+    });
+    if (!grew) break;
+  }
 }
 
 // 指定の倍率で、音量の大きい順に横へ詰めていく。幅を超えたら次の行。引き伸ばしはしない。
@@ -257,6 +332,13 @@ function setupLayoutDialog() {
     box.addEventListener('change', () => setAutoLayout(box.checked ? box.dataset.auto : 'off'));
   });
   syncAutoLayoutUI();
+  document.getElementById('layout-overlap').addEventListener('change', (e) => {
+    volumeOverlap = e.target.checked;
+    try { MV.storage.local.set({ [VOLUME_OVERLAP_KEY]: volumeOverlap }); } catch (err) { /* noop */ }
+    if (autoLayout === 'volume') runAutoLayout();
+  });
+  document.getElementById('layout-hide-ended').addEventListener('change', (e) => setAutoHideEnded(e.target.checked));
+  syncLayoutOptionsUI();
   const nameInput = document.getElementById('layout-name');
   const save = document.getElementById('layout-save');
   const doSave = async () => {

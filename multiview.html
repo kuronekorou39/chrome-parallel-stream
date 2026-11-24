@@ -10,7 +10,7 @@
        古い JS/CSS のまま動いてしまうため、URL を変えて確実に取り直させる。
        js/ / multiview.css / ext-bridge.js を変更したら、この値を manifest.json の version に
        合わせて上げること(上げ忘れると古いまま配られる)。 -->
-  <link rel="stylesheet" href="multiview.css?v=1.0.15" />
+  <link rel="stylesheet" href="multiview.css?v=1.0.19" />
 </head>
 <body>
   <div id="toolbar">
@@ -115,7 +115,7 @@
           <div class="upd-row"><span>最新の版</span><b id="upd-latest">—</b></div>
         </div>
         <p id="upd-note" class="cookie-note"></p>
-        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.15.zip" download="parallel-stream-1.0.15.zip">ZIP をダウンロード</a>
+        <a id="upd-dl" class="tb-btn tb-btn-primary upd-dl" href="dist/parallel-stream-1.0.19.zip" download="parallel-stream-1.0.19.zip">ZIP をダウンロード</a>
         <p class="cookie-note">
           展開してできたフォルダを、<code>chrome://extensions</code> の
           「パッケージ化されていない拡張機能を読み込む」で選び直してください。
@@ -222,6 +222,19 @@
           <button id="layout-snap" class="layout-run" type="button" title="今の配置を保ったまま隙間をそろえる"><i data-ic="sparkle"></i><span class="ic-text">整形</span></button>
           <span aria-hidden="true"></span>
         </div>
+        <div class="layout-sec">オプション</div>
+        <div class="layout-options">
+          <label class="layout-switch" title="音量順で並べるとき、重なりを一番大きい枠で20%、一番小さい枠で60%までに抑えて隙間を埋めます。音量の大きい枠が手前になります">
+            <input type="checkbox" id="layout-overlap" />
+            <span class="layout-switch-track"></span>
+            <span>音量順で重ねて隙間を埋める</span>
+          </label>
+          <label class="layout-switch" title="配信の終了が1分続いたら枠を隠し、再開したら自動で表示します">
+            <input type="checkbox" id="layout-hide-ended" />
+            <span class="layout-switch-track"></span>
+            <span>終わった配信を自動で隠す</span>
+          </label>
+        </div>
         <div class="layout-sec">現在のレイアウトを保存</div>
         <div class="layout-save-row">
           <input type="text" id="layout-name" class="tb-input" placeholder="保存名(省略で日時)" />
@@ -295,26 +308,26 @@
   </div>
   <!-- 拡張ページ / 通常オリジンのどちらで開かれても chrome.* 相当を使えるようにする橋渡し。
        js/ より先に読むこと(MV.* を使うため)。 -->
-  <script src="ext-bridge.js?v=1.0.15"></script>
+  <script src="ext-bridge.js?v=1.0.19"></script>
   <!-- 全ファイルでトップレベルを共有する通常の script。順番に意味がある(main が必ず最後)。 -->
-  <script src="js/config.js?v=1.0.15"></script>
-  <script src="js/urls.js?v=1.0.15"></script>
-  <script src="js/icons.js?v=1.0.15"></script>
-  <script src="js/version.js?v=1.0.15"></script>
-  <script src="js/lineup.js?v=1.0.15"></script>
-  <script src="js/frames.js?v=1.0.15"></script>
-  <script src="js/window.js?v=1.0.15"></script>
-  <script src="js/window-input.js?v=1.0.15"></script>
-  <script src="js/window-controls.js?v=1.0.15"></script>
-  <script src="js/stack.js?v=1.0.15"></script>
-  <script src="js/danmaku.js?v=1.0.15"></script>
-  <script src="js/layout.js?v=1.0.15"></script>
-  <script src="js/audio.js?v=1.0.15"></script>
-  <script src="js/audio-sync.js?v=1.0.15"></script>
-  <script src="js/mixer.js?v=1.0.15"></script>
-  <script src="js/panels.js?v=1.0.15"></script>
-  <script src="js/toolbar.js?v=1.0.15"></script>
-  <script src="js/perf.js?v=1.0.15"></script>
-  <script src="js/main.js?v=1.0.15"></script>
+  <script src="js/config.js?v=1.0.19"></script>
+  <script src="js/urls.js?v=1.0.19"></script>
+  <script src="js/icons.js?v=1.0.19"></script>
+  <script src="js/version.js?v=1.0.19"></script>
+  <script src="js/lineup.js?v=1.0.19"></script>
+  <script src="js/frames.js?v=1.0.19"></script>
+  <script src="js/window.js?v=1.0.19"></script>
+  <script src="js/window-input.js?v=1.0.19"></script>
+  <script src="js/window-controls.js?v=1.0.19"></script>
+  <script src="js/stack.js?v=1.0.19"></script>
+  <script src="js/danmaku.js?v=1.0.19"></script>
+  <script src="js/layout.js?v=1.0.19"></script>
+  <script src="js/audio.js?v=1.0.19"></script>
+  <script src="js/audio-sync.js?v=1.0.19"></script>
+  <script src="js/mixer.js?v=1.0.19"></script>
+  <script src="js/panels.js?v=1.0.19"></script>
+  <script src="js/toolbar.js?v=1.0.19"></script>
+  <script src="js/perf.js?v=1.0.19"></script>
+  <script src="js/main.js?v=1.0.19"></script>
 </body>
 </html>

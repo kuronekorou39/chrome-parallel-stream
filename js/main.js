@@ -47,8 +47,13 @@
   const data = await MV.storage.local.get(MULTIVIEW_ACTIVE_KEY);
   const saved = data[MULTIVIEW_ACTIVE_KEY] || {};
   const autoData = await MV.storage.local.get(AUTO_LAYOUT_KEY);
-  autoLayout = autoLayoutModeOf(autoData[AUTO_LAYOUT_KEY]);
+  autoLayout = initialAutoLayout(autoData[AUTO_LAYOUT_KEY], (saved.wins || saved.urls || []).length > 0);
+  if (autoData[AUTO_LAYOUT_KEY] === undefined) MV.storage.local.set({ [AUTO_LAYOUT_KEY]: autoLayout }); // 判定を次回へ持ち越さない
   syncAutoLayoutUI();
+  const layoutOpts = await MV.storage.local.get([VOLUME_OVERLAP_KEY, AUTO_HIDE_ENDED_KEY]);
+  volumeOverlap = layoutOpts[VOLUME_OVERLAP_KEY] !== false; // 既定はオン
+  autoHideEnded = layoutOpts[AUTO_HIDE_ENDED_KEY] !== false; // 既定はオン
+  syncLayoutOptionsUI();
 
   // 弾幕の共通(既定)設定を復元(壊れた値は dmkSanitize で弾く)。枠ごとの上書きは restoreLineup で。
   if (saved.danmakuGlobal) dmkGlobal = Object.assign({}, DMK_DEFAULTS, dmkSanitize(saved.danmakuGlobal));
@@ -80,6 +85,9 @@
     urls.forEach((u) => createWindow(u, { silent: true }));
     if (urls.length) tileAll(); // 旧データの初回だけ整列(以後は位置を保存・復元)
   }
+  // 復元では最後に作った枠が選択されたままになる。選択中の枠は整列でも手前に残すので、
+  // 開いた直後に音量の小さい枠が手前へ来ないよう、ここで選択を外しておく。
+  clearSelection();
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   if (added.length) saveLineup(); // 置き換えた並びを、次に開いたときの「前回の状態」にする
   updateCount();

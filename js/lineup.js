@@ -11,7 +11,7 @@ function currentLineupItems() {
     return {
       url: w.url,
       x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h),
-      max: !!w.maximized, vol: w.vol != null ? w.vol : 1, hidden: !!w.hidden, light: !!w.light,
+      max: !!w.maximized, vol: w.vol != null ? w.vol : 1, hidden: !!w.hidden && !w.autoHidden, light: !!w.light, // 自動で隠した枠は、隠したまま保存すると読み込まれず再開に気づけない
       tall: w.tall == null ? null : !!w.tall, // 縦積みタイル高の手動指定(null=既定の16:9)
       span: w.span === 'half' ? 'half' : 'full', // 縦積みタイル幅(100%/50%)
       zoom: w.zoom, // 枠内サイトの縮小率の手動指定(🔍。null=幅に応じた既定)
