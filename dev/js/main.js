@@ -85,6 +85,9 @@
     urls.forEach((u) => createWindow(u, { silent: true }));
     if (urls.length) tileAll(); // 旧データの初回だけ整列(以後は位置を保存・復元)
   }
+  // 復元では最後に作った枠が選択されたままになる。選択中の枠は整列でも手前に残すので、
+  // 開いた直後に音量の小さい枠が手前へ来ないよう、ここで選択を外しておく。
+  clearSelection();
   restoring = false; // 以後の移動/リサイズ/追加/削除は保存する
   if (added.length) saveLineup(); // 置き換えた並びを、次に開いたときの「前回の状態」にする
   updateCount();
