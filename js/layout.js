@@ -239,6 +239,8 @@ function layoutByVolume() {
     growWithOverlap(placed, overlapLimits(placed.map((p) => p.r)), stage.clientWidth, stage.clientHeight, VOL_LAYOUT_ASPECT);
     // 音量の大きい枠ほどよく見たいので手前に置く。
     [...placed].reverse().forEach((p) => { p.win.el.style.zIndex = ++zCounter; });
+    // ただし選択中(追加した直後・クリックした枠)は操作中なので、奥へ回さずいちばん手前に残す。
+    if (activeWin && placed.some((p) => p.win === activeWin)) activeWin.el.style.zIndex = ++zCounter;
   }
   placed.forEach((p) => {
     p.win.maximized = false;
