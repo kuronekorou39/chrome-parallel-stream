@@ -546,6 +546,66 @@ function mvInOwnFrame() {
     }, STREAM_POLL_MS);
   }
 
+  // ---- Twitch の埋め込みプレイヤー: 映像が始まらないときの診断 ----
+  // スマホで、チャットは取れているのに映像だけ出ないことが時々ある(再現性が無い)。原因の
+  // 切り分けのため、読み込んでから一定時間たっても再生が始まらないとき、そのときの状態を親へ送る。
+  // 親は枠の上に表示する。始まったら(遅れて始まった場合も)取り消しと、始まるまでの時間を送る。
+  // 状態を見るだけで、再生には手を出さない。
+  if (isDirectTile && host === 'player.twitch.tv') {
+    const DIAG_STUCK_MS = 15000; // これだけ待っても始まらなければ「始まらない」とみなす
+    const DIAG_POLL_MS = 3000;
+    const t0 = Date.now();
+    let lastSent = '';
+    const sec = (ms) => Math.round(ms / 100) / 10;
+    const snapshot = () => {
+      const vids = [...document.querySelectorAll('video')];
+      const v = vids[0];
+      const info = { elapsed: sec(Date.now() - t0), videos: vids.length, vis: document.visibilityState };
+      if (v) {
+        const b = v.buffered;
+        Object.assign(info, {
+          paused: v.paused,
+          ready: v.readyState,     // 0=何も無い 1=情報のみ 2以上=映像あり
+          network: v.networkState, // 2=読み込み中 3=ソースなし
+          time: Math.round(v.currentTime * 10) / 10,
+          buffered: b && b.length ? Math.round((b.end(b.length - 1) - v.currentTime) * 10) / 10 : 0,
+          muted: v.muted,
+          src: v.currentSrc ? v.currentSrc.split(':')[0] : '',
+          error: v.error ? v.error.code + (v.error.message ? ' ' + v.error.message.slice(0, 80) : '') : ''
+        });
+      }
+      // プレイヤーが映像の上に出しているもの(エラー・年齢確認・再生ボタンなど)。CSS で隠している
+      // 案内も拾えるよう、innerText ではなく textContent で読む。
+      const overlay = document.querySelector('.video-player__overlay');
+      const text = overlay ? overlay.textContent.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+      if (text) info.overlay = text;
+      const btn = document.querySelector('[data-a-target="player-play-pause-button"]');
+      if (btn) info.button = btn.getAttribute('data-a-player-state') || '';
+      if (document.querySelector('[data-a-target="player-overlay-mature-accept"]')) info.mature = true;
+      if (document.querySelector('.channel-status-info--offline, .offline-embeds')) info.offline = true;
+      return info;
+    };
+    const isPlaying = () => {
+      const v = document.querySelector('video');
+      return !!v && !v.paused && v.readyState >= 2 && v.currentTime > 0;
+    };
+    const timer = setInterval(() => {
+      // 一度始まった後の停止は回線の乱れなど別の話なので、ここでは扱わない(見張りもやめる)。
+      if (isPlaying()) {
+        clearInterval(timer);
+        post('play-diag', { stuck: false, startSec: sec(Date.now() - t0) });
+        return;
+      }
+      if (Date.now() - t0 < DIAG_STUCK_MS) return;
+      const info = snapshot();
+      if (info.offline) return; // 配信していないだけ
+      const key = JSON.stringify(Object.assign({}, info, { elapsed: 0, time: 0, buffered: 0 }));
+      if (key === lastSent) return; // 経過時間以外が変わったときだけ送り直す
+      lastSent = key;
+      post('play-diag', { stuck: true, info });
+    }, DIAG_POLL_MS);
+  }
+
   // ---- YouTube の live_chat 枠: チャットが使えるかを親へ知らせる ----
   // ライブでない動画では live_chat が「このライブ ストリームではチャットは無効です。」だけを出す。
   // そのとき DOM は一覧(yt-live-chat-item-list-renderer)を持たず、単独の

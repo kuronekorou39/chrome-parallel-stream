@@ -502,6 +502,22 @@ body.panel-dragging iframe { pointer-events: none; }
 @keyframes win-spin { to { transform: rotate(360deg); } }
 .win-loading-label { font-size: 13px; letter-spacing: 0.04em; }
 
+/* Twitch の映像が始まらないときの診断(frames.js の onPlayDiag)。画面を撮って送れるよう文字は選べる。 */
+.win-diag {
+  position: absolute; left: 6px; right: 6px; bottom: 6px; z-index: 4;
+  max-height: 60%; overflow: auto;
+  padding: 8px 10px; border-radius: 6px;
+  background: rgba(20, 16, 6, 0.92); color: #f0e6c8; border: 1px solid var(--c-warning);
+  font: 12px/1.5 system-ui, sans-serif; user-select: text;
+}
+.win-diag-head { display: flex; align-items: center; gap: 8px; font-weight: bold; margin-bottom: 4px; }
+.win-diag-head span { flex: 1; }
+.win-diag-head button {
+  padding: 2px 10px; border-radius: 4px; border: 1px solid var(--c-warning);
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.win-diag-body { white-space: pre-wrap; word-break: break-all; }
+
 /* 拡張機能が古いときの案内。拡張機能がないときの赤い帯(ext-bridge.js)と同じ形の、黄色い帯。 */
 #mv-ext-old {
   position: fixed; left: 0; right: 0; top: 0; z-index: var(--z-banner);
