@@ -218,7 +218,9 @@ function scheduleAutoSync() {
 }
 
 function syncTargets() {
-  return wins.filter((w) => !w.hidden && w.frame && delaySupported(w));
+  // 音量 0(ミュート)の枠は聞いていない枠なので合わせない。音を出している枠だけで揃えたあと、
+  // 関係ない配信を音を消して並べておけるように。
+  return wins.filter((w) => !w.hidden && w.frame && delaySupported(w) && w.vol !== 0);
 }
 
 // ダイアログの表示を今の状態に合わせる。定期実行は単独で使うものではないので、
@@ -239,7 +241,7 @@ function openSyncDialog() {
     beforeOpen: () => {
       syncDialogRan = false;
       document.getElementById('sync-dialog-status').textContent = syncTargets().length < 2
-        ? 'Twitch のライブ枠が 2 つ以上あるときに使えます。'
+        ? '音を出している Twitch のライブ枠が 2 つ以上あるときに使えます(音量 0 の枠は対象外)。'
         : syncRun ? 'いま測っている最中です。' : '';
       syncDialogUI();
     }
