@@ -136,7 +136,10 @@ function onFrameState(e) {
     onStreamState(win, d.state);
   } else if (d.type === 'sync-audio') {
     onSyncAudio(win, d);
+  } else if (d.type === 'play-diag') {
+    onPlayDiag(win, d);
   } else if (d.type === 'frame-hello') {
+    hidePlayDiag(win); // 枠の中で別のページへ移った(再読込を含む)。前のページの診断は古い
     syncFrameTheater(win);  // 起動した frame に現在のシアター設定を返す(読込すれ違い対策)
     syncFrameDanmaku(win);  // 同じく現在の弾幕 ON/OFF も返す
     // 音量も返す。frame の load を待っていると、その前にプレイヤーが記憶値(たいてい最大)で
@@ -145,6 +148,62 @@ function onFrameState(e) {
     applyVolume(win, masterVolume);
     syncFrameDelay(win); // 再読込した枠にも、指定してあった遅延を付け直す
   }
+}
+
+// ====== Twitch の映像が始まらないときの診断 ======
+// スマホで、チャットは取れているのに映像だけ出ないことが時々ある。原因を切り分けるため、
+// 枠の中(stream-control.js)が「読み込んでもしばらく再生が始まらない」と知らせてきたら、
+// そのときのプレイヤーの状態を枠の上に出す(画面を撮って送ってもらえるように)。
+function onPlayDiag(win, d) {
+  if (!d.stuck) {
+    hidePlayDiag(win);
+    win.playStartSec = d.startSec; // 遅れて始まったときの参考
+    return;
+  }
+  if (!win.body) return;
+  const i = d.info || {};
+  const lines = [
+    '経過 ' + i.elapsed + '秒 / video ' + i.videos + '個 / 表示 ' + i.vis,
+    i.videos
+      ? '停止中 ' + (i.paused ? 'はい' : 'いいえ') + ' / ready ' + i.ready + ' / network ' + i.network +
+        ' / 位置 ' + i.time + 's / 先読み ' + i.buffered + 's / ミュート ' + (i.muted ? 'はい' : 'いいえ') +
+        (i.src ? ' / src ' + i.src : '')
+      : '',
+    i.error ? 'エラー ' + i.error : '',
+    i.button ? '再生ボタン ' + i.button : '',
+    i.mature ? '年齢確認が出ています' : '',
+    i.overlay ? '表示 「' + i.overlay + '」' : ''
+  ].filter(Boolean);
+  let el = win.playDiagEl;
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'win-diag';
+    const head = document.createElement('div');
+    head.className = 'win-diag-head';
+    const title = document.createElement('span');
+    title.textContent = '映像が始まりません(診断)';
+    const reload = document.createElement('button');
+    reload.type = 'button';
+    reload.textContent = '再読込';
+    reload.addEventListener('click', () => { hidePlayDiag(win); reloadWindow(win); });
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.textContent = '✕';
+    close.title = 'この表示を閉じる';
+    close.addEventListener('click', () => hidePlayDiag(win));
+    head.append(title, reload, close);
+    const body = document.createElement('div');
+    body.className = 'win-diag-body';
+    el.append(head, body);
+    win.body.appendChild(el);
+    win.playDiagEl = el;
+  }
+  el.querySelector('.win-diag-body').textContent = lines.join('\n');
+  console.info('[multiview] 映像が始まらない枠:', win.url, i);
+}
+
+function hidePlayDiag(win) {
+  if (win.playDiagEl) { win.playDiagEl.remove(); win.playDiagEl = null; }
 }
 
 // ====== 終わった配信を自動で隠す ======
@@ -274,6 +333,7 @@ function setAllChat(on) {
 function mountSiteFrame(win) {
   // 読み直すと別の配信になりうるので、終了の判定はやり直す。
   clearTimeout(win.streamEndTimer);
+  hidePlayDiag(win);
   win.streamState = null;
   win.streamSeenLive = false;
   win.stayVisible = false;
