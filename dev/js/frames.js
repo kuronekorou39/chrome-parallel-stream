@@ -183,9 +183,28 @@ function onPlayDiag(win, d) {
         ' / 配信 ' + r.media + (r.failed && r.failed.length ? ' / 失敗 ' + r.failed.join(', ') : '') : '',
     i.net ? '回線 ' + i.net : '',
     m ? 'video のイベント ' + (m.events || 'なし') : '',
-    m && m.errors ? 'スクリプトのエラー ' + m.errors + '件 最後「' + m.lastError + '」' : '',
+    m && m.errors ? 'スクリプトのエラー ' + m.errors + '件 最後「' + (m.errorList || []).slice(-1)[0] + '」' : '',
+    m && m.console && m.console.length ? 'console ' + m.console.length + '件 最後「' + m.console.slice(-1)[0] + '」' : '',
     i.overlay ? '表示 「' + i.overlay + '」' : ''
   ].filter(Boolean);
+  // コピー用は画面に出している分に加えて、取れたものを全部付ける(画面には収まらない明細)。
+  const twitchWins = wins.filter((w) => /twitch\.tv/.test(w.url || ''));
+  win.playDiagText = [
+    '# Parallel Stream 診断(映像が始まらない)',
+    new Date().toISOString() + ' / ページ ' + EXPECTED_EXT_VERSION + ' / 拡張機能 ' + (MV.extVersion || '不明'),
+    '枠 ' + win.url,
+    '枠の数 ' + wins.length + '(Twitch ' + twitchWins.length + ')/ ほかの Twitch 枠が始まるまで ' +
+      (twitchWins.filter((w) => w !== win).map((w) => (w.playStartSec != null ? w.playStartSec + '秒' : '未')).join(', ') || 'なし'),
+    'ページの UA ' + navigator.userAgent,
+    '',
+    lines.join('\n'),
+    '',
+    '## 明細',
+    JSON.stringify(Object.assign({}, i, { resList: undefined, overlay: undefined }), null, 1),
+    '',
+    '## 通信(開始 / 所要 / 状態 / 転送量 / 種別 / 宛先)',
+    (i.resList || []).join('\n')
+  ].join('\n');
   let el = win.playDiagEl;
   if (!el) {
     el = document.createElement('div');
@@ -203,7 +222,16 @@ function onPlayDiag(win, d) {
     close.textContent = '✕';
     close.title = 'この表示を閉じる';
     close.addEventListener('click', () => hidePlayDiag(win));
-    head.append(title, reload, close);
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.textContent = 'コピー';
+    copy.title = '診断の内容をすべてコピーする(画面に出ていない明細も含む)';
+    copy.addEventListener('click', async () => {
+      const ok = await copyText(win.playDiagText || '');
+      copy.textContent = ok ? 'コピーしました' : 'コピーできません';
+      setTimeout(() => { copy.textContent = 'コピー'; }, 1500);
+    });
+    head.append(title, copy, reload, close);
     const body = document.createElement('div');
     body.className = 'win-diag-body';
     el.append(head, body);
@@ -212,6 +240,23 @@ function onPlayDiag(win, d) {
   }
   el.querySelector('.win-diag-body').textContent = lines.join('\n');
   console.info('[multiview] 映像が始まらない枠:', win.url, i);
+}
+
+// クリップボードへ書く。権限や古いブラウザで clipboard API が使えないときは、選択してコピーする昔の方法。
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) { /* 下へ */ }
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:0;top:0;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { /* noop */ }
+  ta.remove();
+  return ok;
 }
 
 function hidePlayDiag(win) {
