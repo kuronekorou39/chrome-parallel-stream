@@ -154,10 +154,13 @@ function onFrameState(e) {
 // スマホで、チャットは取れているのに映像だけ出ないことが時々ある。原因を切り分けるため、
 // 枠の中(stream-control.js)が「読み込んでもしばらく再生が始まらない」と知らせてきたら、
 // そのときのプレイヤーの状態を枠の上に出す(画面を撮って送ってもらえるように)。
+let lastGoodPlayDiag = null; // 直近で普通に始まった枠の状態(始まらない枠と見比べる基準)
+
 function onPlayDiag(win, d) {
   if (!d.stuck) {
     hidePlayDiag(win);
     win.playStartSec = d.startSec; // 遅れて始まったときの参考
+    if (d.info) lastGoodPlayDiag = { url: win.url, at: new Date().toISOString(), startSec: d.startSec, info: d.info };
     return;
   }
   if (!win.body) return;
@@ -165,6 +168,8 @@ function onPlayDiag(win, d) {
   const m = i.main;
   const r = i.res;
   const yn = (v) => (v ? 'あり' : 'なし');
+  const ws = (m && m.workers) || null;
+  const kind = (key, name) => (ws || []).reduce((n, w) => n + ((w[key] || {})[name] || 0), 0);
   const lines = [
     '経過 ' + i.elapsed + '秒 / video ' + i.videos + '個 / 表示 ' + i.vis,
     i.videos
@@ -178,6 +183,12 @@ function onPlayDiag(win, d) {
     // ここから下は原因の切り分け用(古い拡張機能は送ってこないので、あるものだけ出す)。
     m ? '差し替え Worker ' + yn(m.workerHooked) + ' / fetch ' + yn(m.fetchHooked) +
         ' / MSE ' + yn(m.mse) + ' / MMS ' + yn(m.mms) : '',
+    // Worker とのやり取り。受が 0 なら Worker が起動していない(か固まっている)。
+    // 「中継」は広告ブロッカーが Worker の通信をページ側に頼んだ数と、返した数。差があれば返事待ちで止まっている。
+    ws ? 'Worker ' + ws.length + '個' + ws.map((w) => ' [送 ' + w.sent + ' / 受 ' + w.recv + '(最後 ' + w.lastRecv +
+        's)' + (w.errors.length ? ' / エラー ' + w.errors.length : '') + ']').join('') +
+        ' / 中継 頼まれた ' + kind('recvKinds', 'FetchRequest') + ' 返した ' + kind('sentKinds', 'FetchResponse') : '',
+    ws && ws.some((w) => w.errors.length) ? 'Worker のエラー「' + ws.map((w) => w.errors.slice(-1)[0]).filter(Boolean).join(' / ') + '」' : '',
     '広告ブロッカーの通知 ' + (win.adblock ? JSON.stringify(win.adblock).slice(0, 80) : 'なし'),
     r ? '通信 全' + r.total + ' / gql ' + r.gql + ' / worker ' + r.worker + ' / wasm ' + r.wasm +
         ' / 配信 ' + r.media + (r.failed && r.failed.length ? ' / 失敗 ' + r.failed.join(', ') : '') : '',
@@ -203,7 +214,13 @@ function onPlayDiag(win, d) {
     JSON.stringify(Object.assign({}, i, { resList: undefined, overlay: undefined }), null, 1),
     '',
     '## 通信(開始 / 所要 / 状態 / 転送量 / 種別 / 宛先)',
-    (i.resList || []).join('\n')
+    (i.resList || []).join('\n'),
+    '',
+    '## 比較用: 直近で普通に始まった枠',
+    lastGoodPlayDiag
+      ? lastGoodPlayDiag.at + ' / ' + lastGoodPlayDiag.url + ' / 始まるまで ' + lastGoodPlayDiag.startSec + '秒\n' +
+        JSON.stringify(Object.assign({}, lastGoodPlayDiag.info, { resList: undefined, overlay: undefined, targets: undefined, page: undefined }), null, 1)
+      : 'なし(このページを開いてから、普通に始まった Twitch の枠がまだ無い)'
   ].join('\n');
   let el = win.playDiagEl;
   if (!el) {
