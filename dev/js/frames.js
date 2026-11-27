@@ -162,16 +162,28 @@ function onPlayDiag(win, d) {
   }
   if (!win.body) return;
   const i = d.info || {};
+  const m = i.main;
+  const r = i.res;
+  const yn = (v) => (v ? 'あり' : 'なし');
   const lines = [
     '経過 ' + i.elapsed + '秒 / video ' + i.videos + '個 / 表示 ' + i.vis,
     i.videos
       ? '停止中 ' + (i.paused ? 'はい' : 'いいえ') + ' / ready ' + i.ready + ' / network ' + i.network +
         ' / 位置 ' + i.time + 's / 先読み ' + i.buffered + 's / ミュート ' + (i.muted ? 'はい' : 'いいえ') +
-        (i.src ? ' / src ' + i.src : '')
+        ' / src ' + (i.src || 'なし')
       : '',
     i.error ? 'エラー ' + i.error : '',
     i.button ? '再生ボタン ' + i.button : '',
     i.mature ? '年齢確認が出ています' : '',
+    // ここから下は原因の切り分け用(古い拡張機能は送ってこないので、あるものだけ出す)。
+    m ? '差し替え Worker ' + yn(m.workerHooked) + ' / fetch ' + yn(m.fetchHooked) +
+        ' / MSE ' + yn(m.mse) + ' / MMS ' + yn(m.mms) : '',
+    '広告ブロッカーの通知 ' + (win.adblock ? JSON.stringify(win.adblock).slice(0, 80) : 'なし'),
+    r ? '通信 全' + r.total + ' / gql ' + r.gql + ' / worker ' + r.worker + ' / wasm ' + r.wasm +
+        ' / 配信 ' + r.media + (r.failed && r.failed.length ? ' / 失敗 ' + r.failed.join(', ') : '') : '',
+    i.net ? '回線 ' + i.net : '',
+    m ? 'video のイベント ' + (m.events || 'なし') : '',
+    m && m.errors ? 'スクリプトのエラー ' + m.errors + '件 最後「' + m.lastError + '」' : '',
     i.overlay ? '表示 「' + i.overlay + '」' : ''
   ].filter(Boolean);
   let el = win.playDiagEl;
